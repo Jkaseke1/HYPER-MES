@@ -2,21 +2,15 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>HYPER MES</title>
-    <script type="text/javascript">
-      // SPA redirect for GitHub Pages
-      // Redirects 404s to index.html for client-side routing
-      var pathSegmentsToKeep = 1;
-      var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+    <title>HYPER MES - Page Not Found</title>
+    <script>
+      // Redirect to home page for SPA
+      window.location.href = "/";
     </script>
   </head>
   <body>
+    <h1>Page Not Found</h1>
+    <p>Redirecting to home page...</p>
+    <p>If you're not redirected, <a href="/">click here</a>.</p>
   </body>
 </html>
