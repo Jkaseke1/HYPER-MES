@@ -28,6 +28,18 @@ export default function AdminUsersPage() {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [userBranches, setUserBranches] = useState<{ branch_id: string; access_level: string }[]>([]);
   
+  // Create user modal state
+  const [createUserModal, setCreateUserModal] = useState(false);
+  const [userForm, setUserForm] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    phone: '',
+    role: 'operator' as Profile['role'],
+  });
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserWithDetails | null>(null);
+  
   // Role modal state
   const [roleModal, setRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -97,6 +109,110 @@ export default function AdminUsersPage() {
     setSaving(false);
     setUserModal(false);
     fetchData();
+  }
+
+  function openCreateUserModal() {
+    setUserForm({
+      email: '',
+      password: '',
+      full_name: '',
+      phone: '',
+      role: 'operator',
+    });
+    setUserRoles([]);
+    setUserBranches([]);
+    setCreateUserModal(true);
+  }
+
+  async function createUser() {
+    if (!userForm.email || !userForm.password || !userForm.full_name) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userForm.email,
+        password: userForm.password,
+        options: {
+          data: {
+            full_name: userForm.full_name,
+          },
+        },
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        const userId = authData.user.id;
+        // Update profile with additional info
+        await supabase
+          .from('profiles')
+          .update({
+            full_name: userForm.full_name,
+            phone: userForm.phone,
+            role: userForm.role,
+          })
+          .eq('id', userId);
+
+        // Assign roles
+        if (userRoles.length > 0) {
+          await supabase.from('user_roles').insert(
+            userRoles.map(roleId => ({ user_id: userId, role_id: roleId }))
+          );
+        }
+
+        // Assign branch access
+        if (userBranches.length > 0) {
+          await supabase.from('user_branch_access').insert(
+            userBranches.map(ub => ({
+              user_id: userId,
+              branch_id: ub.branch_id,
+              access_level: ub.access_level,
+            }))
+          );
+        }
+
+        alert('User created successfully!');
+        setCreateUserModal(false);
+        fetchData();
+      }
+    } catch (error: any) {
+      alert(`Error creating user: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  
+  function openDeleteModal(user: UserWithDetails) {
+    setUserToDelete(user);
+    setDeleteModal(true);
+  }
+
+  async function deleteUser() {
+    if (!userToDelete) return;
+    setSaving(true);
+    try {
+      // Delete user roles and branch access first
+      await supabase.from('user_roles').delete().eq('user_id', userToDelete.id);
+      await supabase.from('user_branch_access').delete().eq('user_id', userToDelete.id);
+      
+      // Note: We can't delete auth users via client SDK, only profiles
+      // Admin should use Supabase dashboard to fully delete auth users
+      await supabase.from('profiles').delete().eq('id', userToDelete.id);
+
+      alert('User profile deleted successfully!');
+      setDeleteModal(false);
+      setUserToDelete(null);
+      fetchData();
+    } catch (error: any) {
+      alert(`Error deleting user: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openRoleModal(role?: Role) {
@@ -278,6 +394,13 @@ export default function AdminUsersPage() {
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
               />
             </div>
+            <button
+              onClick={openCreateUserModal}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create User
+            </button>
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -333,13 +456,22 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => openUserModal(user)}
-                        className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="Edit user access"
-                      >
-                        <Edit2 className="w-4 h-4 text-slate-500" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openUserModal(user)}
+                          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Edit user access"
+                        >
+                          <Edit2 className="w-4 h-4 text-slate-500" />
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(user)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete user"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -589,6 +721,198 @@ export default function AdminUsersPage() {
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {saving ? 'Saving...' : selectedRole ? 'Update Role' : 'Create Role'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Create User Modal */}
+      <Modal open={createUserModal} onClose={() => setCreateUserModal(false)} title="Create New User" size="lg">
+        <div className="space-y-6">
+          {/* User Details */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
+              <input
+                type="text"
+                value={userForm.full_name}
+                onChange={(e) => setUserForm({ ...userForm, full_name: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="John Doe"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+              <input
+                type="email"
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="john@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password *</label>
+              <input
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="••••••••"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+              <input
+                type="tel"
+                value={userForm.phone}
+                onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="+1234567890"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Default Role</label>
+              <select
+                value={userForm.role}
+                onChange={(e) => setUserForm({ ...userForm, role: e.target.value as Profile['role'] })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              >
+                <option value="operator">Operator</option>
+                <option value="supervisor">Supervisor</option>
+                <option value="production_manager">Production Manager</option>
+                <option value="warehouse_manager">Warehouse Manager</option>
+                <option value="finance">Finance</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Roles Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Assign Additional Roles
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {roles.filter(r => r.is_active).map(role => (
+                <label
+                  key={role.id}
+                  className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    userRoles.includes(role.id)
+                      ? 'bg-teal-50 border-teal-300'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={userRoles.includes(role.id)}
+                    onChange={() => toggleUserRole(role.id)}
+                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{role.name}</p>
+                    <p className="text-xs text-slate-500">{role.code}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Branch Access Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                Branch Access
+              </h3>
+              <button
+                onClick={addBranchAccess}
+                className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+              >
+                + Add Branch
+              </button>
+            </div>
+            {userBranches.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No branch restrictions (access to all branches)</p>
+            ) : (
+              <div className="space-y-2">
+                {userBranches.map((ub, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={ub.branch_id}
+                      onChange={(e) => updateBranchAccess(ub.branch_id, 'branch_id', e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                    >
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={ub.access_level}
+                      onChange={(e) => updateBranchAccess(ub.branch_id, 'access_level', e.target.value)}
+                      className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                    >
+                      <option value="read">Read</option>
+                      <option value="write">Write</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button
+                      onClick={() => removeBranchAccess(ub.branch_id)}
+                      className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+            <button
+              onClick={() => setCreateUserModal(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createUser}
+              disabled={saving || !userForm.email || !userForm.password || !userForm.full_name}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Creating...' : 'Create User'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete User Modal */}
+      <Modal open={deleteModal} onClose={() => setDeleteModal(false)} title="Delete User" size="sm">
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-800">
+              Are you sure you want to delete <strong>{userToDelete?.full_name}</strong>?
+            </p>
+            <p className="text-xs text-red-600 mt-2">
+              This will remove the user profile and all associated roles and permissions. 
+              The authentication account will remain in Supabase and needs to be deleted manually from the dashboard.
+            </p>
+          </div>
+          
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setDeleteModal(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={deleteUser}
+              disabled={saving}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Deleting...' : 'Delete User'}
             </button>
           </div>
         </div>
