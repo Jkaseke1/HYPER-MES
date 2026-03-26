@@ -1,0 +1,361 @@
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { format } from 'date-fns';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
+import {
+  Factory, ClipboardList, Package, FlaskConical, Truck, TrendingUp, AlertTriangle, Radio, RefreshCw,
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
+import StatCard from '../components/ui/StatCard';
+import StatusBadge from '../components/ui/StatusBadge';
+import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
+
+interface DashboardStats {
+  totalProduction: number;
+  activeOrders: number;
+  rawMaterialCount: number;
+  formulationCount: number;
+  pendingDispatches: number;
+  efficiency: number;
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({
+    totalProduction: 0, activeOrders: 0, rawMaterialCount: 0,
+    formulationCount: 0, pendingDispatches: 0, efficiency: 0,
+  });
+  const [recentOrders, setRecentOrders] = useState<ProductionOrder[]>([]);
+  const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([]);
+  const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
+  const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [liveOrders, setLiveOrders] = useState<ProductionOrder[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const fetchLiveOrders = useCallback(async () => {
+    const { data } = await supabase
+      .from('production_orders')
+      .select('*, formulations(name, code)')
+      .in('status', ['materials_issued', 'in_progress', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(8);
+    setLiveOrders((data as ProductionOrder[]) || []);
+    setLastUpdated(new Date());
+  }, []);
+
+  useEffect(() => {
+    fetchLiveOrders();
+    const channel = supabase
+      .channel('live-production')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
+        fetchLiveOrders();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLiveOrders]);
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      setLoading(true);
+      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes] =
+        await Promise.all([
+          supabase.from('production_orders').select('planned_qty, actual_qty, status'),
+          supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
+          supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']),
+          supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10),
+          supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target').order('name'),
+          supabase.from('monthly_operations_trends').select('*'),
+          supabase.from('inventory_depletion_forecasts').select('*'),
+        ]);
+
+      const orders = ordersRes.data || [];
+      const completed = orders.filter((o) => o.status === 'completed');
+      const totalProd = completed.reduce((sum, o) => sum + (o.actual_qty || 0), 0);
+      const activeCount = orders.filter((o) => ['pending', 'materials_issued', 'in_progress'].includes(o.status)).length;
+      const totalPlanned = completed.reduce((sum, o) => sum + (o.planned_qty || 0), 0);
+      const efficiency = totalPlanned > 0 ? Math.round((totalProd / totalPlanned) * 100) : 0;
+
+      setStats({
+        totalProduction: Math.round(totalProd * 10) / 10,
+        activeOrders: activeCount,
+        rawMaterialCount: materialsRes.count || 0,
+        formulationCount: formulationsRes.count || 0,
+        pendingDispatches: dispatchRes.count || 0,
+        efficiency,
+      });
+      setRecentOrders((recentRes.data as ProductionOrder[]) || []);
+      
+      // Filter low stock items in JavaScript
+      const allMaterials = (stockRes.data as RawMaterial[]) || [];
+      setLowStockItems(allMaterials);
+      setTrends((trendRes.data as MonthlyTrendRow[]) || []);
+      setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
+      
+      setLoading(false);
+    }
+    fetchDashboardData();
+  }, []);
+
+  const forecastMap = useMemo(() => {
+    return inventoryForecasts.reduce<Record<string, InventoryForecastRow>>((acc, row) => {
+      acc[row.raw_material_id] = row;
+      return acc;
+    }, {});
+  }, [inventoryForecasts]);
+
+  function getSeverity(item: RawMaterial) {
+    const forecast = forecastMap[item.id];
+    const thresholdStock = item.reorder_level * (1 + item.alert_threshold_pct);
+    const belowLevel = item.current_stock <= thresholdStock;
+    const daysToDepletion = forecast?.days_to_depletion;
+    const belowDays = typeof daysToDepletion === 'number'
+      ? daysToDepletion <= item.days_of_cover_target
+      : false;
+    if (belowLevel && belowDays) return 'critical';
+    if (belowLevel || belowDays) return 'warning';
+    return 'healthy';
+  }
+
+  const filteredLowStock = lowStockItems
+    .map((item) => ({ item, severity: getSeverity(item) }))
+    .filter(({ severity }) => severity !== 'healthy');
+
+  const trendChartData = trends.map((row) => ({
+    month: format(new Date(row.month), 'MMM yyyy'),
+    production: Number(row.production_t || 0),
+    consumption: Math.abs(Number(row.consumption_t || 0)),
+    dispatch: Number(row.dispatch_t || 0),
+  }));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+        <p className="text-sm text-slate-500 mt-1">Manufacturing overview and key metrics</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <StatCard title="Total Production" value={`${stats.totalProduction} t`} icon={Factory} color="teal" subtitle="Completed output" />
+        <StatCard title="Active Orders" value={stats.activeOrders} icon={ClipboardList} color="teal" subtitle="In pipeline" />
+        <StatCard title="Raw Materials" value={stats.rawMaterialCount} icon={Package} color="teal" subtitle="Registered items" />
+        <StatCard title="Formulations" value={stats.formulationCount} icon={FlaskConical} color="teal" subtitle="Active recipes" />
+        <StatCard title="Pending Dispatches" value={stats.pendingDispatches} icon={Truck} color="amber" subtitle="Awaiting shipment" />
+        <StatCard title="Efficiency" value={`${stats.efficiency}%`} icon={TrendingUp} color="teal" subtitle="Actual vs planned" />
+      </div>
+
+      {/* Live Production Floor */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="relative flex items-center justify-center">
+              <Radio className="w-4 h-4 text-teal-600" />
+              <span className="absolute w-2.5 h-2.5 bg-teal-500 rounded-full top-0 right-0 animate-ping opacity-75" />
+            </div>
+            <h2 className="text-base font-semibold text-slate-800">Live Production Floor</h2>
+            <span className="text-xs text-slate-400 ml-1">Real-time</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400">Updated {format(lastUpdated, 'HH:mm:ss')}</span>
+            <button onClick={fetchLiveOrders} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Refresh">
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+          </div>
+        </div>
+        {liveOrders.length === 0 ? (
+          <p className="text-sm text-slate-400 py-6 text-center">No active production orders on the floor</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {liveOrders.map(order => {
+              const yieldPct = order.planned_qty > 0 ? Math.min(100, Math.round(((order.actual_qty || 0) / order.planned_qty) * 100)) : 0;
+              const statusColor = order.status === 'in_progress' ? 'bg-teal-500' : order.status === 'materials_issued' ? 'bg-amber-500' : 'bg-slate-400';
+              const statusBg = order.status === 'in_progress' ? 'border-teal-200 bg-teal-50/30' : order.status === 'materials_issued' ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200';
+              return (
+                <div key={order.id} className={`rounded-xl border p-4 space-y-3 ${statusBg}`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-mono text-slate-500">{order.batch_number}</p>
+                      <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight">{order.formulations?.name || '—'}</p>
+                    </div>
+                    <span className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full text-white ${statusColor}`}>
+                      {order.status === 'in_progress' ? 'Running' : order.status === 'materials_issued' ? 'Issued' : 'Pending'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                      <span>Progress</span>
+                      <span className="font-medium text-slate-700">{order.actual_qty || 0} / {order.planned_qty} {order.unit}</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${order.status === 'in_progress' ? 'bg-teal-500' : 'bg-amber-400'}`}
+                        style={{ width: `${yieldPct}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 text-right">{yieldPct}% complete</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <PendingApprovalsWidget />
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-slate-800">Operations Trends</h2>
+            <span className="text-xs text-slate-400">Last 12 months</span>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={trendChartData}>
+              <defs>
+                <linearGradient id="prodGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#0d9488" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="consumptionGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="dispatchGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} />
+              <YAxis tick={{ fontSize: 12, fill: '#64748b' }} />
+              <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
+              <Area type="monotone" dataKey="production" stroke="#0d9488" strokeWidth={2} fill="url(#prodGradient)" name="Production (t)" />
+              <Area type="monotone" dataKey="consumption" stroke="#f97316" strokeWidth={2} fill="url(#consumptionGradient)" name="Consumption (t)" />
+              <Area type="monotone" dataKey="dispatch" stroke="#6366f1" strokeWidth={2} fill="url(#dispatchGradient)" name="Dispatch (t)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h2 className="text-base font-semibold text-slate-800">Stock Alerts</h2>
+          </div>
+          {filteredLowStock.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">All stock levels are healthy</p>
+          ) : (
+            <div className="space-y-3 max-h-[280px] overflow-y-auto">
+              {filteredLowStock.map(({ item, severity }) => (
+                <div key={item.id} className={`flex items-center justify-between p-3 rounded-lg border ${severity === 'critical' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{item.name}</p>
+                    <p className="text-xs text-slate-500">{item.code}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-800">{item.current_stock} {item.unit}</p>
+                    <p className="text-xs text-slate-400">Min: {item.reorder_level} {item.unit}</p>
+                    {typeof forecastMap[item.id]?.days_to_depletion === 'number' && (
+                      <p className="text-xs text-slate-500">~{Math.round(forecastMap[item.id]!.days_to_depletion!)} days cover</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-800">Inventory Depletion Forecast</h2>
+          <span className="text-xs text-slate-400">Avg daily usage (30d)</span>
+        </div>
+        {inventoryForecasts.length === 0 ? (
+          <p className="text-sm text-slate-400">No usage history yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
+                  <th className="px-3 py-2 text-left">Material</th>
+                  <th className="px-3 py-2 text-right">Stock</th>
+                  <th className="px-3 py-2 text-right">Avg/day</th>
+                  <th className="px-3 py-2 text-right">Days to Depletion</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {inventoryForecasts.slice(0, 8).map((row) => (
+                  <tr key={row.raw_material_id}>
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-slate-700">{row.name}</p>
+                      <p className="text-xs text-slate-400">{row.code}</p>
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-700">{row.current_stock.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">{row.avg_daily_usage.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {row.days_to_depletion ? (
+                        <span className={`text-sm font-semibold ${row.days_to_depletion <= 5 ? 'text-red-600' : row.days_to_depletion <= 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {Math.round(row.days_to_depletion)} days
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">Stable</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800">Recent Production Orders</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                <th className="px-5 py-3 text-left font-medium">Batch</th>
+                <th className="px-5 py-3 text-left font-medium">Product</th>
+                <th className="px-5 py-3 text-left font-medium">Planned Qty</th>
+                <th className="px-5 py-3 text-left font-medium">Actual Qty</th>
+                <th className="px-5 py-3 text-left font-medium">Status</th>
+                <th className="px-5 py-3 text-left font-medium">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {recentOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-slate-400">No production orders found</td>
+                </tr>
+              ) : (
+                recentOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3 font-medium text-slate-700">{order.batch_number}</td>
+                    <td className="px-5 py-3 text-slate-600">{order.formulations?.name || '-'}</td>
+                    <td className="px-5 py-3 text-slate-600">{order.planned_qty} {order.unit}</td>
+                    <td className="px-5 py-3 text-slate-600">{order.actual_qty} {order.unit}</td>
+                    <td className="px-5 py-3"><StatusBadge status={order.status} /></td>
+                    <td className="px-5 py-3 text-slate-500">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
