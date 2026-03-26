@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { usePermissions } from '../hooks/usePermissions';
 import Modal from '../components/ui/Modal';
 import StatCard from '../components/ui/StatCard';
+import toast from 'react-hot-toast';
 import type { Profile, Branch } from '../types/database';
 import type { Role, Permission, UserRole, UserBranchAccess } from '../types/permissions';
 
@@ -144,7 +145,7 @@ export default function AdminUsersPage() {
 
   async function createUser() {
     if (!userForm.email || !userForm.password || !userForm.full_name) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
@@ -201,12 +202,12 @@ export default function AdminUsersPage() {
           );
         }
 
-        alert('User created successfully!');
+        toast.success('User created successfully!');
         setCreateUserModal(false);
         fetchData();
       }
     } catch (error: any) {
-      alert(`Error creating user: ${error.message}`);
+      toast.error(`Error creating user: ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -230,12 +231,12 @@ export default function AdminUsersPage() {
       // Admin should use Supabase dashboard to fully delete auth users
       await supabase.from('profiles').delete().eq('id', userToDelete.id);
 
-      alert('User profile deleted successfully!');
+      toast.success('User profile deleted successfully!');
       setDeleteModal(false);
       setUserToDelete(null);
       fetchData();
     } catch (error: any) {
-      alert(`Error deleting user: ${error.message}`);
+      toast.error(`Error deleting user: ${error.message}`);
     } finally {
       setSaving(false);
     }

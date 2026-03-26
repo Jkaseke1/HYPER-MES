@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import LoginPage from './pages/LoginPage';
 import { Loader2 } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const RawMaterialsPage = lazy(() => import('./pages/RawMaterialsPage'));
@@ -113,6 +114,30 @@ export default function App() {
     <HashRouter>
       <AuthProvider>
         <AppRoutes />
+        <Toaster 
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
       </AuthProvider>
     </HashRouter>
   );

@@ -53,6 +53,17 @@ CREATE POLICY "Admins can insert profiles" ON profiles
     )
   );
 
+CREATE POLICY "Admins can delete profiles" ON profiles
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 
+      FROM user_roles ur
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.user_id = auth.uid() 
+      AND r.code = 'admin'
+    )
+  );
+
 -- Create a trigger to automatically create profile when user signs up
 -- This is a backup mechanism
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -77,8 +88,44 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- Enable RLS on user_roles and user_branch_access
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_branch_access ENABLE ROW LEVEL SECURITY;
+
+-- Policies for user_roles
+CREATE POLICY "Users can view own roles" ON user_roles
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can manage all user roles" ON user_roles
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 
+      FROM user_roles ur
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.user_id = auth.uid() 
+      AND r.code = 'admin'
+    )
+  );
+
+-- Policies for user_branch_access
+CREATE POLICY "Users can view own branch access" ON user_branch_access
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can manage all branch access" ON user_branch_access
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 
+      FROM user_roles ur
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.user_id = auth.uid() 
+      AND r.code = 'admin'
+    )
+  );
+
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON profiles TO authenticated;
+GRANT ALL ON user_roles TO authenticated;
+GRANT ALL ON user_branch_access TO authenticated;
 GRANT SELECT ON profiles TO anon;
