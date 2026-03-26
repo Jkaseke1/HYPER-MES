@@ -23,6 +23,7 @@ const MaintenanceSchedulePage = lazy(() => import('./pages/MaintenanceSchedulePa
 const SparePartsPage = lazy(() => import('./pages/SparePartsPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 
 function PageLoader() {
   return (
@@ -99,6 +100,7 @@ function AppRoutes() {
           <Route path="/spare-parts" element={<SparePartsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

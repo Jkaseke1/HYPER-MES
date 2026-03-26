@@ -24,6 +24,8 @@ import {
   ShoppingCart,
   ClipboardType,
   ArrowRightLeft,
+  Shield,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -85,6 +87,13 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/reports', icon: BarChart3, label: 'Reports' },
       { to: '/settings', icon: Settings, label: 'Settings' },
+    ],
+  },
+  {
+    label: 'Administration',
+    icon: Shield,
+    items: [
+      { to: '/admin/users', icon: Users, label: 'User Management' },
     ],
   },
 ];
