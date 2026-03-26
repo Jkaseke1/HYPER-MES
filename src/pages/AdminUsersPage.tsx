@@ -160,15 +160,17 @@ export default function AdminUsersPage() {
 
       if (authData.user) {
         const userId = authData.user.id;
-        // Insert profile with additional info
+        // Try to insert profile first, if it exists due to trigger, update it
         const { error: profileError } = await supabase
           .from('profiles')
-          .insert({
+          .upsert({
             id: userId,
             full_name: userForm.full_name,
             phone: userForm.phone,
             role: userForm.role,
             email: userForm.email,
+          }, {
+            onConflict: 'id'
           });
         
         if (profileError) {
