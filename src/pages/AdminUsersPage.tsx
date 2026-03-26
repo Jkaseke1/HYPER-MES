@@ -54,22 +54,35 @@ export default function AdminUsersPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [usersRes, rolesRes, permsRes, branchesRes] = await Promise.all([
-      supabase.from('profiles').select(`
-        *,
-        user_roles(*, roles(*)),
-        user_branch_access(*, branches(*))
-      `).order('full_name'),
-      supabase.from('roles').select('*').order('name'),
-      supabase.from('permissions').select('*').order('module, code'),
-      supabase.from('branches').select('*').eq('is_active', true).order('name'),
-    ]);
-    
-    setUsers(usersRes.data || []);
-    setRoles(rolesRes.data || []);
-    setPermissions(permsRes.data || []);
-    setBranches(branchesRes.data || []);
-    setLoading(false);
+    try {
+      const [usersRes, rolesRes, permsRes, branchesRes] = await Promise.all([
+        supabase.from('profiles').select(`
+          *,
+          user_roles(*, roles(*)),
+          user_branch_access(*, branches(*))
+        `).order('full_name'),
+        supabase.from('roles').select('*').order('name'),
+        supabase.from('permissions').select('*').order('module, code'),
+        supabase.from('branches').select('*').eq('is_active', true).order('name'),
+      ]);
+      
+      if (usersRes.error) console.error('Users fetch error:', usersRes.error);
+      if (rolesRes.error) console.error('Roles fetch error:', rolesRes.error);
+      if (permsRes.error) console.error('Permissions fetch error:', permsRes.error);
+      if (branchesRes.error) console.error('Branches fetch error:', branchesRes.error);
+      
+      console.log('Fetched users:', usersRes.data?.length || 0);
+      console.log('Fetched roles:', rolesRes.data?.length || 0);
+      
+      setUsers(usersRes.data || []);
+      setRoles(rolesRes.data || []);
+      setPermissions(permsRes.data || []);
+      setBranches(branchesRes.data || []);
+    } catch (error) {
+      console.error('FetchData error:', error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function openUserModal(user: UserWithDetails) {
@@ -147,15 +160,21 @@ export default function AdminUsersPage() {
 
       if (authData.user) {
         const userId = authData.user.id;
-        // Update profile with additional info
-        await supabase
+        // Insert profile with additional info
+        const { error: profileError } = await supabase
           .from('profiles')
-          .update({
+          .insert({
+            id: userId,
             full_name: userForm.full_name,
             phone: userForm.phone,
             role: userForm.role,
-          })
-          .eq('id', userId);
+            email: userForm.email,
+          });
+        
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw profileError;
+        }
 
         // Assign roles
         if (userRoles.length > 0) {
