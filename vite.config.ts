@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/HYPER-MES/', // GitHub Pages base path - matches repo: Jkaseke1/HYPER-MES
+  base: '/',
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
