@@ -55,15 +55,13 @@ export default function AdminUsersPage() {
   async function fetchData() {
     setLoading(true);
     try {
-      const [usersRes, rolesRes, permsRes, branchesRes] = await Promise.all([
-        supabase.from('profiles').select(`
-          *,
-          user_roles(*, roles(*)),
-          user_branch_access(*, branches(*))
-        `).order('full_name'),
+      const [usersRes, rolesRes, permsRes, branchesRes, userRolesRes, userBranchRes] = await Promise.all([
+        supabase.from('profiles').select('*').order('full_name'),
         supabase.from('roles').select('*').order('name'),
         supabase.from('permissions').select('*').order('module, code'),
         supabase.from('branches').select('*').eq('is_active', true).order('name'),
+        supabase.from('user_roles').select('*, roles(*)'),
+        supabase.from('user_branch_access').select('*, branches(*)'),
       ]);
       
       if (usersRes.error) console.error('Users fetch error:', usersRes.error);
@@ -74,7 +72,14 @@ export default function AdminUsersPage() {
       console.log('Fetched users:', usersRes.data?.length || 0);
       console.log('Fetched roles:', rolesRes.data?.length || 0);
       
-      setUsers(usersRes.data || []);
+      // Combine user data with roles and branch access
+      const usersWithDetails = (usersRes.data || []).map(user => ({
+        ...user,
+        user_roles: (userRolesRes.data || []).filter(ur => ur.user_id === user.id),
+        user_branch_access: (userBranchRes.data || []).filter(uba => uba.user_id === user.id),
+      }));
+      
+      setUsers(usersWithDetails);
       setRoles(rolesRes.data || []);
       setPermissions(permsRes.data || []);
       setBranches(branchesRes.data || []);
