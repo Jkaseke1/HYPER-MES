@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, AlertTriangle, CheckCircle2, Circle, Clock, Layers, AlertCircle, ArrowRight } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { ProductionOrder, Formulation, Machine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import ApprovalButtons from '../components/approval/ApprovalButtons';
-import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 
 interface OrderMaterial {
@@ -71,16 +69,9 @@ export default function ProductionOrdersPage() {
   const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
-  const [logForm, setLogForm] = useState({ log_type: 'start', description: '', started_at: '', ended_at: '', duration_minutes: '' });
-  const [logSaving, setLogSaving] = useState(false);
-  const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
 
-  const resetLogForm = () => {
-    setLogForm({ log_type: 'start', description: '', started_at: '', ended_at: '', duration_minutes: '' });
-    setEditingLogId(null);
-  };
-
+  
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code)').order('created_at', { ascending: false });
@@ -173,7 +164,7 @@ export default function ProductionOrdersPage() {
         status: 'pending'
       });
       
-      const { data, error } = await supabase.from('production_orders').insert({
+      const { error } = await supabase.from('production_orders').insert({
         batch_number: form.batch_number,
         plan_id: form.plan_id || null,
         formulation_id: form.formulation_id || null,
@@ -186,7 +177,7 @@ export default function ProductionOrdersPage() {
         operator_id: form.operator_id || null,
         notes: form.notes, 
         status: 'pending',
-      }).select().single();
+      });
 
       if (error) throw error;
 
@@ -236,7 +227,6 @@ export default function ProductionOrdersPage() {
     
     const { data: logData } = await supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true });
     setLogs((logData as ProductionLog[]) || []);
-    resetLogForm();
     setWorkflowError(null);
     setShowDetail(true);
   };
@@ -537,6 +527,19 @@ export default function ProductionOrdersPage() {
               />
             </div>
             <div>
+              <label className={labelCls}>Unit</label>
+              <select
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                className={inputCls}
+              >
+                <option value="kg">Kilograms (kg)</option>
+                <option value="ton">Tonnes (ton)</option>
+                <option value="bags">Bags</option>
+                <option value="liters">Liters</option>
+              </select>
+            </div>
+            <div>
               <label className={labelCls}>Priority</label>
               <select
                 value={form.priority}
@@ -548,6 +551,24 @@ export default function ProductionOrdersPage() {
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
               </select>
+            </div>
+            <div>
+              <label className={labelCls}>Planned Start Date</label>
+              <input
+                type="date"
+                value={form.planned_start}
+                onChange={(e) => setForm({ ...form, planned_start: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Planned End Date</label>
+              <input
+                type="date"
+                value={form.planned_end}
+                onChange={(e) => setForm({ ...form, planned_end: e.target.value })}
+                className={inputCls}
+              />
             </div>
             <div>
               <label className={labelCls}>Operator</label>
@@ -562,6 +583,30 @@ export default function ProductionOrdersPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className={labelCls}>Production Plan (Optional)</label>
+              <select
+                value={form.plan_id}
+                onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Select production plan</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>{plan.plan_number}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className={inputCls}
+              rows={3}
+              placeholder="Add any notes or special instructions..."
+            />
           </div>
 
           {materials.length > 0 && (
