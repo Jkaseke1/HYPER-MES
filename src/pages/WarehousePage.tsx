@@ -40,8 +40,8 @@ export default function WarehousePage() {
   async function fetchData() {
     setLoading(true);
     const [{ data: w }, { data: m }] = await Promise.all([
-      supabase.from('warehouses').select('*').eq('is_active', true).order('name'),
-      supabase.from('raw_materials').select('*, warehouses(*)').eq('is_active', true).order('name'),
+      supabase.from('warehouses').select('*').or('is_active.eq.true,is_active.is.null').order('name'),
+      supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
     ]);
     setWarehouses(w || []);
     setMaterials(m || []);
