@@ -1,6 +1,11 @@
--- Auto-load BOM ingredients when production order is created
--- This function creates production_order_materials rows for all formulation ingredients
+-- Fix for BOM auto-load trigger - remove updated_at column
+-- Run this in Supabase SQL Editor to fix the 400 Bad Request error
 
+-- Drop and recreate the trigger with correct columns
+DROP TRIGGER IF EXISTS on_production_order_created ON production_orders;
+DROP FUNCTION IF EXISTS auto_load_bom_ingredients();
+
+-- Recreate the function without updated_at column
 CREATE OR REPLACE FUNCTION auto_load_bom_ingredients()
 RETURNS trigger AS $$
 BEGIN
@@ -39,9 +44,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger to auto-load BOM ingredients
-DROP TRIGGER IF EXISTS on_production_order_created ON production_orders;
+-- Recreate the trigger
 CREATE TRIGGER on_production_order_created
     AFTER INSERT ON production_orders
     FOR EACH ROW
     EXECUTE FUNCTION auto_load_bom_ingredients();
+
+-- Verify the fix
+SELECT 'Trigger fixed successfully' as status;
