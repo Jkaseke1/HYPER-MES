@@ -43,6 +43,15 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
+    label: 'Planning & Setup',
+    icon: ClipboardList,
+    items: [
+      { to: '/sales-orders', icon: ShoppingCart, label: 'Sales Orders' },
+      { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
+      { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
+    ],
+  },
+  {
     label: 'Raw Materials',
     icon: Package,
     items: [
@@ -56,12 +65,8 @@ const navGroups: NavGroup[] = [
     label: 'Production',
     icon: Factory,
     items: [
-      { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
-      { to: '/sales-orders', icon: ShoppingCart, label: 'Sales Orders' },
-      { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
       { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
-      { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
     ],
   },
   {
@@ -70,6 +75,14 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/warehouse', icon: WarehouseIcon, label: 'Warehouse' },
       { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
+    ],
+  },
+  {
+    label: 'Reconciliation & Reporting',
+    icon: BarChart3,
+    items: [
+      { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
+      { to: '/reports', icon: BarChart3, label: 'Reports' },
     ],
   },
   {
@@ -82,17 +95,10 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Reports & Settings',
-    icon: BarChart3,
-    items: [
-      { to: '/reports', icon: BarChart3, label: 'Reports' },
-      { to: '/settings', icon: Settings, label: 'Settings' },
-    ],
-  },
-  {
-    label: 'Administration',
+    label: 'System Administration',
     icon: Shield,
     items: [
+      { to: '/settings', icon: Settings, label: 'Settings' },
       { to: '/admin/users', icon: Users, label: 'User Management' },
     ],
   },

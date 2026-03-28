@@ -5,15 +5,24 @@ import Header from './Header';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
-  '/raw-materials': 'Raw Materials',
+  '/sales-orders': 'Sales Orders',
   '/formulations': 'Formulations & BOM',
   '/production-planning': 'Production Planning',
+  '/raw-materials': 'Raw Materials',
+  '/goods-received': 'Goods Received',
+  '/quality-inspection': 'Quality Inspection',
+  '/material-transfer': 'Material Transfer',
   '/production-orders': 'Production Orders',
+  '/daily-production-report': 'Daily Production Reports',
   '/warehouse': 'Warehouse Management',
   '/dispatch': 'Dispatch Management',
   '/reconciliation': 'Material Reconciliation',
   '/reports': 'Reports & Analytics',
+  '/maintenance-work-orders': 'Maintenance Work Orders',
+  '/maintenance-schedules': 'PM Schedules',
+  '/spare-parts': 'Spare Parts',
   '/settings': 'Settings',
+  '/admin/users': 'User Management',
 };
 
 export default function Layout() {
