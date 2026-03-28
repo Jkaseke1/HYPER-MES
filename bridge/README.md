@@ -1,0 +1,231 @@
+# HYPER MES - Sage Pastel Bridge
+
+## 🎯 **Overview**
+This bridge connects the HYPER MES system with Sage Pastel accounting software, enabling automatic synchronization of transactions between the two systems.
+
+## 📋 **Priority Implementation Status**
+
+### ✅ **Priority 1: Auto Event Handlers (COMPLETE)**
+- **goodsReceiptAuto.js** - Handles GRN confirmations → Sage supplier invoices
+- **goodsIssueAuto.js** - Handles material issuance → Sage inventory issues  
+- **batchCompleteAuto.js** - Handles production completion → Sage finished goods receipts
+- **dispatchAuto.js** - Handles dispatch deliveries → Sage customer invoices
+
+### ✅ **Priority 3: Bridge Worker (COMPLETE)**
+- **bridgeWorker.js** - Main worker that polls sync_log every 30 seconds
+- Coordinates all event handlers
+- Handles retries and error management
+- Provides statistics and health monitoring
+
+## 🚀 **Quick Start**
+
+### 1. Install Dependencies
+```bash
+cd bridge
+npm install
+```
+
+### 2. Configure Environment
+```bash
+cp .env.example .env
+# Edit .env with your Supabase and Sage credentials
+```
+
+### 3. Test Connection
+```bash
+npm run test-connection
+```
+
+### 4. Start Bridge Worker
+```bash
+npm start
+```
+
+## 📊 **Event Flow**
+
+### **Event 1: GRN Confirmation**
+1. MES: GRN status changed to 'approved'
+2. Trigger: Creates sync_log entry
+3. Bridge: Reads goods_received_notes + grn_items
+4. Sage: Posts supplier invoice/stock receipt
+
+### **Event 2: Material Issuance**  
+1. MES: production_order_materials.issued = true
+2. Trigger: Creates sync_log entry
+3. Bridge: Reads material issue data
+4. Sage: Posts inventory issue/cost of goods sold
+
+### **Event 3: Production Completion**
+1. MES: production_orders.status = 'completed'
+2. Trigger: Creates sync_log entry  
+3. Bridge: Reads production_orders + production_outputs
+4. Sage: Posts finished goods receipt
+
+### **Event 4: Dispatch Delivery**
+1. MES: dispatch_orders.status = 'delivered'
+2. Trigger: Creates sync_log entry
+3. Bridge: Reads dispatch_orders + dispatch_items
+4. Sage: Posts customer invoice
+
+## 🔧 **Configuration**
+
+### **Environment Variables**
+```env
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Sage Pastel
+SAGE_PATH=C:\Pastel\Partner\Partner.exe
+SAGE_COMPANY=HYPER FEEDS
+SAGE_DATABASE=C:\Pastel\Data\HYPER
+SAGE_USERNAME=Manager
+SAGE_PASSWORD=
+
+# Bridge Settings
+POLL_INTERVAL=30000  # 30 seconds
+BATCH_SIZE=10
+MAX_RETRIES=3
+```
+
+### **Required Sage Codes**
+- **suppliers.sage_code** - Sage supplier account codes
+- **raw_materials.sage_code** - Sage stock item codes  
+- **formulations.sage_code** - Sage finished goods codes
+- **branches.sage_code** - Sage customer account codes
+
+## 🖥️ **Windows Task Scheduler Setup**
+
+### **Create Bridge Worker Service**
+```cmd
+# Open Task Scheduler
+# Create new task with these settings:
+# Trigger: At system startup, repeat every 5 minutes
+# Action: Start program
+# Program: C:\Program Files\nodejs\node.exe
+# Arguments: "C:\path\to\bridge\bridgeWorker.js"
+# Start in: C:\path\to\bridge\
+# Run with highest privileges
+# Configure for: Windows 10, Windows Server 2016
+```
+
+### **Nightly Reconciliation Job**
+```cmd
+# Create nightly task:
+# Trigger: Daily at 2:00 AM
+# Action: Run reconciliation script
+# Program: C:\Program Files\nodejs\node.exe  
+# Arguments: "C:\path\to\bridge\nightlyReconciliation.js"
+```
+
+## 📈 **Monitoring**
+
+### **Sync Log Monitoring**
+```sql
+-- Check pending events
+SELECT * FROM sync_log WHERE status = 'pending' ORDER BY created_at;
+
+-- Check failed events  
+SELECT * FROM sync_log WHERE status = 'failed' ORDER BY created_at DESC;
+
+-- Event statistics
+SELECT event_type, status, COUNT(*) as count 
+FROM sync_log 
+GROUP BY event_type, status 
+ORDER BY event_type, status;
+```
+
+### **Bridge Worker Statistics**
+The worker outputs real-time statistics:
+- Uptime and processing counts
+- Success/error rates  
+- Queue status by event type
+- Retry counts
+
+## 🚨 **Troubleshooting**
+
+### **Common Issues**
+
+**Sage Connection Failed**
+- Check Sage Pastel is installed and running
+- Verify database path and company name
+- Ensure user has proper permissions
+
+**Missing Sage Codes**
+```sql
+-- Find suppliers without sage_code
+SELECT name FROM suppliers WHERE sage_code IS NULL OR sage_code = '';
+
+-- Find materials without sage_code  
+SELECT name FROM raw_materials WHERE sage_code IS NULL OR sage_code = '';
+```
+
+**Events Not Processing**
+- Check sync_log for error details
+- Verify triggers are firing in MES
+- Check bridge worker logs
+
+### **Manual Event Processing**
+```bash
+# Process specific event types manually
+npm run test-grn      # Process GRN events
+npm run test-issue    # Process material issue events  
+npm run test-batch    # Process batch completion events
+npm run test-dispatch # Process dispatch events
+```
+
+## 🔄 **Development**
+
+### **Running in Development**
+```bash
+# Install nodemon for auto-restart
+npm install -D nodemon
+
+# Run with auto-restart
+npm run dev
+```
+
+### **Testing**
+```bash
+# Run all tests
+npm test
+
+# Test specific components
+npm run test-connection
+```
+
+### **Logging**
+Logs are written to `logs/bridge.log` with:
+- Event processing details
+- Sage transaction responses
+- Error details and stack traces
+- Performance metrics
+
+## 📋 **Priority 2: MES UI Pages (Next Steps)**
+
+The following MES pages still need to be built:
+
+1. **Reconciliation Report Page** - Shows recon_raw_materials variance data
+2. **Purchase Orders List** - Shows purchase_orders table for Mano  
+3. **Sync Log Viewer** - Shows sync_log for Joseph monitoring
+
+## 🚀 **Priority 4: Go Live Checklist**
+
+- [ ] Change `.env` to production Sage server
+- [ ] Set `NODE_ENV=production`
+- [ ] Set up Windows Task Scheduler
+- [ ] Test with real Sage data
+- [ ] Monitor sync_log for 2 weeks
+- [ ] Set up nightly reconciliation jobs
+
+## 📞 **Support**
+
+For issues:
+1. Check bridge worker logs
+2. Review sync_log table in Supabase
+3. Verify Sage Pastel connection
+4. Check required sage_code fields
+
+## 🎊 **Status: READY FOR TESTING**
+
+The Priority 1 auto event handlers and bridge worker are complete and ready for testing with real MES data!
