@@ -28,6 +28,12 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserWithDetails | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [userBranches, setUserBranches] = useState<{ branch_id: string; access_level: string }[]>([]);
+  const [userProfile, setUserProfile] = useState({
+    full_name: '',
+    email: '',
+    phone: '',
+    role: 'operator' as Profile['role']
+  });
   
   // Create user modal state
   const [createUserModal, setCreateUserModal] = useState(false);
@@ -98,31 +104,70 @@ export default function AdminUsersPage() {
       branch_id: uba.branch_id, 
       access_level: uba.access_level 
     })) || []);
+    setUserProfile({
+      full_name: user.full_name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      role: user.role || 'operator'
+    });
     setUserModal(true);
+  }
+
+  async function saveUserProfile() {
+    if (!selectedUser) return;
+    setSaving(true);
+    
+    try {
+      // Update user profile
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: userProfile.full_name,
+          email: userProfile.email,
+          phone: userProfile.phone,
+          role: userProfile.role
+        })
+        .eq('id', selectedUser.id);
+
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('Error updating user profile:', error);
+      alert('Failed to update user profile: ' + error.message);
+      setSaving(false);
+      return;
+    }
   }
 
   async function saveUserRoles() {
     if (!selectedUser) return;
     setSaving(true);
     
-    // Delete existing roles and add new ones
-    await supabase.from('user_roles').delete().eq('user_id', selectedUser.id);
-    if (userRoles.length > 0) {
-      await supabase.from('user_roles').insert(
-        userRoles.map(roleId => ({ user_id: selectedUser.id, role_id: roleId }))
-      );
-    }
-    
-    // Delete existing branch access and add new ones
-    await supabase.from('user_branch_access').delete().eq('user_id', selectedUser.id);
-    if (userBranches.length > 0) {
-      await supabase.from('user_branch_access').insert(
-        userBranches.map(ub => ({ 
-          user_id: selectedUser.id, 
-          branch_id: ub.branch_id, 
-          access_level: ub.access_level 
-        }))
-      );
+    try {
+      // Update user profile first
+      await saveUserProfile();
+      
+      // Delete existing roles and add new ones
+      await supabase.from('user_roles').delete().eq('user_id', selectedUser.id);
+      if (userRoles.length > 0) {
+        await supabase.from('user_roles').insert(
+          userRoles.map(roleId => ({ user_id: selectedUser.id, role_id: roleId }))
+        );
+      }
+      
+      // Delete existing branch access and add new ones
+      await supabase.from('user_branch_access').delete().eq('user_id', selectedUser.id);
+      if (userBranches.length > 0) {
+        await supabase.from('user_branch_access').insert(
+          userBranches.map(ba => ({ 
+            user_id: selectedUser.id, 
+            branch_id: ba.branch_id, 
+            access_level: ba.access_level 
+          }))
+        );
+      }
+    } catch (error: any) {
+      console.error('Error saving user roles and access:', error);
+      alert('Failed to save user roles and access: ' + error.message);
     }
     
     setSaving(false);
@@ -562,8 +607,58 @@ export default function AdminUsersPage() {
       )}
 
       {/* User Edit Modal */}
-      <Modal open={userModal} onClose={() => setUserModal(false)} title={`Edit Access: ${selectedUser?.full_name}`} size="lg">
+      <Modal open={userModal} onClose={() => setUserModal(false)} title={`Edit User: ${selectedUser?.full_name}`} size="lg">
         <div className="space-y-6">
+          {/* User Profile Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              User Profile
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={userProfile.full_name}
+                  onChange={(e) => setUserProfile({ ...userProfile, full_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={userProfile.email}
+                  onChange={(e) => setUserProfile({ ...userProfile, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={userProfile.phone}
+                  onChange={(e) => setUserProfile({ ...userProfile, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Primary Role</label>
+                <select
+                  value={userProfile.role}
+                  onChange={(e) => setUserProfile({ ...userProfile, role: e.target.value as Profile['role'] })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                >
+                  <option value="operator">Operator</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Roles Section */}
           <div>
             <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
