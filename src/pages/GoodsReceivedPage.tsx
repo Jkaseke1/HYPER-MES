@@ -78,7 +78,50 @@ export default function GoodsReceivedPage() {
   function openAdd() {
     setForm(emptyForm);
     setItems([emptyItem]);
+    generateGRNNumber();
     setModalOpen(true);
+  }
+
+  // Auto-generate GRN number
+  async function generateGRNNumber() {
+    try {
+      const { data, error } = await supabase
+        .from('goods_received_notes')
+        .select('grn_number')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      let nextNumber = 1;
+      if (data && data.length > 0) {
+        const lastGRN = data[0].grn_number;
+        const match = lastGRN.match(/GRN-(\d{4})-(\d{3})$/);
+        if (match) {
+          const year = parseInt(match[1]);
+          const sequence = parseInt(match[2]);
+          const currentYear = new Date().getFullYear();
+          
+          if (year === currentYear) {
+            nextNumber = sequence + 1;
+          } else {
+            // New year, reset sequence to 1
+            nextNumber = 1;
+          }
+        }
+      }
+
+      const currentYear = new Date().getFullYear();
+      const paddedNumber = nextNumber.toString().padStart(3, '0');
+      const newGRNNumber = `GRN-${currentYear}-${paddedNumber}`;
+      
+      setForm(prev => ({ ...prev, grn_number: newGRNNumber }));
+    } catch (error) {
+      console.error('Error generating GRN number:', error);
+      // Fallback to current year + 001
+      const currentYear = new Date().getFullYear();
+      setForm(prev => ({ ...prev, grn_number: `GRN-${currentYear}-001` }));
+    }
   }
 
   async function openView(grn: GoodsReceivedNote) {
@@ -344,6 +387,7 @@ export default function GoodsReceivedPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">GRN Number</label>
               <input type="text" required value={form.grn_number} onChange={(e) => setForm({ ...form, grn_number: e.target.value })} className={inputClass} placeholder="e.g. GRN-2026-001" />
+              <p className="text-xs text-slate-500 mt-1">Auto-generated from last GRN • Editable if needed</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Received Date</label>
