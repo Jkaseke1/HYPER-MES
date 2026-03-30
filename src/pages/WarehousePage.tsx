@@ -33,6 +33,8 @@ export default function WarehousePage() {
   const [dateTo, setDateTo] = useState('');
   const [moveType, setMoveType] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [editingReorder, setEditingReorder] = useState<string | null>(null);
+  const [reorderValue, setReorderValue] = useState<string>('');
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (tab === 'movements') fetchMovements(); }, [tab, dateFrom, dateTo, moveType]);
@@ -85,12 +87,47 @@ export default function WarehousePage() {
 
   function getStatus(m: RawMaterial) {
     if (m.current_stock === 0) return 'out_of_stock';
-    return m.current_stock <= m.reorder_level ? 'low_stock' : 'in_stock';
+    return (m.current_stock <= m.reorder_level && m.reorder_level > 0) ? 'low_stock' : 'in_stock';
   }
 
   function stockPct(m: RawMaterial) {
     return m.reorder_level === 0 ? 100 : Math.min(100, Math.round((m.current_stock / (m.reorder_level * 2)) * 100));
   }
+
+  // Handle reorder level editing
+  const startEditingReorder = (materialId: string, currentValue: number) => {
+    setEditingReorder(materialId);
+    setReorderValue(currentValue.toString());
+  };
+
+  const saveReorderLevel = async (materialId: string) => {
+    const newReorderLevel = parseFloat(reorderValue) || 0;
+    
+    try {
+      const { error } = await supabase
+        .from('raw_materials')
+        .update({ reorder_level: newReorderLevel })
+        .eq('id', materialId);
+
+      if (error) throw error;
+
+      // Update local state
+      setMaterials(materials.map(m => 
+        m.id === materialId ? { ...m, reorder_level: newReorderLevel } : m
+      ));
+
+      setEditingReorder(null);
+      setReorderValue('');
+    } catch (error: any) {
+      console.error('Error updating reorder level:', error);
+      alert('Failed to update reorder level');
+    }
+  };
+
+  const cancelEditingReorder = () => {
+    setEditingReorder(null);
+    setReorderValue('');
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
@@ -162,7 +199,46 @@ export default function WarehousePage() {
                         <td className="px-4 py-3 text-slate-600">{m.category}</td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-800">{m.current_stock.toLocaleString()}</td>
                         <td className="px-4 py-3 text-slate-500">{m.unit}</td>
-                        <td className="px-4 py-3 text-right text-slate-500">{m.reorder_level.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          {editingReorder === m.id ? (
+                            <div className="flex items-center gap-1 justify-end">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={reorderValue}
+                                onChange={(e) => setReorderValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveReorderLevel(m.id);
+                                  if (e.key === 'Escape') cancelEditingReorder();
+                                }}
+                                className="w-20 px-2 py-1 text-right border border-teal-500 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => saveReorderLevel(m.id)}
+                                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                title="Save"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={cancelEditingReorder}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Cancel"
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEditingReorder(m.id, m.reorder_level)}
+                              className="text-right text-slate-500 hover:text-teal-600 hover:bg-teal-50 px-2 py-1 rounded text-sm transition-colors"
+                              title="Click to edit reorder level"
+                            >
+                              {m.reorder_level.toLocaleString()}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right text-slate-800">R {(m.current_stock * m.cost_per_unit).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                         <td className="px-4 py-3">
                           <div className="w-full bg-slate-100 rounded-full h-2">
