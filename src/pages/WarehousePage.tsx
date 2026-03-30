@@ -152,7 +152,7 @@ export default function WarehousePage() {
       {tab === 'stock' && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Total Raw Materials Value" value={`R ${stats.rawValue.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
+            <StatCard title="Total Raw Materials Value" value={`$ ${stats.rawValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
             <StatCard title="Total Finished Goods" value={stats.total} icon={WarehouseIcon} color="emerald" />
             <StatCard title="Low Stock Items" value={stats.lowCount} icon={AlertTriangle} color="amber" />
             <StatCard title="Warehouses" value={stats.whCount} icon={WarehouseIcon} color="teal" />
@@ -239,7 +239,7 @@ export default function WarehousePage() {
                             </button>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-800">R {(m.current_stock * m.cost_per_unit).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-3 text-right text-slate-800">$ {(m.current_stock * m.cost_per_unit).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                         <td className="px-4 py-3">
                           <div className="w-full bg-slate-100 rounded-full h-2">
                             <div className={`h-2 rounded-full ${statusBarColor[st]}`} style={{ width: `${stockPct(m)}%` }} />

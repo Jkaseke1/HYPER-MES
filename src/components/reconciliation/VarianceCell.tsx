@@ -30,7 +30,7 @@ export default function VarianceCell({ value, format = 'number' }: VarianceCellP
 
   const display = format === 'percentage'
     ? `${value.toFixed(2)}%`
-    : value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    : value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${bgClass}`}>

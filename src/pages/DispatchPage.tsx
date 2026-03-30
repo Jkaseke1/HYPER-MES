@@ -236,14 +236,14 @@ export default function DispatchPage() {
                       </select>
                     </td>
                     <td className="px-3 py-1.5"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" /></td>
-                    <td className="px-3 py-1.5 text-slate-600">{(item.quantity * item.unit_price).toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-slate-600">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="flex justify-end gap-6 mt-3 text-sm">
               <span className="text-slate-600">Total Weight: <strong className="text-slate-800">{totalWeight.toLocaleString()} kg</strong></span>
-              <span className="text-slate-600">Total Value: <strong className="text-slate-800">{totalValue.toLocaleString()}</strong></span>
+              <span className="text-slate-600">Total Value: <strong className="text-slate-800">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
             </div>
           </div>
 
@@ -287,7 +287,7 @@ export default function DispatchPage() {
               </div>
               <div className="flex items-start gap-2">
                 <Package className="w-4 h-4 text-slate-400 mt-0.5" />
-                <div><p className="text-xs text-slate-500">Weight / Value</p><p className="text-sm font-medium text-slate-700">{viewOrder.total_weight.toLocaleString()} kg / {viewOrder.total_value.toLocaleString()}</p></div>
+                <div><p className="text-xs text-slate-500">Weight / Value</p><p className="text-sm font-medium text-slate-700">{viewOrder.total_weight.toLocaleString()} kg / ${viewOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
               </div>
             </div>
             {viewOrder.delivery_notes && <p className="text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-lg px-4 py-2">{viewOrder.delivery_notes}</p>}
@@ -332,8 +332,8 @@ export default function DispatchPage() {
                       <td className="px-3 py-2 text-slate-600">{item.batch_number}</td>
                       <td className="px-3 py-2 text-slate-600">{item.quantity}</td>
                       <td className="px-3 py-2 text-slate-600">{item.unit}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.unit_price.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-slate-700 font-medium">{item.line_total.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-slate-600">${item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-slate-700 font-medium">${item.line_total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
