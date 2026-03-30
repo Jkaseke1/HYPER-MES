@@ -26,6 +26,7 @@ import {
   ArrowRightLeft,
   Shield,
   Users,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -82,6 +83,7 @@ const navGroups: NavGroup[] = [
     icon: BarChart3,
     items: [
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
+      { to: '/admin/sync-log', icon: Activity, label: 'Sync Log' },
       { to: '/reports', icon: BarChart3, label: 'Reports' },
     ],
   },

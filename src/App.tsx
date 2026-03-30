@@ -16,6 +16,7 @@ const ProductionOrdersPage = lazy(() => import('./pages/ProductionOrdersPage'));
 const WarehousePage = lazy(() => import('./pages/WarehousePage'));
 const DispatchPage = lazy(() => import('./pages/DispatchPage'));
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
+const SyncLogPage = lazy(() => import('./pages/SyncLogPage'));
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage'));
 const DailyProductionReportPage = lazy(() => import('./pages/DailyProductionReportPage'));
 const MaterialTransferPage = lazy(() => import('./pages/MaterialTransferPage'));
@@ -96,6 +97,7 @@ function AppRoutes() {
           <Route path="/warehouse" element={<WarehousePage />} />
           <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/reconciliation" element={<ReconciliationPage />} />
+          <Route path="/admin/sync-log" element={<SyncLogPage />} />
           <Route path="/maintenance-work-orders" element={<MaintenanceWorkOrdersPage />} />
           <Route path="/maintenance-schedules" element={<MaintenanceSchedulePage />} />
           <Route path="/spare-parts" element={<SparePartsPage />} />

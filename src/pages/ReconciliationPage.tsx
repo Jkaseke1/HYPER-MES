@@ -1,236 +1,261 @@
-import { useState, useEffect } from 'react';
-import { Plus, Calendar, ChevronRight, FileCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Package, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown, Calendar, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { Branch } from '../types/database';
-import type { ReconciliationPeriod } from '../types/reconciliation';
-import { MONTH_NAMES } from '../types/reconciliation';
-import Modal from '../components/ui/Modal';
-import StatusBadge from '../components/ui/StatusBadge';
-import ReconciliationDetail from './ReconciliationDetail';
+import StatCard from '../components/ui/StatCard';
 
-const currentYear = new Date().getFullYear();
-const currentMonth = new Date().getMonth() + 1;
+interface ReconRawMaterial {
+  id: string;
+  material_name: string;
+  sage_code: string;
+  sage_quantity: number;
+  mes_quantity: number;
+  variance: number;
+  variance_percentage: number;
+  last_synced: string;
+  status: 'OK' | 'LOW_VARIANCE' | 'HIGH_VARIANCE';
+  created_at: string;
+  updated_at: string;
+}
+
+interface LastReconciliation {
+  run_time: string;
+  total_records: number;
+  matched: number;
+  variances: number;
+}
+
+const statusConfig = {
+  OK: { color: 'emerald', icon: CheckCircle, label: 'OK' },
+  LOW_VARIANCE: { color: 'amber', icon: TrendingUp, label: 'Low Variance' },
+  HIGH_VARIANCE: { color: 'red', icon: AlertTriangle, label: 'High Variance' }
+};
 
 export default function ReconciliationPage() {
-  const [periods, setPeriods] = useState<ReconciliationPeriod[]>([]);
+  const [materials, setMaterials] = useState<ReconRawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<ReconciliationPeriod | null>(null);
-  const [newMonth, setNewMonth] = useState(currentMonth);
-  const [newYear, setNewYear] = useState(currentYear);
-  const [saving, setSaving] = useState(false);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [newBranch, setNewBranch] = useState('');
-  const [newStatus, setNewStatus] = useState<ReconciliationPeriod['status']>('draft');
-  const [formError, setFormError] = useState<string | null>(null);
+  const [lastReconciliation, setLastReconciliation] = useState<LastReconciliation | null>(null);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  async function fetchPeriods() {
+  async function fetchReconciliationData() {
     setLoading(true);
-    const { data } = await supabase
-      .from('reconciliation_periods')
-      .select('*, branches(name)')
-      .order('year', { ascending: false })
-      .order('month', { ascending: false });
-    setPeriods(data || []);
-    setLoading(false);
+    try {
+      // Fetch reconciliation data
+      const { data: reconData, error: reconError } = await supabase
+        .from('recon_raw_materials')
+        .select('*')
+        .order('variance_percentage', { ascending: false });
+
+      if (reconError) throw reconError;
+      setMaterials(reconData || []);
+
+      // Fetch last reconciliation run time from sync_log
+      const { data: syncData, error: syncError } = await supabase
+        .from('sync_log')
+        .select('created_at, description')
+        .eq('event_type', 'reconciliation_completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!syncError && syncData) {
+        setLastReconciliation({
+          run_time: syncData.created_at,
+          total_records: materials.length,
+          matched: materials.filter(m => m.status === 'OK').length,
+          variances: materials.filter(m => m.status !== 'OK').length
+        });
+      }
+    } catch (error: any) {
+      console.error('Error fetching reconciliation data:', error);
+    } finally {
+      setLoading(false);
+      setLastRefresh(new Date());
+    }
   }
 
-  useEffect(() => { fetchPeriods(); }, []);
   useEffect(() => {
-    supabase.from('branches').select('id, name').eq('is_active', true).then(({ data }) => {
-      setBranches((data as Branch[]) || []);
-    });
+    fetchReconciliationData();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    e.preventDefault();
-    if (!newBranch) {
-      setFormError('Please select a branch.');
-      return;
-    }
-    setFormError(null);
-    setSaving(true);
-    const { data, error } = await supabase
-      .from('reconciliation_periods')
-      .insert({ month: newMonth, year: newYear, status: newStatus, branch_id: newBranch })
-      .select()
-      .maybeSingle();
-    setSaving(false);
-    if (error) {
-      setFormError(error.message);
-      return;
-    }
-    setModalOpen(false);
-    setNewBranch('');
-    setNewStatus('draft');
-    if (data) {
-      setSelectedPeriod(data as ReconciliationPeriod);
-    }
-    fetchPeriods();
-  }
+  const summary = {
+    matched: materials.filter(m => m.status === 'OK').length,
+    variances: materials.filter(m => m.status !== 'OK').length,
+    notInMES: materials.filter(m => m.mes_quantity === 0).length
+  };
 
-  if (selectedPeriod) {
-    return (
-      <ReconciliationDetail
-        period={selectedPeriod}
-        onBack={() => { setSelectedPeriod(null); fetchPeriods(); }}
-        onUpdate={(updated) => setSelectedPeriod(updated)}
-      />
-    );
-  }
+  const getStatus = (variancePercentage: number): 'OK' | 'LOW_VARIANCE' | 'HIGH_VARIANCE' => {
+    if (Math.abs(variancePercentage) <= 5) return 'OK';
+    if (Math.abs(variancePercentage) <= 15) return 'LOW_VARIANCE';
+    return 'HIGH_VARIANCE';
+  };
 
-  const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
+  const formatVariance = (variance: number, variancePercentage: number) => {
+    const sign = variance >= 0 ? '+' : '';
+    return `${sign}${variance.toLocaleString()} (${sign}${variancePercentage.toFixed(1)}%)`;
+  };
+
+  const getVarianceColor = (variance: number) => {
+    if (variance > 0) return 'text-red-600';
+    if (variance < 0) return 'text-amber-600';
+    return 'text-slate-600';
+  };
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Material Reconciliation</h1>
-          <p className="text-sm text-slate-500 mt-1">Monthly stock reconciliation across all production stages</p>
+          <h1 className="text-2xl font-bold text-slate-900">Reconciliation</h1>
+          <p className="text-sm text-slate-600 mt-1">Compare Sage and MES inventory data</p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> New Period
-        </button>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <RefreshCw className="w-3 h-3" />
+          Last refresh: {lastRefresh.toLocaleTimeString()}
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin" />
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard 
+          title="Matched" 
+          value={summary.matched.toLocaleString()} 
+          icon={CheckCircle} 
+          color="emerald" 
+        />
+        <StatCard 
+          title="Variances" 
+          value={summary.variances.toLocaleString()} 
+          icon={AlertTriangle} 
+          color="amber" 
+        />
+        <StatCard 
+          title="Not in MES" 
+          value={summary.notInMES.toLocaleString()} 
+          icon={Package} 
+          color="slate" 
+        />
+      </div>
+
+      {/* Last Reconciliation Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Calendar className="w-5 h-5 text-blue-600 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-blue-900">Reconciliation Schedule</h3>
+            <p className="text-sm text-blue-700 mt-1">
+              Reconciliation runs automatically every night at 11pm
+            </p>
+            {lastReconciliation && (
+              <p className="text-xs text-blue-600 mt-2">
+                Last run: {new Date(lastReconciliation.run_time).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
-      ) : periods.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-xl border border-slate-200">
-          <FileCheck className="w-12 h-12 mb-3" />
-          <p className="text-sm font-medium">No reconciliation periods yet</p>
-          <p className="text-xs mt-1">Create your first monthly reconciliation to get started</p>
+      </div>
+
+      {/* Reconciliation Table */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">Raw Materials Reconciliation</h2>
+            <button
+              onClick={fetchReconciliationData}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Period</th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Branch</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Received RM</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Actual Production</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Actual Dispatched</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Dispatch Variance</th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Action</th>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Material Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Sage Code</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Sage Qty</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">MES Qty</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Variance</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Last Synced</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-20 text-center">
+                    <div className="flex items-center justify-center">
+                      <RefreshCw className="w-6 h-6 animate-spin text-teal-600" />
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {periods.map((period) => {
-                  const totalVariance = period.actual_dispatched_t - period.expected_dispatched_t;
+              ) : materials.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-20 text-center text-slate-500">
+                    <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm font-medium">No reconciliation data found</p>
+                  </td>
+                </tr>
+              ) : (
+                materials.map((material) => {
+                  const status = getStatus(material.variance_percentage);
+                  const config = statusConfig[status];
+                  const StatusIcon = config.icon;
+
                   return (
-                    <tr key={period.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-slate-100 rounded-lg">
-                            <Calendar className="w-4 h-4 text-slate-500" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-slate-800">
-                              {MONTH_NAMES[period.month - 1]} {period.year}
-                            </div>
-                          </div>
+                    <tr key={material.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {material.material_name}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                          {material.sage_code}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {material.sage_quantity.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-700">
+                        {material.mes_quantity.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className={`font-medium ${getVarianceColor(material.variance)}`}>
+                          {formatVariance(material.variance, material.variance_percentage)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-600">{period.branches?.name || '-'}</span>
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-slate-700">
+                          {material.last_synced 
+                            ? new Date(material.last_synced).toLocaleDateString()
+                            : 'Never'
+                          }
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-medium text-slate-800">{period.received_raw_materials_t.toLocaleString()}</span>
-                        <span className="text-xs text-slate-500 ml-1">T</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-medium text-slate-800">{period.actual_declared_production_t.toLocaleString()}</span>
-                        <span className="text-xs text-slate-500 ml-1">T</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-medium text-slate-800">{period.actual_dispatched_t.toLocaleString()}</span>
-                        <span className="text-xs text-slate-500 ml-1">T</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        {totalVariance !== 0 ? (
-                          <span className={`text-sm font-semibold ${totalVariance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                            {totalVariance > 0 ? '+' : ''}{totalVariance.toLocaleString()} T
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <StatusIcon className={`w-4 h-4 text-${config.color}-600`} />
+                          <span className={`text-xs font-medium text-${config.color}-700`}>
+                            {config.label}
                           </span>
-                        ) : (
-                          <span className="text-sm text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={period.status} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          onClick={() => setSelectedPeriod(period)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
-                        >
-                          View Details
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        </div>
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="New Reconciliation Period" size="sm">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Month</label>
-            <select value={newMonth} onChange={(e) => setNewMonth(parseInt(e.target.value))} className={inputClass}>
-              {MONTH_NAMES.map((name, i) => (
-                <option key={i} value={i + 1}>{name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Year</label>
-            <select value={newYear} onChange={(e) => setNewYear(parseInt(e.target.value))} className={inputClass}>
-              {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Branch</label>
-            <select value={newBranch} onChange={(e) => setNewBranch(e.target.value)} className={inputClass}>
-              <option value="">Select branch</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Initial Status</label>
-            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ReconciliationPeriod['status'])} className={inputClass}>
-              {['draft', 'in_progress', 'completed', 'approved'].map((status) => (
-                <option key={status} value={status}>{status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
-              ))}
-            </select>
-          </div>
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create Period'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/50">
+          <p className="text-xs text-slate-500">
+            {materials.length} material{materials.length !== 1 ? 's' : ''} shown • 
+            Sorted by variance (highest first)
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
