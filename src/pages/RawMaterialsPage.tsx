@@ -12,8 +12,8 @@ const TABS = ['All', ...CATEGORIES] as const;
 const emptyForm = { name: '', code: '', category: 'grain', unit: 'ton', cost_per_unit: 0, reorder_level: 0, description: '', currency_code: 'USD', warehouse_id: '' };
 
 function getStockStatus(current: number, reorder: number): string {
-  if (current <= 0) return 'out_of_stock';
-  if (current <= reorder) return 'low_stock';
+  if (current === 0) return 'out_of_stock';
+  if (current <= reorder && reorder > 0) return 'low_stock';
   return 'in_stock';
 }
 
@@ -36,6 +36,10 @@ export default function RawMaterialsPage() {
   const [saving, setSaving] = useState(false);
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  
+  // Inline reorder level editing state
+  const [editingReorder, setEditingReorder] = useState<string | null>(null);
+  const [reorderValue, setReorderValue] = useState<string>('');
 
   async function fetchMaterials() {
     setLoading(true);
@@ -125,6 +129,41 @@ export default function RawMaterialsPage() {
     fetchMaterials();
   }
 
+  // Inline reorder level editing functions
+  function startEditingReorder(materialId: string, currentValue: number) {
+    setEditingReorder(materialId);
+    setReorderValue(currentValue.toString());
+  }
+
+  async function saveReorderLevel(materialId: string) {
+    const newValue = parseFloat(reorderValue) || 0;
+    
+    try {
+      const { error } = await supabase
+        .from('raw_materials')
+        .update({ reorder_level: newValue })
+        .eq('id', materialId);
+
+      if (error) throw error;
+
+      // Update local state
+      setMaterials(prev => prev.map(m => 
+        m.id === materialId ? { ...m, reorder_level: newValue } : m
+      ));
+    } catch (error: any) {
+      console.error('Error saving reorder level:', error);
+      alert('Failed to save reorder level: ' + error.message);
+    }
+    
+    setEditingReorder(null);
+    setReorderValue('');
+  }
+
+  function cancelEditingReorder() {
+    setEditingReorder(null);
+    setReorderValue('');
+  }
+
   const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
 
   const totalMaterials = materials.length;
@@ -201,7 +240,51 @@ export default function RawMaterialsPage() {
                           <span className={status === 'out_of_stock' ? 'text-red-600 font-medium' : 'text-slate-700'}>{m.current_stock.toLocaleString()}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{m.reorder_level.toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {editingReorder === m.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={reorderValue}
+                              onChange={(e) => setReorderValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  saveReorderLevel(m.id);
+                                } else if (e.key === 'Escape') {
+                                  cancelEditingReorder();
+                                }
+                              }}
+                              onBlur={() => saveReorderLevel(m.id)}
+                              className="w-20 px-2 py-1 border border-teal-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => saveReorderLevel(m.id)}
+                              className="p-1 rounded text-teal-600 hover:bg-teal-50"
+                              title="Save"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={cancelEditingReorder}
+                              className="p-1 rounded text-slate-400 hover:bg-slate-50"
+                              title="Cancel"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startEditingReorder(m.id, m.reorder_level)}
+                            className="text-slate-600 hover:text-teal-600 hover:bg-teal-50 px-2 py-1 rounded text-sm transition-colors"
+                            title="Click to edit reorder level"
+                          >
+                            {m.reorder_level.toLocaleString()}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full border ${stockStyles[status]}`}>
                           {status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
