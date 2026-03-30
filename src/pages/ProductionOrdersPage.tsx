@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, ArrowRight } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { ProductionOrder, Formulation, Machine, Profile, ProductionPlan, ProductionLog } from '../types/database';
@@ -295,26 +295,6 @@ export default function ProductionOrdersPage() {
     
     setSaving(true);
     try {
-      // Check stock availability before issuing
-      const { data: rawMaterial, error: stockError } = await supabase
-        .from('raw_materials')
-        .select('current_stock, unit')
-        .eq('id', material.raw_material_id)
-        .single();
-
-      if (stockError) throw stockError;
-
-      // Validate stock availability
-      if (rawMaterial.current_stock < material.planned_qty) {
-        const availableStock = rawMaterial.current_stock.toLocaleString();
-        const plannedQty = material.planned_qty.toLocaleString();
-        const unit = rawMaterial.unit || 'kg';
-        
-        setWorkflowError(`Insufficient stock — only ${availableStock} ${unit} available in Sage. Required: ${plannedQty} ${unit}`);
-        setSaving(false);
-        return;
-      }
-
       // Call the database function to issue individual ingredient
       const { error } = await supabase.rpc('issue_individual_ingredient', {
         p_material_id: material.id,
@@ -869,17 +849,17 @@ export default function ProductionOrdersPage() {
                             <td className="px-3 py-2 text-center">
                               {!material.issued && selected.status === 'pending' && (
                                 <div className="flex flex-col gap-1">
-                                  {material.raw_materials?.current_stock < material.planned_qty && (
+                                  {material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty && (
                                     <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
                                       <AlertTriangle className="w-3 h-3" />
-                                      Low Stock: {material.raw_materials.current_stock.toLocaleString()} {material.unit}
+                                      Insufficient stock — only {material.raw_materials.current_stock.toLocaleString()}{material.unit} available
                                     </div>
                                   )}
                                   <button
                                     onClick={() => issueIndividualIngredient(material)}
                                     disabled={saving}
                                     className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-                                      material.raw_materials?.current_stock < material.planned_qty
+                                      material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty
                                         ? 'bg-amber-600 hover:bg-amber-700 text-white'
                                         : 'bg-teal-600 hover:bg-teal-700 text-white'
                                     }`}
