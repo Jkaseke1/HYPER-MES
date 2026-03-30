@@ -19,7 +19,7 @@ interface OrderMaterial {
   issued: boolean; 
   issued_at?: string;
   issued_by?: string;
-  raw_materials?: { name: string; code: string; cost_per_unit: number };
+  raw_materials?: { name: string; code: string; cost_per_unit: number; current_stock: number; };
 }
 
 type TabFilter = 'all' | 'pending' | 'materials_issued' | 'in_progress' | 'completed';
@@ -120,7 +120,7 @@ export default function ProductionOrdersPage() {
     // Check if BOM exists for this formulation
     const { data: bomData, error: bomError } = await supabase
       .from('formulation_ingredients')
-      .select('*, raw_materials(name, code, cost_per_unit)')
+      .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
       .eq('formulation_id', fid)
       .eq('is_active', true);
     
@@ -213,7 +213,7 @@ export default function ProductionOrdersPage() {
     // Load materials with issuance status
     const { data } = await supabase
       .from('production_order_materials')
-      .select('*, raw_materials(name, code, cost_per_unit)')
+      .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
       .eq('production_order_id', order.id);
     
     const mats = (data as OrderMaterial[]) || [];
@@ -295,6 +295,26 @@ export default function ProductionOrdersPage() {
     
     setSaving(true);
     try {
+      // Check stock availability before issuing
+      const { data: rawMaterial, error: stockError } = await supabase
+        .from('raw_materials')
+        .select('current_stock, unit')
+        .eq('id', material.raw_material_id)
+        .single();
+
+      if (stockError) throw stockError;
+
+      // Validate stock availability
+      if (rawMaterial.current_stock < material.planned_qty) {
+        const availableStock = rawMaterial.current_stock.toLocaleString();
+        const plannedQty = material.planned_qty.toLocaleString();
+        const unit = rawMaterial.unit || 'kg';
+        
+        setWorkflowError(`Insufficient stock — only ${availableStock} ${unit} available in Sage. Required: ${plannedQty} ${unit}`);
+        setSaving(false);
+        return;
+      }
+
       // Call the database function to issue individual ingredient
       const { error } = await supabase.rpc('issue_individual_ingredient', {
         p_material_id: material.id,
@@ -307,7 +327,7 @@ export default function ProductionOrdersPage() {
       // Refresh materials
       const { data: refreshedData } = await supabase
         .from('production_order_materials')
-        .select('*, raw_materials(name, code, cost_per_unit)')
+        .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
         .eq('production_order_id', selected.id);
       
       const refreshed = (refreshedData as OrderMaterial[]) || [];
@@ -848,14 +868,26 @@ export default function ProductionOrdersPage() {
                             </td>
                             <td className="px-3 py-2 text-center">
                               {!material.issued && selected.status === 'pending' && (
-                                <button
-                                  onClick={() => issueIndividualIngredient(material)}
-                                  disabled={saving}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-teal-600 hover:bg-teal-700 text-white rounded transition-colors"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  Issue
-                                </button>
+                                <div className="flex flex-col gap-1">
+                                  {material.raw_materials?.current_stock < material.planned_qty && (
+                                    <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Low Stock: {material.raw_materials.current_stock.toLocaleString()} {material.unit}
+                                    </div>
+                                  )}
+                                  <button
+                                    onClick={() => issueIndividualIngredient(material)}
+                                    disabled={saving}
+                                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                      material.raw_materials?.current_stock < material.planned_qty
+                                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                        : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                    }`}
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Issue
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
