@@ -187,11 +187,11 @@ export default function SyncLogPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {Object.entries(statusConfig).map(([status, config]) => {
-          const count = logs.filter(log => log.status === status).length;
+        {Object.entries(statusConfig).map(([statusKey, config]) => {
+          const count = logs.filter(log => log.status === statusKey).length;
           const Icon = config.icon;
           return (
-            <div key={status} className="bg-white rounded-lg border border-slate-200 p-4">
+            <div key={statusKey} className="bg-white rounded-lg border border-slate-200 p-4">
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg bg-${config.color}-50`}>
                   <Icon className={`w-5 h-5 text-${config.color}-600`} />
