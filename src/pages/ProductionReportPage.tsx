@@ -24,6 +24,7 @@ const MONTH_NAMES = [
 ];
 
 export default function ProductionReportPage() {
+  console.log('ProductionReportPage loaded!');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
