@@ -37,9 +37,19 @@ interface DispatchItem {
   line_total: number;
 }
 
+const DISPATCH_WORKFLOW: { status: DispatchOrder['status']; label: string; btnLabel: string; btnColor: string; next: DispatchOrder['status'] | null }[] = [
+  { status: 'pending',    label: 'Pending',    btnLabel: 'Plan Dispatch',      btnColor: 'bg-blue-600 hover:bg-blue-700',   next: 'planned' },
+  { status: 'planned',   label: 'Planned',    btnLabel: 'Mark as Loaded',     btnColor: 'bg-amber-600 hover:bg-amber-700',  next: 'loaded' },
+  { status: 'loaded',    label: 'Loaded',     btnLabel: 'Dispatch Now',       btnColor: 'bg-teal-600 hover:bg-teal-700',   next: 'dispatched' },
+  { status: 'dispatched',label: 'Dispatched', btnLabel: 'Confirm Delivery',   btnColor: 'bg-emerald-600 hover:bg-emerald-700', next: 'delivered' },
+  { status: 'delivered', label: 'Delivered',  btnLabel: '',                   btnColor: '',                                 next: null },
+];
+
 export default function DispatchPage() {
   const [orders, setOrders] = useState<DispatchOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewOrder, setViewOrder] = useState<DispatchOrder | null>(null);
@@ -62,6 +72,7 @@ export default function DispatchPage() {
   }
 
   async function openView(order: DispatchOrder) {
+    setWorkflowError(null);
     setViewOrder(order);
     const { data } = await supabase
       .from('dispatch_items')
@@ -69,6 +80,32 @@ export default function DispatchPage() {
       .eq('dispatch_order_id', order.id);
     
     if (data) setViewItems(data);
+  }
+
+  async function updateDispatchStatus(nextStatus: DispatchOrder['status']) {
+    if (!viewOrder) return;
+    setSaving(true);
+    setWorkflowError(null);
+    try {
+      const updates: Record<string, any> = { status: nextStatus };
+      if (nextStatus === 'dispatched') updates.dispatched_at = new Date().toISOString();
+      if (nextStatus === 'delivered') updates.delivered_at = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('dispatch_orders')
+        .update(updates)
+        .eq('id', viewOrder.id);
+
+      if (error) throw error;
+
+      const updated = { ...viewOrder, ...updates };
+      setViewOrder(updated as DispatchOrder);
+      setOrders(prev => prev.map(o => o.id === viewOrder.id ? updated as DispatchOrder : o));
+    } catch (err: any) {
+      setWorkflowError(err.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const filteredOrders = orders.filter((order) => {
@@ -221,6 +258,45 @@ export default function DispatchPage() {
       >
         {viewOrder && (
           <div className="space-y-3">
+            {/* Workflow Bar */}
+            {(() => {
+              const step = DISPATCH_WORKFLOW.find(s => s.status === viewOrder.status);
+              const stepIndex = DISPATCH_WORKFLOW.findIndex(s => s.status === viewOrder.status);
+              return (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-1 flex-wrap text-xs">
+                    {DISPATCH_WORKFLOW.map((s, i) => (
+                      <span key={s.status} className="flex items-center gap-1">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          i < stepIndex ? 'bg-emerald-100 text-emerald-700' :
+                          i === stepIndex ? 'bg-teal-600 text-white' :
+                          'bg-slate-100 text-slate-400'
+                        }`}>{s.label}</span>
+                        {i < DISPATCH_WORKFLOW.length - 1 && <span className="text-slate-300">→</span>}
+                      </span>
+                    ))}
+                  </div>
+                  {workflowError && (
+                    <p className="text-xs text-red-600 font-medium">{workflowError}</p>
+                  )}
+                  {step?.next && (
+                    <button
+                      onClick={() => updateDispatchStatus(step.next!)}
+                      disabled={saving}
+                      className={`flex items-center gap-2 px-4 py-1.5 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${step.btnColor}`}
+                    >
+                      <Truck className="w-4 h-4" />
+                      {saving ? 'Updating…' : step.btnLabel}
+                    </button>
+                  )}
+                  {viewOrder.status === 'delivered' && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 className="w-4 h-4" /> Delivered — order complete
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             {/* Tabs */}
             <div className="flex border-b border-slate-200 -mx-6 px-6">
               <button
@@ -358,15 +434,12 @@ export default function DispatchPage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <div className="flex justify-end pt-3 border-t border-slate-200">
               <button
-                onClick={() => { setViewOrder(null); setActiveTab('general'); }}
+                onClick={() => { setViewOrder(null); setActiveTab('general'); setWorkflowError(null); }}
                 className="px-4 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors"
               >
                 Close
-              </button>
-              <button className="px-4 py-1.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors">
-                Plan Dispatch
               </button>
             </div>
           </div>

@@ -304,6 +304,19 @@ export default function ProductionOrdersPage() {
 
       if (error) throw error;
 
+      // Record as a stock movement so Material Transfer page reflects it
+      await supabase.from('stock_movements').insert({
+        movement_type: 'transfer_to_production',
+        raw_material_id: material.raw_material_id,
+        quantity: -Math.abs(material.planned_qty),
+        unit: 'kg',
+        notes: `Issued to production order ${selected.batch_number}`,
+        reference_type: 'production_order',
+        reference_id: selected.id,
+        batch_number: selected.batch_number,
+        movement_date: new Date().toISOString(),
+      });
+
       // Refresh materials
       const { data: refreshedData } = await supabase
         .from('production_order_materials')
