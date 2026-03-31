@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Download, RefreshCw, DollarSign, BarChart3, Users, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar, Download, RefreshCw, DollarSign, BarChart3, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import StatCard from '../components/ui/StatCard';
+import { MONTH_NAMES } from '../types/reconciliation';
 
 interface LabourCostData {
   production_line: string;
@@ -11,11 +12,6 @@ interface LabourCostData {
   total_labour_cost: number;
   percentage_of_total: number;
 }
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
 
 // Labour rates per tonne (USD) by formulation sage_code
 const LABOUR_RATES: Record<string, number> = {
@@ -88,7 +84,7 @@ const isPigPellet = (formulationName: string): boolean => {
 };
 
 export default function LabourCostReportPage() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [labourData, setLabourData] = useState<LabourCostData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,8 +93,8 @@ export default function LabourCostReportPage() {
   async function fetchLabourData() {
     setLoading(true);
     try {
-      const startDate = new Date(selectedYear, selectedMonth, 1);
-      const endDate = new Date(selectedYear, selectedMonth + 1, 0);
+      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+      const endDate = new Date(selectedYear, selectedMonth, 0);
       
       // Fetch completed production orders for the selected month
       const { data: orders, error: ordersError } = await supabase
@@ -131,8 +127,9 @@ export default function LabourCostReportPage() {
       }>();
       
       orders?.forEach(order => {
-        const sageCode = order.formulations.sage_code;
-        const formulationName = order.formulations.name;
+        const formulation = order.formulations as any;
+        const sageCode = formulation.sage_code;
+        const formulationName = formulation.name;
         const actualQty = order.actual_qty || 0;
         const tonnesProduced = actualQty / 1000; // Convert kg to tonnes
         
@@ -239,68 +236,50 @@ export default function LabourCostReportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `labour-cost-report-${MONTH_NAMES[selectedMonth]}-${selectedYear}.csv`;
+    a.download = `labour-cost-report-${MONTH_NAMES[selectedMonth - 1]}-${selectedYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Labour Cost Report</h1>
-          <p className="text-sm text-slate-600 mt-1">Monthly labour cost analysis by production line</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {MONTH_NAMES[selectedMonth - 1]} {selectedYear} · Rate-per-tonne analysis by production line
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <RefreshCw className="w-3 h-3" />
-          Last refresh: {lastRefresh.toLocaleTimeString()}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">Refreshed {lastRefresh.toLocaleTimeString()}</span>
+          <button onClick={exportToCSV} disabled={labourData.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40">
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
         </div>
       </div>
 
-      {/* Month Selector */}
-      <div className="flex items-center gap-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 bg-white border border-slate-200 rounded-xl px-5 py-3">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-slate-400" />
-          <label className="text-sm font-medium text-slate-700">Month:</label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-          >
-            {MONTH_NAMES.map((month, index) => (
-              <option key={index} value={index}>{month}</option>
-            ))}
+          <label className="text-sm font-medium text-slate-600">Month:</label>
+          <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
+            {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
         </div>
-        
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-slate-700">Year:</label>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-          >
-            {[2024, 2025, 2026].map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
+          <label className="text-sm font-medium text-slate-600">Year:</label>
+          <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
+            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-
-        <button
-          onClick={fetchLabourData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-
-        <button
-          onClick={exportToCSV}
-          className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
+        <button onClick={fetchLabourData} disabled={loading}
+          className="flex items-center gap-2 px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
 
