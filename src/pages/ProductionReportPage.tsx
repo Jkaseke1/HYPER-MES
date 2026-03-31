@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Download, RefreshCw, BarChart3, Package, Percent, Activity } from 'lucide-react';
+import { Calendar, Download, RefreshCw, BarChart3, TrendingUp, Package, Percent, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import StatCard from '../components/ui/StatCard';
 
@@ -280,6 +280,42 @@ export default function ProductionReportPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top 10 Formulations */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">Top 10 Formulations by Tonnage</h3>
+          <div className="space-y-3">
+            {productionData
+              .sort((a, b) => b.actual_qty - a.actual_qty)
+              .slice(0, 10)
+              .map((item, index) => (
+                <div key={index} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-slate-500 w-6">#{index + 1}</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{item.formulation_name}</p>
+                      <p className="text-xs text-slate-500">{item.sage_code}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-800">{item.actual_qty.toLocaleString()} kg</p>
+                    <p className="text-xs text-slate-500">{item.batches_count} batches</p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Daily Production Trend */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">Daily Production Trend</h3>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">Daily production data will appear here when data is available.</p>
+          </div>
         </div>
       </div>
     </div>
