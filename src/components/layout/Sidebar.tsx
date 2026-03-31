@@ -51,7 +51,6 @@ const navGroups: NavGroup[] = [
     label: 'Planning & Setup',
     icon: ClipboardList,
     items: [
-      { to: '/sales-orders', icon: ShoppingCart, label: 'Dispatch Planning' },
       { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
       { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
     ],
