@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Download, RefreshCw, BarChart3, TrendingUp, Package, Percent, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar, Download, RefreshCw, BarChart3, Package, Percent, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import StatCard from '../components/ui/StatCard';
 
@@ -13,11 +13,6 @@ interface ProductionData {
   variance_percentage: number;
 }
 
-interface DailyProduction {
-  date: string;
-  tonnage: number;
-}
-
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -28,7 +23,6 @@ export default function ProductionReportPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
-  const [dailyData, setDailyData] = useState<DailyProduction[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
@@ -64,9 +58,10 @@ export default function ProductionReportPage() {
       const formulationMap = new Map<string, ProductionData>();
       
       orders?.forEach(order => {
-        const sageCode = order.formulations.sage_code;
+        const formulation = order.formulations as any;
+        const sageCode = formulation.sage_code;
         const existing = formulationMap.get(sageCode) || {
-          formulation_name: order.formulations.name,
+          formulation_name: formulation.name,
           sage_code: sageCode,
           batches_count: 0,
           planned_qty: 0,
@@ -93,21 +88,6 @@ export default function ProductionReportPage() {
 
       setProductionData(processedData);
 
-      // Process daily data for trend chart
-      const dailyMap = new Map<string, number>();
-      
-      orders?.forEach(order => {
-        const date = new Date(order.created_at).toISOString().split('T')[0];
-        const current = dailyMap.get(date) || 0;
-        dailyMap.set(date, current + (order.actual_qty || 0));
-      });
-
-      const dailyProduction = Array.from(dailyMap.entries())
-        .map(([date, tonnage]) => ({ date, tonnage }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      setDailyData(dailyProduction);
-
     } catch (error: any) {
       console.error('Error fetching production data:', error);
     } finally {
@@ -127,11 +107,6 @@ export default function ProductionReportPage() {
   const completionRate = productionData.reduce((sum, item) => sum + item.planned_qty, 0) > 0
     ? (totalTonnage / productionData.reduce((sum, item) => sum + item.planned_qty, 0)) * 100
     : 0;
-
-  // Top 10 formulations by tonnage
-  const topFormulations = [...productionData]
-    .sort((a, b) => b.actual_qty - a.actual_qty)
-    .slice(0, 10);
 
   const exportToCSV = () => {
     const headers = ['Formulation Name', 'Sage Code', 'Batches', 'Planned Qty (kg)', 'Actual Qty (kg)', 'Variance (kg)', 'Variance %'];
@@ -305,56 +280,6 @@ export default function ProductionReportPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top 10 Formulations */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Top 10 Formulations by Tonnage</h3>
-          <div className="space-y-3">
-            {topFormulations.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-slate-500 w-6">#{index + 1}</span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{item.formulation_name}</p>
-                    <p className="text-xs text-slate-500">{item.sage_code}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-slate-800">{item.actual_qty.toLocaleString()} kg</p>
-                  <p className="text-xs text-slate-500">{item.batches_count} batches</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Daily Production Trend */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Daily Production Trend</h3>
-          <div className="space-y-2">
-            {dailyData.slice(-10).map((day, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">
-                  {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="w-24 bg-slate-100 rounded-full h-2">
-                    <div 
-                      className="bg-teal-600 h-2 rounded-full"
-                      style={{ width: `${(day.tonnage / Math.max(...dailyData.map(d => d.tonnage))) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-slate-800 w-16 text-right">
-                    {day.tonnage.toLocaleString()} kg
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>
