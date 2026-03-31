@@ -105,10 +105,11 @@ export default function RawMaterialsReportPage() {
   const criticalVariance = allRows.filter(r => Math.abs(r.material_variance) > 10).length;
 
   const exportToCSV = () => {
-    const headers = ['Type', 'Material', 'Opening Stock', 'Receipts', 'Total', 'Issues to Prod', 'Physical Stock', 'System Stock', 'Variance', 'Variance %', 'Comments'];
+    const headers = ['Type', 'Material', 'Sage Code', 'Opening Stock', 'Receipts', 'Total', 'Issues to Prod', 'Physical Stock', 'System Stock', 'Variance', 'Variance %', 'Comments'];
     const rows = allRows.map(r => [
       r.material_type === 'minivits' ? 'Minivits' : 'Bulk',
       r.material_name,
+      r.sage_code || '',
       r.opening_stock,
       r.stock_receipts,
       r.total,
@@ -151,6 +152,7 @@ export default function RawMaterialsReportPage() {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 min-w-[180px]">Material</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">Sage Code</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 whitespace-nowrap">Opening Stock</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 whitespace-nowrap">Receipts</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 whitespace-nowrap">Total</th>
@@ -166,6 +168,9 @@ export default function RawMaterialsReportPage() {
               {rows.map((item) => (
                 <tr key={item.id} className={`hover:bg-slate-50 ${Math.abs(item.material_variance) > 10 ? 'bg-red-50/30' : ''}`}>
                   <td className="px-4 py-3 font-medium text-slate-800">{item.material_name}</td>
+                  <td className="px-4 py-3">
+                    {item.sage_code ? <span className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded">{item.sage_code}</span> : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{item.opening_stock.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{item.stock_receipts.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium">{item.total.toLocaleString()}</td>
@@ -181,6 +186,7 @@ export default function RawMaterialsReportPage() {
             <tfoot>
               <tr className="bg-slate-100 border-t-2 border-slate-300 font-semibold text-slate-700">
                 <td className="px-4 py-3">TOTALS</td>
+                <td className="px-4 py-3" />
                 <td className="px-4 py-3 text-right tabular-nums">{t.opening.toLocaleString()}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{t.receipts.toLocaleString()}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{t.total.toLocaleString()}</td>
@@ -274,12 +280,12 @@ export default function RawMaterialsReportPage() {
       {/* Summary Cards */}
       {!loading && period && allRows.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard title="Total Materials" value={allRows.length.toString()} icon={Package} color="teal" />
+          <StatCard title="Opening Stock" value={totals.opening.toLocaleString() + ' kg'} icon={Package} color="teal" />
           <StatCard title="Total Receipts" value={totals.receipts.toLocaleString() + ' kg'} icon={TrendingUp} color="emerald" />
           <StatCard title="Total Issues" value={totals.issues.toLocaleString() + ' kg'} icon={TrendingDown} color="amber" />
           <StatCard
-            title="Variance Items"
-            value={`${withVariance} (${criticalVariance} critical)`}
+            title="Closing Stock"
+            value={(totals.opening + totals.receipts - totals.issues).toLocaleString() + ' kg'}
             icon={AlertTriangle}
             color={criticalVariance > 0 ? 'red' : 'slate'}
           />
