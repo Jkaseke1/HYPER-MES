@@ -317,7 +317,7 @@ export default function RawMaterialsReportPage() {
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-red-100"></div>
-                <span>Large variance (>10kg)</span>
+                <span>Large variance (&gt;10kg)</span>
               </div>
             </div>
           </div>
