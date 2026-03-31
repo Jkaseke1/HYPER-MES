@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import {
   LayoutDashboard,
-  Package,
+  Package as PackageIcon,
   PackageCheck,
   ClipboardCheck,
   Beaker,
@@ -11,7 +11,7 @@ import {
   Warehouse as WarehouseIcon,
   Truck,
   FileCheck,
-  BarChart3,
+  BarChart3 as BarChart3Icon,
   Settings,
   LogOut,
   Wheat,
@@ -28,9 +28,9 @@ import {
   Users,
   Activity,
   FileText,
-  Package,
+  Package as PackageIcon2,
   DollarSign,
-  BarChart3,
+  BarChart3 as BarChart3Icon2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -51,16 +51,16 @@ const navGroups: NavGroup[] = [
     label: 'Planning & Setup',
     icon: ClipboardList,
     items: [
-      { to: '/sales-orders', icon: ShoppingCart, label: 'Sales Orders' },
+      { to: '/sales-orders', icon: ShoppingCart, label: 'Dispatch Planning' },
       { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
       { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
     ],
   },
   {
     label: 'Raw Materials',
-    icon: Package,
+    icon: PackageIcon,
     items: [
-      { to: '/raw-materials', icon: Package, label: 'Raw Materials' },
+      { to: '/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received' },
       { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
@@ -75,6 +75,15 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Sales & Distribution',
+    icon: ShoppingCart,
+    items: [
+      { to: '/sales-orders', icon: FileText, label: 'Dispatch Planning' },
+      { to: '/warehouse', icon: WarehouseIcon, label: 'Warehouse' },
+      { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
+    ],
+  },
+  {
     label: 'Warehouse & Dispatch',
     icon: WarehouseIcon,
     items: [
@@ -84,12 +93,12 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Reconciliation & Reporting',
-    icon: BarChart3,
+    icon: BarChart3Icon,
     items: [
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/admin/sync-log', icon: Activity, label: 'Sync Log' },
-      { to: '/reports/production', icon: BarChart3, label: 'Production Report' },
-      { to: '/reports/raw-materials', icon: Package, label: 'Raw Materials Report' },
+      { to: '/reports/production', icon: BarChart3Icon2, label: 'Production Report' },
+      { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials Report' },
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
       { to: '/reports', icon: FileText, label: 'Reports' },
     ],
