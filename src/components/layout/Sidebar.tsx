@@ -27,6 +27,10 @@ import {
   Shield,
   Users,
   Activity,
+  FileText,
+  Package,
+  DollarSign,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -84,7 +88,10 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/admin/sync-log', icon: Activity, label: 'Sync Log' },
-      { to: '/reports', icon: BarChart3, label: 'Reports' },
+      { to: '/reports/production', icon: BarChart3, label: 'Production Report' },
+      { to: '/reports/raw-materials', icon: Package, label: 'Raw Materials Report' },
+      { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
+      { to: '/reports', icon: FileText, label: 'Reports' },
     ],
   },
   {

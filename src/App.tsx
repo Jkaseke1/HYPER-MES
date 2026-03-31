@@ -17,6 +17,9 @@ const WarehousePage = lazy(() => import('./pages/WarehousePage'));
 const DispatchPage = lazy(() => import('./pages/DispatchPage'));
 const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
 const SyncLogPage = lazy(() => import('./pages/SyncLogPage'));
+const ProductionReportPage = lazy(() => import('./pages/ProductionReportPage'));
+const RawMaterialsReportPage = lazy(() => import('./pages/RawMaterialsReportPage'));
+const LabourCostReportPage = lazy(() => import('./pages/LabourCostReportPage'));
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage'));
 const DailyProductionReportPage = lazy(() => import('./pages/DailyProductionReportPage'));
 const MaterialTransferPage = lazy(() => import('./pages/MaterialTransferPage'));
@@ -98,6 +101,9 @@ function AppRoutes() {
           <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/reconciliation" element={<ReconciliationPage />} />
           <Route path="/admin/sync-log" element={<SyncLogPage />} />
+          <Route path="/reports/production" element={<ProductionReportPage />} />
+          <Route path="/reports/raw-materials" element={<RawMaterialsReportPage />} />
+          <Route path="/reports/labour" element={<LabourCostReportPage />} />
           <Route path="/maintenance-work-orders" element={<MaintenanceWorkOrdersPage />} />
           <Route path="/maintenance-schedules" element={<MaintenanceSchedulePage />} />
           <Route path="/spare-parts" element={<SparePartsPage />} />
