@@ -101,8 +101,10 @@ export default function SyncLogPage() {
   }, [statusFilter, eventTypeFilter]);
 
   const filteredLogs = logs.filter(log => 
-    log.description.toLowerCase().includes(search.toLowerCase()) ||
-    log.reference_type.toLowerCase().includes(search.toLowerCase())
+    log && 
+    log.status && 
+    (log.description?.toLowerCase().includes(search.toLowerCase()) ||
+     log.reference_type?.toLowerCase().includes(search.toLowerCase()))
   );
 
   const toggleErrorExpansion = (logId: string) => {
@@ -238,7 +240,7 @@ export default function SyncLogPage() {
                 </tr>
               ) : (
                 filteredLogs.map((log) => {
-                  const currentStatusConfig = statusConfig[log.status];
+                  const currentStatusConfig = statusConfig[log.status] || statusConfig.pending;
                   const StatusIcon = currentStatusConfig.icon;
                   const isExpanded = expandedErrors.has(log.id);
                   const isRetrying = retrying.has(log.id);
