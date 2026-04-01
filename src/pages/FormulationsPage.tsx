@@ -300,45 +300,95 @@ export default function FormulationsPage() {
           <p className="text-slate-500">No formulations found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(f => (
-            <div
-              key={f.id}
-              onClick={() => compareMode ? toggleCompareSelect(f) : openDetail(f)}
-              className={`bg-white rounded-xl border p-5 hover:shadow-md transition-all cursor-pointer group ${
-                compareSelected.find(c => c.id === f.id)
-                  ? 'border-amber-400 ring-2 ring-amber-200'
-                  : 'border-slate-200 hover:border-teal-200'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
-                    <FlaskConical className="w-5 h-5 text-teal-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800 text-sm">{f.name}</h3>
-                    <p className="text-xs text-slate-400">{f.code}</p>
-                  </div>
-                </div>
-                {compareMode
-                  ? compareSelected.find(c => c.id === f.id)
-                    ? <span className="flex items-center justify-center w-5 h-5 bg-amber-500 text-white rounded-full text-xs font-bold">{compareSelected.findIndex(c => c.id === f.id) + 1}</span>
-                    : <span className="w-5 h-5 border-2 border-slate-300 rounded-full" />
-                  : <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 transition-colors" />
-                }
-              </div>
-              <div className="flex flex-wrap gap-2 mb-3">
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${catColor[f.category] || catColor.other}`}>{formatLabel(f.category)}</span>
-                <StatusBadge status={f.status} />
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-center pt-3 border-t border-slate-100">
-                <div><p className="text-xs text-slate-400">Version</p><p className="text-sm font-semibold text-slate-700">v{f.version}</p></div>
-                <div><p className="text-xs text-slate-400">Batch</p><p className="text-sm font-semibold text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</p></div>
-                <div><p className="text-xs text-slate-400">Cost/Unit</p><p className="text-sm font-semibold text-teal-700">${f.estimated_cost_per_unit.toFixed(2)}</p></div>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Formula</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Category</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Version</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Batch Size</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Cost/Unit</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Protein</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Fat</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map(f => (
+                  <tr 
+                    key={f.id}
+                    className={`hover:bg-slate-50 transition-colors ${
+                      compareSelected.find(c => c.id === f.id)
+                        ? 'bg-amber-50'
+                        : ''
+                    }`}
+                  >
+                    {compareMode && (
+                      <td className="px-4 py-3 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={!!compareSelected.find(c => c.id === f.id)}
+                          onChange={() => toggleCompareSelect(f)}
+                          className="rounded border-slate-300 text-amber-500 focus:ring-amber-500" 
+                        />
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => compareMode ? toggleCompareSelect(f) : openDetail(f)}
+                        className="flex items-center gap-2 hover:text-teal-600 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+                          <FlaskConical className="w-4 h-4 text-teal-600" />
+                        </div>
+                        <span className="font-medium text-slate-800 hover:underline">{f.name}</span>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">{f.code}</code>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${catColor[f.category] || catColor.other}`}>
+                        {formatLabel(f.category)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm font-semibold text-slate-700">v{f.version}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-sm font-semibold text-teal-700">${f.estimated_cost_per_unit.toFixed(2)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-slate-700">{f.target_protein}%</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-slate-700">{f.target_fat}%</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusBadge status={f.status} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => openDetail(f)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
