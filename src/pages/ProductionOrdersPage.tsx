@@ -34,6 +34,14 @@ const tabs: { key: TabFilter; label: string }[] = [
 const calculateMaterialCost = (items: OrderMaterial[]) =>
   items.reduce((sum, mat) => sum + ((mat.actual_qty || mat.planned_qty) * (mat.unit_cost || 0)), 0);
 
+// Labour rates per production line (per tonne)
+const LABOUR_RATES: Record<string, number> = {
+  'Main Plant': 2.78,
+  'Dog Plant': 18.02,
+  'Samora Mix': 5.00,
+  'Red Plant': 25.50,
+};
+
 const emptyForm = {
   batch_number: '', 
   plan_id: '', 
@@ -909,11 +917,62 @@ export default function ProductionOrdersPage() {
 
             {/* Costing Tab */}
             {detailTab === 'costing' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <h3 className="text-lg font-semibold text-slate-800">Cost Breakdown</h3>
-                <div className="grid grid-cols-2 gap-4">
+                
+                {/* Cost Summary Cards */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <div className="text-xs font-medium text-slate-500 mb-1">Raw Material Cost</div>
+                    <div className="text-2xl font-bold text-slate-800">${costing.raw_material_cost.toFixed(2)}</div>
+                    <div className="text-xs text-slate-400 mt-1">From issued ingredients</div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="text-xs font-medium text-blue-600 mb-1">Production Line Cost</div>
+                    <div className="text-2xl font-bold text-blue-700">
+                      ${(() => {
+                        const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                        const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                        return (lineRate * actualTonnes).toFixed(2);
+                      })()}
+                    </div>
+                    <div className="text-xs text-blue-600 mt-1">
+                      {selected.machines?.name} @ ${LABOUR_RATES[selected.machines?.name as string] || 0}/tonne
+                    </div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                    <div className="text-xs font-medium text-emerald-600 mb-1">Total Production Cost</div>
+                    <div className="text-2xl font-bold text-emerald-700">
+                      ${(() => {
+                        const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                        const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                        const productionLineCost = lineRate * actualTonnes;
+                        const total = costing.raw_material_cost + productionLineCost + costing.overhead_cost;
+                        return total.toFixed(2);
+                      })()}
+                    </div>
+                    <div className="text-xs text-emerald-600 mt-1">Raw + Line + Overhead</div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="text-xs font-medium text-amber-600 mb-1">Cost per kg</div>
+                    <div className="text-2xl font-bold text-amber-700">
+                      ${(() => {
+                        const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                        const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                        const productionLineCost = lineRate * actualTonnes;
+                        const total = costing.raw_material_cost + productionLineCost + costing.overhead_cost;
+                        const costPerKg = output.actual_qty > 0 ? total / output.actual_qty : 0;
+                        return costPerKg.toFixed(4);
+                      })()}
+                    </div>
+                    <div className="text-xs text-amber-600 mt-1">Based on actual output</div>
+                  </div>
+                </div>
+
+                {/* Editable Fields */}
+                <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
                   <div>
-                    <label className={labelCls}>Raw Material Cost</label>
+                    <label className={labelCls}>Raw Material Cost (Auto-calculated)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -922,28 +981,7 @@ export default function ProductionOrdersPage() {
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Labour Cost</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={costing.labour_cost}
-                      onChange={(e) => setCosting({ ...costing, labour_cost: parseFloat(e.target.value) || 0 })}
-                      className={inputCls}
-                      disabled={selected.status !== 'in_progress'}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Production Line Cost</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={costing.production_line_cost}
-                      onChange={(e) => setCosting({ ...costing, production_line_cost: parseFloat(e.target.value) || 0 })}
-                      className={inputCls}
-                      disabled={selected.status !== 'in_progress'}
-                    />
+                    <div className="text-xs text-slate-500 mt-1">Sum of issued ingredient costs</div>
                   </div>
                   <div>
                     <label className={labelCls}>Overhead Cost</label>
@@ -955,6 +993,76 @@ export default function ProductionOrdersPage() {
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
+                    <div className="text-xs text-slate-500 mt-1">Utilities, maintenance, etc.</div>
+                  </div>
+                </div>
+
+                {/* Variance Analysis */}
+                <div className="border-t border-slate-200 pt-4">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-3">Planned vs Actual Variance</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <div className="text-xs font-medium text-slate-600 mb-1">Planned Cost</div>
+                      <div className="text-lg font-bold text-slate-800">
+                        ${(() => {
+                          const plannedLineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                          const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
+                          const plannedLineCost = plannedLineRate * plannedTonnes;
+                          return (costing.raw_material_cost + plannedLineCost + costing.overhead_cost).toFixed(2);
+                        })()}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <div className="text-xs font-medium text-slate-600 mb-1">Actual Cost</div>
+                      <div className="text-lg font-bold text-slate-800">
+                        ${(() => {
+                          const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                          const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                          const productionLineCost = lineRate * actualTonnes;
+                          return (costing.raw_material_cost + productionLineCost + costing.overhead_cost).toFixed(2);
+                        })()}
+                      </div>
+                    </div>
+                    <div className={`rounded-lg p-3 ${(() => {
+                      const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                      const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
+                      const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                      const plannedCost = costing.raw_material_cost + (lineRate * plannedTonnes) + costing.overhead_cost;
+                      const actualCost = costing.raw_material_cost + (lineRate * actualTonnes) + costing.overhead_cost;
+                      const variance = actualCost - plannedCost;
+                      return variance > 0 ? 'bg-red-50' : variance < 0 ? 'bg-emerald-50' : 'bg-slate-50';
+                    })()}`}>
+                      <div className={`text-xs font-medium mb-1 ${(() => {
+                        const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                        const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
+                        const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                        const plannedCost = costing.raw_material_cost + (lineRate * plannedTonnes) + costing.overhead_cost;
+                        const actualCost = costing.raw_material_cost + (lineRate * actualTonnes) + costing.overhead_cost;
+                        const variance = actualCost - plannedCost;
+                        return variance > 0 ? 'text-red-600' : variance < 0 ? 'text-emerald-600' : 'text-slate-600';
+                      })()}`}>
+                        Variance
+                      </div>
+                      <div className={`text-lg font-bold ${(() => {
+                        const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                        const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
+                        const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                        const plannedCost = costing.raw_material_cost + (lineRate * plannedTonnes) + costing.overhead_cost;
+                        const actualCost = costing.raw_material_cost + (lineRate * actualTonnes) + costing.overhead_cost;
+                        const variance = actualCost - plannedCost;
+                        return variance > 0 ? 'text-red-700' : variance < 0 ? 'text-emerald-700' : 'text-slate-700';
+                      })()}`}>
+                        ${(() => {
+                          const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+                          const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
+                          const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
+                          const plannedCost = costing.raw_material_cost + (lineRate * plannedTonnes) + costing.overhead_cost;
+                          const actualCost = costing.raw_material_cost + (lineRate * actualTonnes) + costing.overhead_cost;
+                          const variance = actualCost - plannedCost;
+                          return (variance > 0 ? '+' : '') + variance.toFixed(2);
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
