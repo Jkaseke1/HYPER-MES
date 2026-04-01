@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import type { DispatchOrder, DispatchItem, Branch, Warehouse, Formulation } from '../types/database';
@@ -95,6 +95,30 @@ export default function DispatchPage() {
     await supabase.from('dispatch_orders').update(updates).eq('id', id);
     if (viewOrder?.id === id) setViewOrder({ ...viewOrder, ...updates });
     fetchOrders();
+  };
+
+  const deleteOrder = async (order: DispatchOrder) => {
+    // Check deletion protection - only Pending dispatches can be deleted
+    if (order.status !== 'pending') {
+      alert('Cannot delete — this dispatch has been processed. Only pending dispatches can be deleted.');
+      return;
+    }
+
+    if (!window.confirm(`Delete dispatch order ${order.dispatch_number}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('dispatch_orders').delete().eq('id', order.id);
+      if (error) throw error;
+      setViewOrder(null);
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Error deleting dispatch order:', error);
+      alert(`Failed to delete dispatch order: ${error.message}`);
+      setSaving(false);
+    }
   };
 
   const STATUS_FLOW: Record<string, { label: string; next: string }> = { pending: { label: 'Start Loading', next: 'loading' }, loading: { label: 'Mark Dispatched', next: 'dispatched' }, dispatched: { label: 'In Transit', next: 'in_transit' }, in_transit: { label: 'Mark Delivered', next: 'delivered' } };
@@ -272,6 +296,12 @@ export default function DispatchPage() {
                 {nextStatus(viewOrder.status) && (
                   <button onClick={() => updateStatus(viewOrder.id, nextStatus(viewOrder.status)!.next)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
                     {nextStatus(viewOrder.status)!.label}
+                  </button>
+                )}
+                {viewOrder.status === 'pending' && (
+                  <button onClick={() => deleteOrder(viewOrder)} disabled={saving} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">
+                    <AlertTriangle className="w-3 h-3" />
+                    Delete
                   </button>
                 )}
               </div>

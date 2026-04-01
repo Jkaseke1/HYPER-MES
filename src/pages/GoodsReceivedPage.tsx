@@ -262,6 +262,15 @@ export default function GoodsReceivedPage() {
 
   async function handleDelete() {
     if (!deleting) return;
+    
+    // Check deletion protection - only Pending GRNs can be deleted
+    if (deleting.status !== 'pending') {
+      alert('Cannot delete — this GRN has been processed. Only pending GRNs can be deleted.');
+      setDeleteModalOpen(false);
+      setDeleting(null);
+      return;
+    }
+    
     setSaving(true);
     try {
       const { error } = await supabase.from('goods_received_notes').delete().eq('id', deleting.id);

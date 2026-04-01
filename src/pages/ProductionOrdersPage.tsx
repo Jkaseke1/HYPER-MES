@@ -87,7 +87,30 @@ export default function ProductionOrdersPage() {
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
 
-  
+  // Delete production order with status protection
+  const deleteOrder = async (order: ProductionOrder) => {
+    if (order.status !== 'pending') {
+      setWorkflowError('Cannot delete — this order has been processed. Only pending orders can be deleted.');
+      return;
+    }
+
+    if (!window.confirm(`Delete production order ${order.batch_number}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('production_orders').delete().eq('id', order.id);
+      if (error) throw error;
+      setShowDetail(false);
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Error deleting order:', error);
+      setWorkflowError(`Failed to delete order: ${error.message}`);
+      setSaving(false);
+    }
+  };
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code), profiles(full_name, email)').order('created_at', { ascending: false });
@@ -771,44 +794,57 @@ export default function ProductionOrdersPage() {
             </div>
 
             {/* Workflow Actions */}
-            <div className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-lg">
+            <div className="flex items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-lg">
+              <div className="flex items-center gap-3">
+                {selected.status === 'pending' && (
+                  <button
+                    onClick={() => updateStatus('materials_issued')}
+                    disabled={saving || detailMaterials.length === 0 || !allIngredientsIssued()}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    Approve/Issue Materials
+                  </button>
+                )}
+                
+                {selected.status === 'materials_issued' && (
+                  <button
+                    onClick={() => updateStatus('in_progress')}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Production
+                  </button>
+                )}
+                
+                {selected.status === 'in_progress' && (
+                  <button
+                    onClick={() => updateStatus('completed')}
+                    disabled={saving || output.actual_qty <= 0}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Complete Production
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <ArrowRight className="w-4 h-4" />
+                  <span>Workflow: Pending → Materials Issued → In Progress → Completed</span>
+                </div>
+              </div>
+
               {selected.status === 'pending' && (
                 <button
-                  onClick={() => updateStatus('materials_issued')}
-                  disabled={saving || detailMaterials.length === 0 || !allIngredientsIssued()}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  Approve/Issue Materials
-                </button>
-              )}
-              
-              {selected.status === 'materials_issued' && (
-                <button
-                  onClick={() => updateStatus('in_progress')}
+                  onClick={() => deleteOrder(selected)}
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
                 >
-                  <Play className="w-4 h-4" />
-                  Start Production
+                  <AlertTriangle className="w-4 h-4" />
+                  Delete Order
                 </button>
               )}
-              
-              {selected.status === 'in_progress' && (
-                <button
-                  onClick={() => updateStatus('completed')}
-                  disabled={saving || output.actual_qty <= 0}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Complete Production
-                </button>
-              )}
-
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <ArrowRight className="w-4 h-4" />
-                <span>Workflow: Pending → Materials Issued → In Progress → Completed</span>
-              </div>
             </div>
 
             {/* Detail Tabs */}
