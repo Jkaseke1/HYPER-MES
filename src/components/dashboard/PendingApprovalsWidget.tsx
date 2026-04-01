@@ -19,6 +19,7 @@ interface PendingApproval {
 
 export default function PendingApprovalsWidget() {
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [creatorNames, setCreatorNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -36,11 +37,21 @@ export default function PendingApprovalsWidget() {
       .limit(10);
 
     if (data && profile?.role) {
-      // Filter to only show items the user can approve
-      const filtered = data.filter((item: PendingApproval) => 
+      const filtered = data.filter((item: PendingApproval) =>
         canApprove(item.entity_type as any, profile.role)
       );
       setApprovals(filtered);
+
+      const ids = [...new Set(filtered.map((a: PendingApproval) => a.created_by).filter(Boolean))] as string[];
+      if (ids.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', ids);
+        const map = new Map<string, string>();
+        profiles?.forEach((p: { id: string; full_name: string }) => map.set(p.id, p.full_name));
+        setCreatorNames(map);
+      }
     }
     setLoading(false);
   }
@@ -113,10 +124,15 @@ export default function PendingApprovalsWidget() {
                       {approval.entity_number}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <StatusBadge status={approval.status} />
+                    {approval.created_by && creatorNames.get(approval.created_by) && (
+                      <span className="text-xs text-slate-500">
+                        Created by <span className="font-medium text-slate-700">{creatorNames.get(approval.created_by)}</span>
+                      </span>
+                    )}
                     <span className="text-xs text-slate-400">
-                      {new Date(approval.created_at).toLocaleDateString()}
+                      {new Date(approval.created_at).toLocaleDateString('en-GB')}
                     </span>
                   </div>
                 </div>
