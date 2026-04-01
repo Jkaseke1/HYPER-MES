@@ -94,7 +94,7 @@ export default function ProductionOrderDetail({ order, materials, onClose }: Pro
             <p className="font-semibold text-slate-800">{order.actual_qty || 0} {order.unit}</p>
           </div>
           <div>
-            <span className="text-slate-500">Machine</span>
+            <span className="text-slate-500">Production Line</span>
             <p className="font-semibold text-slate-800">{order.machines?.name || '-'}</p>
           </div>
           <div>
@@ -287,7 +287,7 @@ export default function ProductionOrderDetail({ order, materials, onClose }: Pro
                   <p className="text-sm font-semibold text-slate-800 mt-1">{order.formulations?.name}</p>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-500 uppercase">Machine</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase">Production Line</label>
                   <p className="text-sm font-semibold text-slate-800 mt-1">{order.machines?.name || 'Not assigned'}</p>
                 </div>
                 <div>

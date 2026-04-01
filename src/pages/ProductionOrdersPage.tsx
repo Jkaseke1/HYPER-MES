@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { ProductionOrder, Formulation, Machine, Profile, ProductionPlan, ProductionLog } from '../types/database';
+import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
@@ -51,7 +51,7 @@ const emptyForm = {
 export default function ProductionOrdersPage() {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
-  const [machines, setMachines] = useState<Machine[]>([]);
+  const [productionLines, setProductionLines] = useState<ProductionLine[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tab, setTab] = useState<TabFilter>('all');
   const [search, setSearch] = useState('');
@@ -65,7 +65,7 @@ export default function ProductionOrdersPage() {
   const [logs, setLogs] = useState<ProductionLog[]>([]);
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'logs'>('materials');
   const [bomVariances, setBomVariances] = useState<any[]>([]);
-  const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, machine_cost: 0, overhead_cost: 0 });
+  const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
   const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
@@ -91,7 +91,7 @@ export default function ProductionOrdersPage() {
       supabase.from('production_plans').select('*').order('created_at', { ascending: false }),
     ]).then(([f, m, p, pl]) => {
       setFormulations((f.data as Formulation[]) || []);
-      setMachines((m.data as Machine[]) || []);
+      setProductionLines((m.data as ProductionLine[]) || []);
       setProfiles((p.data as Profile[]) || []);
       setPlans((pl.data as ProductionPlan[]) || []);
     });
@@ -147,9 +147,9 @@ export default function ProductionOrdersPage() {
   };
 
   const createOrder = async () => {
-    // Validate machine is required (Issue 3)
+    // Validate production line is required (Issue 3)
     if (!form.machine_id || form.machine_id === '') {
-      setWorkflowError('Machine selection is required. Every batch must be assigned to a specific machine.');
+      setWorkflowError('Production Line selection is required. Every batch must be assigned to a specific production line.');
       return;
     }
 
@@ -206,7 +206,7 @@ export default function ProductionOrdersPage() {
 
   const openDetail = async (order: ProductionOrder) => {
     setSelected(order);
-    setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, machine_cost: order.machine_cost, overhead_cost: order.overhead_cost });
+    setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
     setOutput({ actual_qty: order.actual_qty, rejected_qty: order.rejected_qty, wastage_qty: order.wastage_qty });
     setDetailTab('materials');
     
@@ -374,7 +374,7 @@ export default function ProductionOrdersPage() {
           throw new Error('Cannot complete production order — actual output quantities must be recorded first. Please enter production outputs in the Output tab.');
         }
         
-        const total = costing.raw_material_cost + costing.labour_cost + costing.machine_cost + costing.overhead_cost;
+        const total = costing.raw_material_cost + costing.labour_cost + costing.production_line_cost + costing.overhead_cost;
         Object.assign(updates, { 
           ...costing, 
           ...output, 
@@ -488,7 +488,7 @@ export default function ProductionOrdersPage() {
                 <tr className="border-b border-slate-200 bg-slate-50/50">
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Batch Number</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Formulation</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Machine</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Production Line</th>
                   <th className="text-right px-4 py-3 font-semibold text-slate-600">Planned Qty</th>
                   <th className="text-right px-4 py-3 font-semibold text-slate-600">Actual Qty</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
@@ -573,15 +573,15 @@ export default function ProductionOrdersPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Machine *</label>
+              <label className={labelCls}>Production Line *</label>
               <select
                 value={form.machine_id}
                 onChange={(e) => setForm({ ...form, machine_id: e.target.value })}
                 className={`${inputCls} ${!form.machine_id ? 'border-red-300' : ''}`}
                 required
               >
-                <option value="">Select machine (required)</option>
-                {machines.map((m) => (
+                <option value="">Select production line (required)</option>
+                {productionLines.map((m) => (
                   <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
                 ))}
               </select>
@@ -729,7 +729,7 @@ export default function ProductionOrdersPage() {
                 <div className="text-sm font-medium text-slate-800">{selected.formulations?.name}</div>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500">Machine</label>
+                <label className="text-xs font-medium text-slate-500">Production Line</label>
                 <div className="text-sm font-medium text-slate-800">{selected.machines?.name}</div>
               </div>
               <div>
@@ -920,12 +920,12 @@ export default function ProductionOrdersPage() {
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>Machine Cost</label>
+                    <label className={labelCls}>Production Line Cost</label>
                     <input
                       type="number"
                       step="0.01"
-                      value={costing.machine_cost}
-                      onChange={(e) => setCosting({ ...costing, machine_cost: parseFloat(e.target.value) || 0 })}
+                      value={costing.production_line_cost}
+                      onChange={(e) => setCosting({ ...costing, production_line_cost: parseFloat(e.target.value) || 0 })}
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
