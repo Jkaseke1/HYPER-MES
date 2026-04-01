@@ -113,11 +113,16 @@ export default function ProductionOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code), profiles(full_name, email)').order('created_at', { ascending: false });
+    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code), profiles!operator_id(full_name, email)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     if (search) q = q.ilike('batch_number', `%${search}%`);
-    const { data } = await q;
-    setOrders((data as ProductionOrder[]) || []);
+    const { data, error } = await q;
+    if (error) {
+      console.error('Error fetching orders:', error);
+      setOrders([]);
+    } else {
+      setOrders((data as ProductionOrder[]) || []);
+    }
     setLoading(false);
   }, [tab, search]);
 
