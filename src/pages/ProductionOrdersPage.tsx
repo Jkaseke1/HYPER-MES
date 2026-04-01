@@ -74,7 +74,7 @@ export default function ProductionOrdersPage() {
   
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code)').order('created_at', { ascending: false });
+    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code), profiles(full_name, email)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     if (search) q = q.ilike('batch_number', `%${search}%`);
     const { data } = await q;
@@ -500,6 +500,11 @@ export default function ProductionOrdersPage() {
                   <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800">{order.batch_number}</div>
+                      {order.profiles?.full_name && (
+                        <div className="text-xs text-slate-500 mt-1">
+                          Created by <span className="font-medium text-slate-700">{order.profiles.full_name}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-slate-600">{order.formulations?.name || '-'}</div>
@@ -719,6 +724,16 @@ export default function ProductionOrdersPage() {
                   <AlertCircle className="w-4 h-4" />
                   <span className="text-sm font-medium">{workflowError}</span>
                 </div>
+              </div>
+            )}
+
+            {/* Creator Tag */}
+            {selected.profiles?.full_name && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
+                <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                <span className="text-xs font-medium text-blue-700">
+                  Created by <span className="font-semibold">{selected.profiles.full_name}</span>
+                </span>
               </div>
             )}
 
