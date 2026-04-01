@@ -21,7 +21,6 @@ import {
   Wrench,
   Calendar,
   PackagePlus,
-  ShoppingCart,
   ClipboardType,
   ArrowRightLeft,
   Shield,
@@ -71,15 +70,6 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
       { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
-    ],
-  },
-  {
-    label: 'Sales & Distribution',
-    icon: ShoppingCart,
-    items: [
-      { to: '/sales-orders', icon: FileText, label: 'Dispatch Planning' },
-      { to: '/warehouse', icon: WarehouseIcon, label: 'Warehouse' },
-      { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
     ],
   },
   {
