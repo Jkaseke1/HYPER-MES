@@ -57,6 +57,7 @@ const emptyForm = {
   machine_id: '', 
   planned_qty: 0, 
   unit: 'kg',
+  unit_size: '25kg',
   priority: 'normal' as const, 
   planned_start: '', 
   planned_end: '', 
@@ -215,6 +216,7 @@ export default function ProductionOrdersPage() {
         machine_id: form.machine_id, // Required field - NOT NULL in database
         planned_qty: form.planned_qty, 
         unit: form.unit,
+        unit_size: form.unit_size,
         priority: form.priority, 
         planned_start: form.planned_start || null,
         planned_end: form.planned_end || null, 
@@ -661,6 +663,18 @@ export default function ProductionOrdersPage() {
               </select>
             </div>
             <div>
+              <label className={labelCls}>Unit Size (Bag)</label>
+              <select
+                value={form.unit_size}
+                onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
+                className={inputCls}
+              >
+                <option value="25kg">25 kg</option>
+                <option value="10kg">10 kg</option>
+                <option value="8kg">8 kg</option>
+              </select>
+            </div>
+            <div>
               <label className={labelCls}>Priority</label>
               <select
                 value={form.priority}
@@ -783,7 +797,7 @@ export default function ProductionOrdersPage() {
             )}
 
             {/* Order Info */}
-            <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+            <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
               <div>
                 <label className="text-xs font-medium text-slate-500">Formulation</label>
                 <div className="text-sm font-medium text-slate-800">{selected.formulations?.name}</div>
@@ -791,6 +805,10 @@ export default function ProductionOrdersPage() {
               <div>
                 <label className="text-xs font-medium text-slate-500">Production Line</label>
                 <div className="text-sm font-medium text-slate-800">{selected.machines?.name}</div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500">Unit Size</label>
+                <div className="text-sm font-medium text-slate-800">{selected.unit_size || '25kg'}</div>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500">Status</label>
