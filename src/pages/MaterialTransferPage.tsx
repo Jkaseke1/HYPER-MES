@@ -80,7 +80,7 @@ export default function MaterialTransferPage() {
     setSaving(true);
     try {
       const { error } = await supabase.from('stock_movements').insert({
-        movement_type: 'transfer_to_production',
+        movement_type: 'transfer',
         raw_material_id: form.raw_material_id,
         warehouse_id: form.from_warehouse_id,
         quantity: -Math.abs(form.quantity), // Negative for outbound
