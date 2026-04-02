@@ -152,6 +152,8 @@ export default function FormulationsPage() {
 
   async function openEdit(f: Formulation) {
     setEditId(f.id);
+    const variants = (f as any).unit_size_variants;
+    console.log('Loading formulation variants:', variants);
     setForm({
       name: f.name,
       code: f.code,
@@ -161,7 +163,7 @@ export default function FormulationsPage() {
       description: f.description,
       batch_size: f.batch_size.toString(),
       batch_unit: f.batch_unit,
-      unit_size_variants: (f as any).unit_size_variants || [],
+      unit_size_variants: Array.isArray(variants) ? variants : [],
       target_protein: f.target_protein.toString(),
       target_fat: f.target_fat.toString(),
       target_fiber: f.target_fiber.toString(),
@@ -198,8 +200,12 @@ export default function FormulationsPage() {
 
     setSaving(true);
     try {
+      // Filter out empty unit_size_variants and validate
+      const validVariants = form.unit_size_variants.filter(v => v.size && v.batch_size > 0);
+      
       const payload = {
         ...form,
+        unit_size_variants: validVariants.length > 0 ? validVariants : null,
         batch_size: Number(form.batch_size) || 0,
         target_protein: Number(form.target_protein) || 0,
         target_fat: Number(form.target_fat) || 0,
@@ -207,6 +213,8 @@ export default function FormulationsPage() {
         target_moisture: Number(form.target_moisture) || 0,
         updated_at: new Date().toISOString(),
       };
+      
+      console.log('Saving formulation with variants:', payload.unit_size_variants);
 
       let fId = editId;
       if (editId) {
@@ -758,6 +766,20 @@ export default function FormulationsPage() {
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? 'Edit Formula' : 'New Formula'} size="xl">
         <div className="space-y-5">
+          <div>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants (Required)</h4>
+            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
+            <div className="space-y-2">
+              {form.unit_size_variants.map((variant, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  <input type="number" placeholder="Batch size" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { l: 'Name', k: 'name', t: 'text' }, { l: 'Code', k: 'code', t: 'text' },
@@ -784,20 +806,6 @@ export default function FormulationsPage() {
             <div className="col-span-2"><label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
               <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
           </div>
-          <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Unit Size Variants</h4>
-            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
-            <div className="space-y-2 mb-3">
-              {form.unit_size_variants.map((variant, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  <input type="number" placeholder="Batch size" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setForm({ ...form, unit_size_variants: [...form.unit_size_variants, { size: '', batch_size: 0 }] })} className="flex items-center gap-1 px-3 py-2 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add Size Variant</button>
-          </div>
 
           <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nutritional Targets</h4>
@@ -823,8 +831,8 @@ export default function FormulationsPage() {
               <tbody>{ings.map((ing, idx) => (
                 <tr key={idx} className="border-b border-slate-50">
                   <td className="py-1.5 pr-2">
-                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: materials.find(m => m.id === e.target.value)?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500">
-                      <option value="">Select...</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
+                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500">
+                      <option value="">Select raw material...</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
