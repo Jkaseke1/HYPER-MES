@@ -57,7 +57,7 @@ const emptyForm = {
   machine_id: '', 
   planned_qty: 0, 
   unit: 'kg',
-  unit_size: '25kg',
+  unit_size: '25',
   priority: 'normal' as const, 
   planned_start: '', 
   planned_end: '', 
@@ -710,9 +710,13 @@ export default function ProductionOrdersPage() {
                 onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
                 className={inputCls}
               >
-                <option value="25kg">25 kg</option>
-                <option value="10kg">10 kg</option>
-                <option value="8kg">8 kg</option>
+                <option value="5">5 kg</option>
+                <option value="8">8 kg</option>
+                <option value="10">10 kg</option>
+                <option value="20">20 kg</option>
+                <option value="25">25 kg</option>
+                <option value="40">40 kg</option>
+                <option value="50">50 kg</option>
               </select>
             </div>
             <div>
