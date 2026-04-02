@@ -806,10 +806,12 @@ export default function FormulationsPage() {
               </select></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Sage Code</label>
               <input type="text" value={form.sage_code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
-              <input type="number" value={form.batch_size} onChange={e => setForm({ ...form, batch_size: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
+              <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
+              <input type="number" value={form.unit_size_variants[0]?.batch_size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
