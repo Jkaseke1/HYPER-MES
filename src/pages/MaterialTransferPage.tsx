@@ -79,8 +79,6 @@ export default function MaterialTransferPage() {
   async function createTransfer() {
     setSaving(true);
     try {
-      const transferNumber = `TRF-${format(new Date(), 'yyyyMMdd')}-${Math.floor(Math.random() * 1000)}`;
-      
       const { error } = await supabase.from('stock_movements').insert({
         movement_type: 'transfer_to_production',
         raw_material_id: form.raw_material_id,
@@ -89,7 +87,6 @@ export default function MaterialTransferPage() {
         unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
         movement_date: form.transfer_date,
         notes: `Transfer to ${form.to_location}. Purpose: ${form.purpose}. ${form.notes}`,
-        reference_number: transferNumber,
       });
 
       if (error) {
