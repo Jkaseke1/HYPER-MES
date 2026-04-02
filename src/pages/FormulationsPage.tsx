@@ -6,8 +6,6 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 
-const CATEGORY_FILTERS = ['All', 'broiler', 'layer', 'dairy', 'pig', 'horse', 'pet', 'other'] as const;
-const CATEGORY_OPTIONS = CATEGORY_FILTERS.filter(c => c !== 'All') as string[];
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 type UnitSizeVariant = { size: string; batch_size: number };
@@ -35,11 +33,11 @@ const emptyForm: FormState = {
   code: '',
   sage_code: '',
   version: 1,
-  category: 'broiler',
+  category: '',
   description: '',
   batch_size: '',
   batch_unit: 'kg',
-  unit_size_variants: [],
+  unit_size_variants: [{ size: '', batch_size: 0 }],
   target_protein: '',
   target_fat: '',
   target_fiber: '',
@@ -54,6 +52,7 @@ const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', 
 export default function FormulationsPage() {
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [formulationIngredientCounts, setFormulationIngredientCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
@@ -100,7 +99,13 @@ export default function FormulationsPage() {
     setMaterials(data || []);
   }, []);
 
-  useEffect(() => { fetchFormulations(); fetchMaterials(); }, [fetchFormulations, fetchMaterials]);
+  const fetchCategories = useCallback(async () => {
+    const { data } = await supabase.from('raw_materials').select('category').eq('is_active', true);
+    const uniqueCategories = Array.from(new Set(data?.map(d => d.category).filter(Boolean) || [])).sort();
+    setCategories(uniqueCategories);
+  }, []);
+
+  useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
 
   const filtered = formulations.filter(f => {
     if (filter !== 'All' && f.category !== filter) return false;
@@ -361,13 +366,20 @@ export default function FormulationsPage() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex gap-1 flex-wrap">
-            {CATEGORY_FILTERS.map(c => (
+            <button
+              key="All"
+              onClick={() => setFilter('All')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === 'All' ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            >
+              All
+            </button>
+            {categories.map((c: string) => (
               <button
                 key={c}
                 onClick={() => setFilter(c)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === c ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
               >
-                {c === 'All' ? 'All' : formatLabel(c)}
+                {formatLabel(c)}
               </button>
             ))}
           </div>
@@ -767,17 +779,28 @@ export default function FormulationsPage() {
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? 'Edit Formula' : 'New Formula'} size="xl">
         <div className="space-y-5">
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants (Required)</h4>
-            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
-            <div className="space-y-2">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Unit Size Variants (Required)</h4>
+                <p className="text-xs text-slate-500">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
+              </div>
+            </div>
+            <div className="space-y-2 mb-3">
               {form.unit_size_variants.map((variant, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  <input type="number" placeholder="Batch size" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                <div key={idx} className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
+                    <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
+                    <input type="number" placeholder="e.g., 1000" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  </div>
+                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors mb-0"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
+            <button onClick={() => setForm({ ...form, unit_size_variants: [...form.unit_size_variants, { size: '', batch_size: 0 }] })} className="flex items-center gap-1 px-3 py-2 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add Size Variant</button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -795,7 +818,8 @@ export default function FormulationsPage() {
                 onChange={e => setForm({ ...form, category: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
               >
-                {CATEGORY_OPTIONS.map((c) => (
+                <option value="">Select a category...</option>
+                {categories.map((c: string) => (
                   <option key={c} value={c}>{formatLabel(c)}</option>
                 ))}
               </select></div>
