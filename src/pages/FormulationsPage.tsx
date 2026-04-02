@@ -833,25 +833,6 @@ export default function FormulationsPage() {
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants</h4>
-            <div className="space-y-2 mb-3">
-              {form.unit_size_variants.map((variant, idx) => (
-                <div key={idx} className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
-                    <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
-                    <input type="number" placeholder="e.g., 1000" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  </div>
-                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors mb-0"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nutritional Targets</h4>
             <div className="grid grid-cols-4 gap-3">
               {[['Protein %', 'target_protein'], ['Fat %', 'target_fat'], ['Fiber %', 'target_fiber'], ['Moisture %', 'target_moisture']].map(([l, k]) => (
