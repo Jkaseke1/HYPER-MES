@@ -785,6 +785,21 @@ export default function FormulationsPage() {
               <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
           </div>
           <div>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Unit Size Variants</h4>
+            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
+            <div className="space-y-2 mb-3">
+              {form.unit_size_variants.map((variant, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  <input type="number" placeholder="Batch size" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setForm({ ...form, unit_size_variants: [...form.unit_size_variants, { size: '', batch_size: 0 }] })} className="flex items-center gap-1 px-3 py-2 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add Size Variant</button>
+          </div>
+
+          <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nutritional Targets</h4>
             <div className="grid grid-cols-4 gap-3">
               {[['Protein %', 'target_protein'], ['Fat %', 'target_fat'], ['Fiber %', 'target_fiber'], ['Moisture %', 'target_moisture']].map(([l, k]) => (
