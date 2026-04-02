@@ -65,6 +65,8 @@ export default function FormulationsPage() {
   const [compareSelected, setCompareSelected] = useState<Formulation[]>([]);
   const [compareIngs, setCompareIngs] = useState<[FormulationIngredient[], FormulationIngredient[]]>([[], []]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [bomEditMode, setBomEditMode] = useState(false);
+  const [bomEditIngs, setBomEditIngs] = useState<FormulationIngredient[]>([]);
 
   const fetchFormulations = useCallback(async () => {
     setLoading(true);
@@ -245,6 +247,38 @@ export default function FormulationsPage() {
     await supabase.from('formulations').delete().eq('id', id);
     setDetailOpen(false);
     fetchFormulations();
+  }
+
+  async function saveBomEdits() {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      // Update all ingredients
+      for (const ing of bomEditIngs) {
+        const { error } = await supabase
+          .from('formulation_ingredients')
+          .update({
+            quantity: ing.quantity,
+            unit: ing.unit,
+            percentage: ing.percentage,
+            is_critical: ing.is_critical,
+          })
+          .eq('id', ing.id);
+        
+        if (error) throw error;
+      }
+      
+      setBomEditMode(false);
+      // Refresh detail view
+      const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
+      setDetailIngs(data || []);
+      fetchFormulations();
+    } catch (error: any) {
+      console.error('Error saving BOM:', error);
+      alert(`Failed to save BOM: ${error.message || error}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
@@ -617,11 +651,12 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={selected?.name || ''} size="xl">
+      <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="xl">
         {selected && (
           <div className="space-y-5">
             <div className="flex gap-2">
-              <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit</button>
+              <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
+              <button onClick={() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> {bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM'}</button>
               <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -631,21 +666,55 @@ export default function FormulationsPage() {
             </div>
             {selected.description && <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{selected.description}</p>}
             <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-2">Ingredients ({detailIngs.length})</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-slate-700">Ingredients ({detailIngs.length})</h4>
+                {bomEditMode && <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">Editing Mode</span>}
+              </div>
               {detailIngs.length === 0 ? <p className="text-sm text-slate-400">No ingredients added</p> : (
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-slate-200 text-left">
-                    <th className="pb-2 font-medium text-slate-500">Material</th><th className="pb-2 font-medium text-slate-500">Qty</th><th className="pb-2 font-medium text-slate-500">%</th><th className="pb-2 font-medium text-slate-500">Critical</th>
+                    <th className="pb-2 font-medium text-slate-500">Material</th><th className="pb-2 font-medium text-slate-500">Qty</th><th className="pb-2 font-medium text-slate-500">Unit</th><th className="pb-2 font-medium text-slate-500">%</th><th className="pb-2 font-medium text-slate-500">Critical</th>
                   </tr></thead>
-                  <tbody>{detailIngs.map(i => (
+                  <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => (
                     <tr key={i.id} className="border-b border-slate-50">
                       <td className="py-2 text-slate-700">{i.raw_materials?.name || 'Unknown'}</td>
-                      <td className="py-2 text-slate-600">{i.quantity} {i.unit}</td>
-                      <td className="py-2 text-slate-600">{i.percentage}%</td>
-                      <td className="py-2">{i.is_critical ? <span className="text-xs font-medium text-red-600">Yes</span> : <span className="text-xs text-slate-400">No</span>}</td>
+                      <td className="py-2">
+                        {bomEditMode ? (
+                          <input type="number" step="0.01" value={i.quantity} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                        ) : (
+                          <span>{i.quantity}</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {bomEditMode ? (
+                          <input type="text" value={i.unit} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], unit: e.target.value }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                        ) : (
+                          <span>{i.unit}</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {bomEditMode ? (
+                          <input type="number" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], percentage: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                        ) : (
+                          <span>{i.percentage}%</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {bomEditMode ? (
+                          <input type="checkbox" checked={i.is_critical} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setBomEditIngs(u); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        ) : (
+                          <span>{i.is_critical ? <span className="text-xs font-medium text-red-600">Yes</span> : <span className="text-xs text-slate-400">No</span>}</span>
+                        )}
+                      </td>
                     </tr>
                   ))}</tbody>
                 </table>
+              )}
+              {bomEditMode && (
+                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-200">
+                  <button onClick={() => setBomEditMode(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
+                  <button onClick={saveBomEdits} disabled={saving} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save BOM Changes'}</button>
+                </div>
               )}
             </div>
           </div>
