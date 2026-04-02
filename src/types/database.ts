@@ -135,11 +135,13 @@ export interface Formulation {
   id: string;
   name: string;
   code: string;
+  sage_code: string;
   version: number;
   category: string;
   description: string;
   batch_size: number;
   batch_unit: string;
+  unit_size_variants: Array<{ size: string; batch_size: number }> | null;
   target_protein: number;
   target_fat: number;
   target_fiber: number;
