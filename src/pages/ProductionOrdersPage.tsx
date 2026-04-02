@@ -199,12 +199,13 @@ export default function ProductionOrdersPage() {
     setMaterials(materials);
     
     // Build BOM preview with percentage calculations
-    const totalQty = bomData.reduce((sum: number, ing: any) => sum + ing.quantity, 0);
+    // BOM quantities are per 50kg bag from Sage, so percentage = (quantity / 50) * 100
     const preview = bomData.map((ing: any, idx: number) => ({
       index: idx + 1,
       code: ing.raw_materials?.code || '-',
       name: ing.raw_materials?.name || '-',
-      bomPercent: totalQty > 0 ? Math.round((ing.quantity / totalQty) * 100 * 100) / 100 : 0,
+      // Calculate percentage: (quantity per 50kg / 50) * 100
+      bomPercent: Math.round((ing.quantity / 50.0) * 100 * 100) / 100,
       quantity: ing.quantity,
       unitCost: ing.raw_materials?.cost_per_unit || 0,
     }));
@@ -828,7 +829,8 @@ export default function ProductionOrdersPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {bomPreview.map((ing: any) => {
-                        const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                        // Calculate quantity required: (quantity per 50kg / 50.0) * planned_qty
+                        const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
                         const lineTotal = qtyRequired * ing.unitCost;
                         return (
                           <tr key={ing.index} className="hover:bg-slate-50">
@@ -847,7 +849,7 @@ export default function ProductionOrdersPage() {
                         <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
                           ${bomPreview.reduce((sum: number, ing: any) => {
-                            const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                            const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
                             return sum + (qtyRequired * ing.unitCost);
                           }, 0).toFixed(2)}
                         </td>
@@ -861,7 +863,7 @@ export default function ProductionOrdersPage() {
               <div className="grid grid-cols-3 gap-3">
                 {(() => {
                   const totalCost = bomPreview.reduce((sum: number, ing: any) => {
-                    const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                    const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
                     return sum + (qtyRequired * ing.unitCost);
                   }, 0);
                   const bagSize = parseInt(form.unit_size) || 25;
