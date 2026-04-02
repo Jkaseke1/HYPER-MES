@@ -289,6 +289,15 @@ export default function FormulationsPage() {
     }
   }
 
+  const recalculatePercentages = (updatedIngs: IngRow[]) => {
+    const total = updatedIngs.filter(i => i.raw_material_id).reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    if (total === 0) return updatedIngs;
+    return updatedIngs.map(i => ({
+      ...i,
+      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / total) * 100 * 100) / 100 : 0,
+    }));
+  };
+
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
 
   const catColor: Record<string, string> = {
@@ -802,9 +811,9 @@ export default function FormulationsPage() {
                     <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: materials.find(m => m.id === e.target.value)?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500">
                       <option value="">Select...</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
                     </select></td>
-                  <td className="py-1.5 pr-2"><input type="number" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="number" step="0.1" value={ing.percentage} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], percentage: Number(e.target.value) }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantities" /></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
                   <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>
