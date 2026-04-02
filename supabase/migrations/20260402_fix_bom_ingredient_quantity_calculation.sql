@@ -20,8 +20,9 @@ BEGIN
         SELECT 
             NEW.id,
             fi.raw_material_id,
-            -- Calculate planned quantity: (percentage / 100) × planned batch size
-            ((fi.percentage / 100.0) * NEW.planned_qty) as planned_qty,
+            -- Calculate planned quantity: (quantity / 50.0) × planned_qty
+            -- This accounts for BOM quantities being per 50kg bag from Sage
+            ((fi.quantity / 50.0) * NEW.planned_qty) as planned_qty,
             NULL as actual_qty, -- Will be set when issued
             false as issued, -- Not issued initially
             NULL as issued_at,
