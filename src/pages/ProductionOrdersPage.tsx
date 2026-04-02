@@ -351,6 +351,17 @@ export default function ProductionOrdersPage() {
     
     setSaving(true);
     try {
+      // Check if material has sufficient stock before issuing
+      if (!material.raw_materials?.current_stock || material.raw_materials.current_stock < material.planned_qty) {
+        const availableStock = material.raw_materials?.current_stock || 0;
+        throw new Error(
+          `Insufficient stock for ${material.raw_materials?.name}. ` +
+          `Required: ${material.planned_qty} ${material.unit}, ` +
+          `Available: ${availableStock} ${material.unit}. ` +
+          `Cannot issue materials when stock is unavailable.`
+        );
+      }
+
       // Call the database function to issue individual ingredient
       const { error } = await supabase.rpc('issue_individual_ingredient', {
         p_material_id: material.id,
@@ -396,6 +407,20 @@ export default function ProductionOrdersPage() {
     return detailMaterials.length > 0 && detailMaterials.every(m => m.issued);
   };
 
+  // Check if all materials have sufficient stock available
+  const allMaterialsAvailable = () => {
+    return detailMaterials.length > 0 && detailMaterials.every(m => 
+      m.raw_materials?.current_stock && m.raw_materials.current_stock >= m.planned_qty
+    );
+  };
+
+  // Get list of materials with insufficient stock
+  const getInsufficientMaterials = () => {
+    return detailMaterials.filter(m => 
+      !m.raw_materials?.current_stock || m.raw_materials.current_stock < m.planned_qty
+    );
+  };
+
   // Enforce workflow sequence (Issue 2)
   const updateStatus = async (status: string) => {
     if (!selected) return;
@@ -409,6 +434,13 @@ export default function ProductionOrdersPage() {
       if (status === 'materials_issued') {
         if (detailMaterials.length === 0) {
           throw new Error('Cannot issue materials — no ingredients linked to this order. Please set up the BOM for this formulation first.');
+        }
+        if (!allMaterialsAvailable()) {
+          const insufficient = getInsufficientMaterials();
+          const insufficientList = insufficient.map(m => 
+            `${m.raw_materials?.name} (need ${m.planned_qty}${m.unit}, have ${m.raw_materials?.current_stock || 0}${m.unit})`
+          ).join(', ');
+          throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
         }
         if (!allIngredientsIssued()) {
           throw new Error('Cannot mark materials as issued — not all ingredients have been issued individually. Please issue each ingredient separately from the Components tab.');
@@ -911,6 +943,24 @@ export default function ProductionOrdersPage() {
                     {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
                   </div>
                 </div>
+
+                {!allMaterialsAvailable() && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <h4 className="font-semibold text-red-800 mb-2">⚠️ Insufficient Stock - Cannot Proceed</h4>
+                        <p className="text-sm text-red-700 mb-2">The following materials do not have sufficient stock available:</p>
+                        <ul className="text-sm text-red-700 space-y-1">
+                          {getInsufficientMaterials().map((m) => (
+                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> - Need {m.planned_qty}{m.unit}, have {m.raw_materials?.current_stock || 0}{m.unit}</li>
+                          ))}
+                        </ul>
+                        <p className="text-sm text-red-700 mt-2">Please restock these materials before issuing materials to production.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {detailMaterials.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
@@ -963,19 +1013,20 @@ export default function ProductionOrdersPage() {
                               {!material.issued && selected.status === 'pending' && (
                                 <div className="flex flex-col gap-1">
                                   {material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty && (
-                                    <div className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                                    <div className="text-xs text-red-600 font-medium flex items-center gap-1">
                                       <AlertTriangle className="w-3 h-3" />
-                                      Insufficient stock — only {material.raw_materials.current_stock.toLocaleString()}{material.unit} available
+                                      Out of stock
                                     </div>
                                   )}
                                   <button
                                     onClick={() => issueIndividualIngredient(material)}
-                                    disabled={saving}
+                                    disabled={saving || !material.raw_materials?.current_stock || material.raw_materials.current_stock < material.planned_qty}
                                     className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
                                       material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty
-                                        ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                        ? 'bg-red-200 text-red-700 cursor-not-allowed opacity-50'
                                         : 'bg-teal-600 hover:bg-teal-700 text-white'
                                     }`}
+                                    title={material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty ? 'Insufficient stock - cannot issue' : 'Issue this material to production'}
                                   >
                                     <Check className="w-3 h-3" />
                                     Issue
