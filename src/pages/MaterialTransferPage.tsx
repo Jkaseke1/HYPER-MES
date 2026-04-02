@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, X, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -36,6 +36,8 @@ export default function MaterialTransferPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
   const [saving, setSaving] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   const [form, setForm] = useState({
     raw_material_id: '',
@@ -49,8 +51,17 @@ export default function MaterialTransferPage() {
   });
 
   useEffect(() => {
+    fetchUserRole();
     fetchData();
   }, []);
+
+  async function fetchUserRole() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (data) setUserRole(data.role);
+    }
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -107,6 +118,69 @@ export default function MaterialTransferPage() {
         production_order_id: '',
         notes: '',
       });
+      setSuccessMessage('Transfer created successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      fetchData();
+    } catch (err: any) {
+      console.error('Unexpected error:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function approveTransfer(transferId: string) {
+    if (!['admin', 'warehouse_manager'].includes(userRole)) {
+      alert('Only Admin and Warehouse Manager can approve transfers');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('stock_movements')
+        .update({ status: 'completed' })
+        .eq('id', transferId);
+
+      if (error) {
+        console.error('Error approving transfer:', error);
+        alert(`Failed to approve transfer: ${error.message}`);
+        setSaving(false);
+        return;
+      }
+
+      setSuccessMessage('Transfer approved successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setViewTransfer(null);
+      fetchData();
+    } catch (err: any) {
+      console.error('Unexpected error:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelTransfer(transferId: string) {
+    if (!confirm('Are you sure you want to cancel this transfer?')) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('stock_movements')
+        .delete()
+        .eq('id', transferId);
+
+      if (error) {
+        console.error('Error canceling transfer:', error);
+        alert(`Failed to cancel transfer: ${error.message}`);
+        setSaving(false);
+        return;
+      }
+
+      setSuccessMessage('Transfer cancelled successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setViewTransfer(null);
       fetchData();
     } catch (err: any) {
       console.error('Unexpected error:', err);
@@ -385,6 +459,14 @@ export default function MaterialTransferPage() {
         </div>
       </Modal>
 
+      {/* Success Message */}
+      {successMessage && (
+        <div className="fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 z-50">
+          <CheckCircle className="w-5 h-5 text-green-600" />
+          <p className="text-sm font-medium text-green-800">{successMessage}</p>
+        </div>
+      )}
+
       {/* View Transfer Modal */}
       <Modal
         open={viewTransfer !== null}
@@ -433,6 +515,42 @@ export default function MaterialTransferPage() {
             <div>
               <label className="text-xs font-medium text-slate-500 uppercase">Notes</label>
               <p className="text-sm text-slate-700 mt-1">{viewTransfer.notes || 'No additional notes'}</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <button
+                onClick={() => setViewTransfer(null)}
+                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Close
+              </button>
+              {viewTransfer.status === 'pending' && (
+                <>
+                  <button
+                    onClick={() => cancelTransfer(viewTransfer.id)}
+                    disabled={saving}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    {saving ? 'Cancelling...' : 'Cancel Transfer'}
+                  </button>
+                  {['admin', 'warehouse_manager'].includes(userRole) && (
+                    <button
+                      onClick={() => approveTransfer(viewTransfer.id)}
+                      disabled={saving}
+                      className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      {saving ? 'Approving...' : 'Approve Transfer'}
+                    </button>
+                  )}
+                </>
+              )}
+              {viewTransfer.status === 'completed' && (
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Transfer Completed</span>
+                </div>
+              )}
             </div>
           </div>
         )}
