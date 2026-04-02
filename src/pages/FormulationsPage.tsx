@@ -10,14 +10,18 @@ const CATEGORY_FILTERS = ['All', 'broiler', 'layer', 'dairy', 'pig', 'horse', 'p
 const CATEGORY_OPTIONS = CATEGORY_FILTERS.filter(c => c !== 'All') as string[];
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
+type UnitSizeVariant = { size: string; batch_size: number };
+
 type FormState = {
   name: string;
   code: string;
+  sage_code: string;
   version: number;
   category: string;
   description: string;
   batch_size: string;
   batch_unit: string;
+  unit_size_variants: UnitSizeVariant[];
   target_protein: string;
   target_fat: string;
   target_fiber: string;
@@ -29,11 +33,13 @@ type FormState = {
 const emptyForm: FormState = {
   name: '',
   code: '',
+  sage_code: '',
   version: 1,
   category: 'broiler',
   description: '',
   batch_size: '',
   batch_unit: 'kg',
+  unit_size_variants: [],
   target_protein: '',
   target_fat: '',
   target_fiber: '',
@@ -149,11 +155,13 @@ export default function FormulationsPage() {
     setForm({
       name: f.name,
       code: f.code,
+      sage_code: (f as any).sage_code || '',
       version: f.version,
       category: f.category,
       description: f.description,
       batch_size: f.batch_size.toString(),
       batch_unit: f.batch_unit,
+      unit_size_variants: (f as any).unit_size_variants || [],
       target_protein: f.target_protein.toString(),
       target_fat: f.target_fat.toString(),
       target_fiber: f.target_fiber.toString(),
@@ -744,10 +752,11 @@ export default function FormulationsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { l: 'Name', k: 'name', t: 'text' }, { l: 'Code', k: 'code', t: 'text' },
-              { l: 'Batch Size', k: 'batch_size', t: 'number' }, { l: 'Batch Unit', k: 'batch_unit', t: 'text' },
+              { l: 'Sage Code', k: 'sage_code', t: 'text' }, { l: 'Batch Size', k: 'batch_size', t: 'number' },
+              { l: 'Batch Unit', k: 'batch_unit', t: 'text' },
             ].map(({ l, k, t }) => (
               <div key={k}><label className="block text-xs font-medium text-slate-600 mb-1">{l}</label>
-                <input type={t} value={(form as any)[k]} onChange={e => setForm({ ...form, [k]: t === 'number' ? Number(e.target.value) : e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
+                <input type={t} value={(form as any)[k]} onChange={e => setForm({ ...form, [k]: t === 'number' ? Number(e.target.value) : e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder={l === 'Sage Code' ? 'e.g., HDC25, HDC10, HDC8' : ''} /></div>
             ))}
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
