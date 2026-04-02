@@ -779,39 +779,38 @@ export default function FormulationsPage() {
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? 'Edit Formula' : 'New Formula'} size="xl">
         <div className="space-y-5">
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Unit Size Variants (Required)</h4>
-                <p className="text-xs text-slate-500">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
-              </div>
-            </div>
-            <div className="space-y-2 mb-3">
-              {form.unit_size_variants.map((variant, idx) => (
-                <div key={idx} className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
-                    <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
-                    <input type="number" placeholder="e.g., 1000" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
-                  </div>
-                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors mb-0"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setForm({ ...form, unit_size_variants: [...form.unit_size_variants, { size: '', batch_size: 0 }] })} className="flex items-center gap-1 px-3 py-2 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add Size Variant</button>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants (Required)</h4>
+            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { l: 'Name', k: 'name', t: 'text' }, { l: 'Code', k: 'code', t: 'text' },
-              { l: 'Sage Code', k: 'sage_code', t: 'text' }, { l: 'Batch Size', k: 'batch_size', t: 'number' },
-              { l: 'Batch Unit', k: 'batch_unit', t: 'text' },
-            ].map(({ l, k, t }) => (
-              <div key={k}><label className="block text-xs font-medium text-slate-600 mb-1">{l}</label>
-                <input type={t} value={(form as any)[k]} onChange={e => setForm({ ...form, [k]: t === 'number' ? Number(e.target.value) : e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder={l === 'Sage Code' ? 'e.g., HDC25, HDC10, HDC8' : ''} /></div>
-            ))}
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Name (Raw Material)</label>
+              <select
+                value={form.name}
+                onChange={e => {
+                  const selectedMaterial = materials.find(m => m.name === e.target.value);
+                  setForm({
+                    ...form,
+                    name: e.target.value,
+                    code: selectedMaterial?.code || '',
+                    sage_code: selectedMaterial?.code || ''
+                  });
+                }}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+              >
+                <option value="">Select raw material...</option>
+                {materials.map(m => (
+                  <option key={m.id} value={m.name}>{m.name} ({m.code})</option>
+                ))}
+              </select></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
+              <input type="text" value={form.code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Sage Code</label>
+              <input type="text" value={form.sage_code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
+              <input type="number" value={form.batch_size} onChange={e => setForm({ ...form, batch_size: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
+              <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
@@ -829,6 +828,25 @@ export default function FormulationsPage() {
               </select></div>
             <div className="col-span-2"><label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
               <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants</h4>
+            <div className="space-y-2 mb-3">
+              {form.unit_size_variants.map((variant, idx) => (
+                <div key={idx} className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
+                    <input type="text" placeholder="e.g., 5kg" value={variant.size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
+                    <input type="number" placeholder="e.g., 1000" value={variant.batch_size} onChange={e => { const v = [...form.unit_size_variants]; v[idx] = { ...v[idx], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                  </div>
+                  <button onClick={() => setForm({ ...form, unit_size_variants: form.unit_size_variants.filter((_, i) => i !== idx) })} className="p-2 text-slate-400 hover:text-red-600 transition-colors mb-0"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div>
