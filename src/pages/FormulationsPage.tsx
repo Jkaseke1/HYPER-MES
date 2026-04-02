@@ -784,26 +784,27 @@ export default function FormulationsPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., Dog Food 5kg" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Sage Formula</label>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">BOM</label>
               <select
-                value={form.code}
+                value={form.name}
                 onChange={e => {
-                  const selectedFormula = formulations.find(f => f.code === e.target.value);
+                  const selectedBom = formulations.find(f => f.name === e.target.value);
                   setForm({
                     ...form,
-                    code: e.target.value,
-                    sage_code: selectedFormula?.sage_code || ''
+                    name: e.target.value,
+                    code: selectedBom?.code || '',
+                    sage_code: selectedBom?.sage_code || ''
                   });
                 }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
               >
-                <option value="">Select Sage formula...</option>
+                <option value="">Select BOM...</option>
                 {formulations.map(f => (
-                  <option key={f.id} value={f.code}>{f.code}</option>
+                  <option key={f.id} value={f.name}>{f.name}</option>
                 ))}
               </select></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
+              <input type="text" value={form.code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Sage Code</label>
               <input type="text" value={form.sage_code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
