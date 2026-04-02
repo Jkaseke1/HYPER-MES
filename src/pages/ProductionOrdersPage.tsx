@@ -87,6 +87,8 @@ export default function ProductionOrdersPage() {
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [bomPreview, setBomPreview] = useState<any[]>([]);
+  const [selectedFormulation, setSelectedFormulation] = useState<Formulation | null>(null);
 
   // Delete production order with status protection
   const deleteOrder = async (order: ProductionOrder) => {
@@ -156,11 +158,15 @@ export default function ProductionOrdersPage() {
   const onFormulationChange = async (fid: string) => {
     setForm((f) => ({ ...f, formulation_id: fid }));
     if (!fid) { 
-      setMaterials([]); 
+      setMaterials([]);
+      setBomPreview([]);
+      setSelectedFormulation(null);
       return; 
     }
     const sel = formulations.find((f) => f.id === fid);
     if (!sel) return;
+    
+    setSelectedFormulation(sel);
     
     // Check if BOM exists for this formulation
     const { data: bomData, error: bomError } = await supabase
@@ -172,12 +178,13 @@ export default function ProductionOrdersPage() {
     if (bomError || !bomData || bomData.length === 0) {
       setWorkflowError(`No BOM ingredients found for ${sel.name}. Please set up the BOM first.`);
       setMaterials([]);
+      setBomPreview([]);
       return;
     }
     
     setWorkflowError(null);
     const scale = form.planned_qty > 0 ? form.planned_qty / sel.batch_size : 1;
-    setMaterials(bomData.map((ing: any) => ({
+    const materials = bomData.map((ing: any) => ({
       id: ing.id, 
       raw_material_id: ing.raw_material_id,
       planned_qty: Math.round(ing.quantity * scale * 100) / 100, 
@@ -188,7 +195,20 @@ export default function ProductionOrdersPage() {
       total_cost: Math.round(ing.quantity * scale * (ing.raw_materials?.cost_per_unit || 0) * 100) / 100,
       issued: false, 
       raw_materials: ing.raw_materials,
-    })));
+    }));
+    setMaterials(materials);
+    
+    // Build BOM preview with percentage calculations
+    const totalQty = bomData.reduce((sum: number, ing: any) => sum + ing.quantity, 0);
+    const preview = bomData.map((ing: any, idx: number) => ({
+      index: idx + 1,
+      code: ing.raw_materials?.code || '-',
+      name: ing.raw_materials?.name || '-',
+      bomPercent: totalQty > 0 ? Math.round((ing.quantity / totalQty) * 100 * 100) / 100 : 0,
+      quantity: ing.quantity,
+      unitCost: ing.raw_materials?.cost_per_unit || 0,
+    }));
+    setBomPreview(preview);
   };
 
   const createOrder = async () => {
@@ -789,13 +809,84 @@ export default function ProductionOrdersPage() {
             />
           </div>
 
-          {materials.length > 0 && (
-            <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg">
-              <div className="text-sm font-medium text-teal-800">
-                {materials.length} BOM ingredients will be auto-loaded
+          {bomPreview.length > 0 && selectedFormulation && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700">BOM Preview — Scaled to Planned Quantity</h3>
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-teal-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-slate-700">#</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-700">Code</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-700">Ingredient Name</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">BOM %</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Qty (kg)</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Unit Cost</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {bomPreview.map((ing: any) => {
+                        const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                        const lineTotal = qtyRequired * ing.unitCost;
+                        return (
+                          <tr key={ing.index} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-slate-600">{ing.index}</td>
+                            <td className="px-3 py-2 font-medium text-slate-800">{ing.code}</td>
+                            <td className="px-3 py-2 text-slate-700">{ing.name}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-teal-50 font-medium">
+                        <td colSpan={4} className="px-3 py-2 text-right text-slate-700">Total:</td>
+                        <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
+                        <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
+                          ${bomPreview.reduce((sum: number, ing: any) => {
+                            const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                            return sum + (qtyRequired * ing.unitCost);
+                          }, 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="text-xs text-teal-600 mt-1">
-                Ingredients will be automatically created when the order is saved
+              
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                {(() => {
+                  const totalCost = bomPreview.reduce((sum: number, ing: any) => {
+                    const qtyRequired = (ing.bomPercent / 100) * form.planned_qty;
+                    return sum + (qtyRequired * ing.unitCost);
+                  }, 0);
+                  const bagSize = parseInt(form.unit_size) || 25;
+                  const numBags = Math.ceil(form.planned_qty / bagSize);
+                  const costPerBag = numBags > 0 ? totalCost / numBags : 0;
+                  const costPerKg = form.planned_qty > 0 ? totalCost / form.planned_qty : 0;
+                  
+                  return (
+                    <>
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="text-xs font-medium text-green-700 mb-1">Expected Output</div>
+                        <div className="text-sm font-semibold text-green-900">{form.planned_qty.toFixed(2)} kg</div>
+                        <div className="text-xs text-green-600 mt-1">{numBags} × {bagSize}kg bags</div>
+                      </div>
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="text-xs font-medium text-blue-700 mb-1">Cost per Bag</div>
+                        <div className="text-sm font-semibold text-blue-900">${costPerBag.toFixed(2)}</div>
+                      </div>
+                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="text-xs font-medium text-purple-700 mb-1">Cost per kg</div>
+                        <div className="text-sm font-semibold text-purple-900">${costPerKg.toFixed(2)}</div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
