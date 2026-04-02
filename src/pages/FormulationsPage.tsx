@@ -671,44 +671,62 @@ export default function FormulationsPage() {
                 {bomEditMode && <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">Editing Mode</span>}
               </div>
               {detailIngs.length === 0 ? <p className="text-sm text-slate-400">No ingredients added</p> : (
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b border-slate-200 text-left">
-                    <th className="pb-2 font-medium text-slate-500">Material</th><th className="pb-2 font-medium text-slate-500">Qty</th><th className="pb-2 font-medium text-slate-500">Unit</th><th className="pb-2 font-medium text-slate-500">%</th><th className="pb-2 font-medium text-slate-500">Critical</th>
-                  </tr></thead>
-                  <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => (
-                    <tr key={i.id} className="border-b border-slate-50">
-                      <td className="py-2 text-slate-700">{i.raw_materials?.name || 'Unknown'}</td>
-                      <td className="py-2">
-                        {bomEditMode ? (
-                          <input type="number" step="0.01" value={i.quantity} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
-                        ) : (
-                          <span>{i.quantity}</span>
-                        )}
-                      </td>
-                      <td className="py-2">
-                        {bomEditMode ? (
-                          <input type="text" value={i.unit} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], unit: e.target.value }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
-                        ) : (
-                          <span>{i.unit}</span>
-                        )}
-                      </td>
-                      <td className="py-2">
-                        {bomEditMode ? (
-                          <input type="number" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], percentage: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
-                        ) : (
-                          <span>{i.percentage}%</span>
-                        )}
-                      </td>
-                      <td className="py-2">
-                        {bomEditMode ? (
-                          <input type="checkbox" checked={i.is_critical} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setBomEditIngs(u); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                        ) : (
-                          <span>{i.is_critical ? <span className="text-xs font-medium text-red-600">Yes</span> : <span className="text-xs text-slate-400">No</span>}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead><tr className="border-b border-slate-200 text-left bg-slate-50">
+                      <th className="px-3 py-2 font-medium text-slate-600">Material</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Qty</th>
+                      <th className="px-3 py-2 font-medium text-slate-600">Unit</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-right">%</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Unit Cost</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Total Cost</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Stock</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Critical</th>
+                    </tr></thead>
+                    <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => {
+                      const unitCost = i.raw_materials?.cost_per_unit || 0;
+                      const totalCost = i.quantity * unitCost;
+                      const currentStock = i.raw_materials?.current_stock || 0;
+                      const stockStatus = currentStock >= i.quantity ? 'text-emerald-600' : currentStock > 0 ? 'text-amber-600' : 'text-red-600';
+                      return (
+                        <tr key={i.id} className="border-b border-slate-50 hover:bg-slate-50">
+                          <td className="px-3 py-2 text-slate-700 font-medium">{i.raw_materials?.name || 'Unknown'}</td>
+                          <td className="px-3 py-2 text-right">
+                            {bomEditMode ? (
+                              <input type="number" step="0.01" value={i.quantity} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                            ) : (
+                              <span>{i.quantity.toFixed(2)}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {bomEditMode ? (
+                              <input type="text" value={i.unit} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], unit: e.target.value }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                            ) : (
+                              <span>{i.unit}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {bomEditMode ? (
+                              <input type="number" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], percentage: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                            ) : (
+                              <span>{i.percentage.toFixed(1)}%</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-700 font-medium">${unitCost.toFixed(4)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700 font-semibold">${totalCost.toFixed(2)}</td>
+                          <td className={`px-3 py-2 text-right font-medium ${stockStatus}`}>{currentStock.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-center">
+                            {bomEditMode ? (
+                              <input type="checkbox" checked={i.is_critical} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setBomEditIngs(u); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                            ) : (
+                              <span>{i.is_critical ? <span className="text-xs font-medium text-red-600">●</span> : <span className="text-xs text-slate-300">○</span>}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}</tbody>
+                  </table>
+                </div>
               )}
               {bomEditMode && (
                 <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-200">
