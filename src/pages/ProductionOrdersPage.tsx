@@ -198,14 +198,23 @@ export default function ProductionOrdersPage() {
       return;
     }
 
+    // Validate planned_qty is provided
+    if (!form.planned_qty || form.planned_qty <= 0) {
+      setWorkflowError('Planned Quantity must be greater than 0.');
+      return;
+    }
+
     setSaving(true);
     try {
+      // Ensure planned_qty is a valid number and not multiplied
+      const plannedQty = parseFloat(String(form.planned_qty));
+      
       // Debug: Log form data before submission
       console.log('Creating order with form data:', {
         batch_number: form.batch_number,
         formulation_id: form.formulation_id,
         machine_id: form.machine_id,
-        planned_qty: form.planned_qty,
+        planned_qty: plannedQty,
         status: 'pending'
       });
       
@@ -214,7 +223,7 @@ export default function ProductionOrdersPage() {
         plan_id: form.plan_id || null,
         formulation_id: form.formulation_id || null,
         machine_id: form.machine_id, // Required field - NOT NULL in database
-        planned_qty: form.planned_qty, 
+        planned_qty: plannedQty, 
         unit: form.unit,
         unit_size: form.unit_size,
         priority: form.priority, 
