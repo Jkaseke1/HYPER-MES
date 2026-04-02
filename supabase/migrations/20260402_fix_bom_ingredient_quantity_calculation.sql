@@ -1,5 +1,6 @@
--- Auto-load BOM ingredients when production order is created
--- This function creates production_order_materials rows for all formulation ingredients
+-- Fix BOM ingredient quantity calculation bug
+-- The previous trigger used non-existent quantity_ratio field
+-- Correct formula: (percentage / 100) × planned_qty
 
 CREATE OR REPLACE FUNCTION auto_load_bom_ingredients()
 RETURNS trigger AS $$
@@ -39,7 +40,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger to auto-load BOM ingredients
+-- Recreate trigger with updated function
 DROP TRIGGER IF EXISTS on_production_order_created ON production_orders;
 CREATE TRIGGER on_production_order_created
     AFTER INSERT ON production_orders
