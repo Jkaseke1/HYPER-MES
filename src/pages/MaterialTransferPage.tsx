@@ -58,7 +58,7 @@ export default function MaterialTransferPage() {
       supabase
         .from('stock_movements')
         .select('*, raw_materials(name, code, unit), warehouses(name)')
-        .eq('movement_type', 'transfer_to_production')
+        .eq('movement_type', 'transfer')
         .order('created_at', { ascending: false }),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('warehouses').select('*').eq('is_active', true).order('name'),
