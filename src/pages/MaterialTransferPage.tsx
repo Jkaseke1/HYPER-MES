@@ -108,8 +108,9 @@ export default function MaterialTransferPage() {
 
   const filteredTransfers = transfers.filter((transfer) => {
     const matchesSearch =
-      transfer.raw_materials?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.raw_materials?.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      !searchTerm ||
+      transfer.raw_materials?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transfer.raw_materials?.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transfer.to_location?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || transfer.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -189,43 +190,47 @@ export default function MaterialTransferPage() {
                   </td>
                 </tr>
               ) : (
-                filteredTransfers.map((transfer) => (
-                  <tr key={transfer.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setViewTransfer(transfer)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {format(new Date(transfer.transfer_date || transfer.created_at), 'dd MMM yyyy')}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-slate-800">{transfer.raw_materials?.name}</p>
-                      <p className="text-xs text-slate-500">{transfer.raw_materials?.code}</p>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{transfer.warehouses?.name || '-'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 text-sm text-slate-700">
-                        <Factory className="w-3.5 h-3.5 text-slate-400" />
-                        {transfer.to_location || 'Production Floor'}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
-                      {Math.abs(transfer.quantity).toLocaleString()} {transfer.unit}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{transfer.purpose || '-'}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={transfer.status || 'pending'} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setViewTransfer(transfer); }}
-                        className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="View details"
-                      >
-                        <Eye className="w-4 h-4 text-slate-500" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filteredTransfers.map((transfer) => {
+                  const transferDate = transfer.transfer_date || transfer.created_at;
+                  const quantity = Math.abs(transfer.quantity || 0);
+                  return (
+                    <tr key={transfer.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setViewTransfer(transfer)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          {transferDate ? format(new Date(transferDate), 'dd MMM yyyy') : '-'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-slate-800">{transfer.raw_materials?.name || '-'}</p>
+                        <p className="text-xs text-slate-500">{transfer.raw_materials?.code || ''}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{transfer.warehouses?.name || '-'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                          <Factory className="w-3.5 h-3.5 text-slate-400" />
+                          {transfer.to_location || 'Production Floor'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
+                        {quantity.toLocaleString()} {transfer.unit || 'kg'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{transfer.purpose || '-'}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={transfer.status || 'pending'} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setViewTransfer(transfer); }}
+                          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="View details"
+                        >
+                          <Eye className="w-4 h-4 text-slate-500" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -292,8 +297,8 @@ export default function MaterialTransferPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
               <input
                 type="number"
-                value={form.quantity}
-                onChange={(e) => setForm({ ...form, quantity: parseFloat(e.target.value) })}
+                value={form.quantity || ''}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value ? parseFloat(e.target.value) : 0 })}
                 className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                 placeholder="0.00"
                 step="0.01"
@@ -381,18 +386,18 @@ export default function MaterialTransferPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-slate-500 uppercase">Material</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.raw_materials?.name}</p>
-                <p className="text-xs text-slate-500">{viewTransfer.raw_materials?.code}</p>
+                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.raw_materials?.name || '-'}</p>
+                <p className="text-xs text-slate-500">{viewTransfer.raw_materials?.code || ''}</p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 uppercase">Quantity</label>
                 <p className="text-sm font-medium text-slate-800 mt-1">
-                  {Math.abs(viewTransfer.quantity).toLocaleString()} {viewTransfer.unit}
+                  {Math.abs(viewTransfer.quantity || 0).toLocaleString()} {viewTransfer.unit || 'kg'}
                 </p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 uppercase">From</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.warehouses?.name}</p>
+                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.warehouses?.name || '-'}</p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 uppercase">To</label>
@@ -401,7 +406,7 @@ export default function MaterialTransferPage() {
               <div>
                 <label className="text-xs font-medium text-slate-500 uppercase">Transfer Date</label>
                 <p className="text-sm font-medium text-slate-800 mt-1">
-                  {format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy')}
+                  {viewTransfer.transfer_date || viewTransfer.created_at ? format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy') : '-'}
                 </p>
               </div>
               <div>
