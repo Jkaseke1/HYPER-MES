@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { generateDispatchNumber } from '../lib/batchNumberGenerator';
 import type { DispatchOrder, DispatchItem, Branch, Warehouse, Formulation } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -34,6 +35,7 @@ export default function DispatchPage() {
   const [form, setForm] = useState(initForm);
   const [items, setItems] = useState([{ ...EMPTY_ITEM }]);
   const [saving, setSaving] = useState(false);
+  const [dispatchNumber, setDispatchNumber] = useState<string>('');
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
@@ -69,16 +71,24 @@ export default function DispatchPage() {
 
   const handleCreate = async () => {
     setSaving(true);
-    const dispatchNumber = `DSP-${Date.now().toString(36).toUpperCase()}`;
-    const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: dispatchNumber, status: 'pending', total_weight: totalWeight, total_value: totalValue }).select().single();
-    if (!error && data) {
-      const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: i.unit_price, line_total: i.quantity * i.unit_price }));
-      if (rows.length) await supabase.from('dispatch_items').insert(rows);
+    try {
+      const generatedNumber = await generateDispatchNumber();
+      const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: totalValue }).select().single();
+      if (!error && data) {
+        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: i.unit_price, line_total: i.quantity * i.unit_price }));
+        if (rows.length) await supabase.from('dispatch_items').insert(rows);
+      }
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('Error creating dispatch order:', error);
+      alert(`Failed to create dispatch order: ${error.message}`);
+    } finally {
+      setSaving(false);
+      setShowCreate(false);
+      resetForm();
+      setDispatchNumber('');
+      fetchOrders();
     }
-    setSaving(false);
-    setShowCreate(false);
-    resetForm();
-    fetchOrders();
   };
 
   const resetForm = () => { setForm(initForm); setItems([{ ...EMPTY_ITEM }]); };
@@ -196,6 +206,11 @@ export default function DispatchPage() {
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Dispatch Order" size="xl">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Dispatch #</label>
+              <input type="text" value={dispatchNumber || 'Auto-generated'} disabled className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500 cursor-not-allowed" />
+              <p className="text-xs text-slate-500 mt-1">System generated - cannot be edited</p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
               <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
