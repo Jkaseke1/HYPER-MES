@@ -439,7 +439,7 @@ export default function ProductionOrdersPage() {
       }
 
       // Record as a stock movement so Material Transfer page reflects it
-      await supabase.from('stock_movements').insert({
+      const { error: movementError } = await supabase.from('stock_movements').insert({
         movement_type: 'production_input',
         raw_material_id: material.raw_material_id,
         quantity: -Math.abs(material.planned_qty),
@@ -451,13 +451,21 @@ export default function ProductionOrdersPage() {
         movement_date: new Date().toISOString(),
       });
 
-      // Refresh materials
+      if (movementError) {
+        console.error('ERROR recording stock movement:', movementError);
+        // Don't throw - stock movement is secondary to the main issuance
+      }
+
+      // Refresh materials - add small delay to ensure database is updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const { data: refreshedData } = await supabase
         .from('production_order_materials')
         .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
         .eq('production_order_id', selected.id);
       
       const refreshed = normalizeRawMaterials((refreshedData as any[]) || []);
+      console.log('DEBUG: Refreshed materials after issue', refreshed);
       setDetailMaterials(refreshed);
       setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(refreshed) }));
       

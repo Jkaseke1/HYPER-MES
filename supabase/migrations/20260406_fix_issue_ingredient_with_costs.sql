@@ -41,8 +41,7 @@ BEGIN
         issued_at = NOW(),
         issued_by = p_issued_by,
         unit_cost = ROUND(COALESCE(v_unit_cost, 0)::numeric, 4),
-        total_cost = ROUND((p_actual_qty * COALESCE(v_unit_cost, 0))::numeric, 4),
-        updated_at = NOW()
+        total_cost = ROUND((p_actual_qty * COALESCE(v_unit_cost, 0))::numeric, 4)
     WHERE id = p_material_id;
     
     -- Log the individual ingredient issuance for Sage integration
