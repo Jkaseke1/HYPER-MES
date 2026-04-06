@@ -392,6 +392,15 @@ export default function ProductionOrdersPage() {
 
       if (error) throw error;
 
+      // Update unit_cost and total_cost from raw materials
+      const unitCost = material.raw_materials?.cost_per_unit || 0;
+      const totalCost = material.planned_qty * unitCost;
+      
+      await supabase.from('production_order_materials').update({
+        unit_cost: unitCost,
+        total_cost: totalCost
+      }).eq('id', material.id);
+
       // Record as a stock movement so Material Transfer page reflects it
       await supabase.from('stock_movements').insert({
         movement_type: 'transfer_to_production',
@@ -473,6 +482,18 @@ export default function ProductionOrdersPage() {
       if (errors.length > 0) {
         throw new Error(`Failed to issue ${errors.length} ingredients: ${errors[0].error?.message}`);
       }
+
+      // Update unit_cost and total_cost for all materials from raw materials
+      const costUpdates = detailMaterials.map(material => {
+        const unitCost = material.raw_materials?.cost_per_unit || 0;
+        const totalCost = material.planned_qty * unitCost;
+        return supabase.from('production_order_materials').update({
+          unit_cost: unitCost,
+          total_cost: totalCost
+        }).eq('id', material.id);
+      });
+
+      await Promise.all(costUpdates);
 
       // Record stock movements for all issued materials
       const movements = detailMaterials.map(material => ({
