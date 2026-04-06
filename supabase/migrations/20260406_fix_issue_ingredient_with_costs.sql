@@ -67,7 +67,7 @@ BEGIN
             'issued_by', p_issued_by,
             'issued_at', NOW()
         )
-    );
+    ) ON CONFLICT DO NOTHING;
     
     -- Log for debugging
     RAISE NOTICE 'Individual ingredient % issued for production order % with unit_cost %', 
