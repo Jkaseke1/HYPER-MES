@@ -135,7 +135,17 @@ export default function DispatchPage() {
   const nextStatus = (s: string) => STATUS_FLOW[s] || null;
 
   const updateItem = (idx: number, field: string, value: any) => {
-    const updated = items.map((item, i) => (i === idx ? { ...item, [field]: value } : item));
+    const updated = [...items];
+    updated[idx] = { ...updated[idx], [field]: value };
+    
+    // Auto-populate batch_number when formulation is selected
+    if (field === 'formulation_id' && value) {
+      const selectedFormulation = formulations.find(f => f.id === value);
+      if (selectedFormulation) {
+        updated[idx].batch_number = selectedFormulation.code || '';
+      }
+    }
+    
     setItems(updated);
   };
 
