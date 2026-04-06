@@ -442,6 +442,64 @@ export default function ProductionOrdersPage() {
     );
   };
 
+  // Bulk issue all materials at once
+  const bulkIssueMaterials = async () => {
+    if (!selected) return;
+    
+    setSaving(true);
+    try {
+      // Check stock availability first
+      if (!allMaterialsAvailable()) {
+        const insufficient = getInsufficientMaterials();
+        const insufficientList = insufficient.map(m => 
+          `${m.raw_materials?.name} (need ${m.planned_qty}${m.unit}, have ${m.raw_materials?.current_stock || 0}${m.unit})`
+        ).join(', ');
+        throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
+      }
+
+      // Issue all materials in parallel
+      const issuePromises = detailMaterials.map(material =>
+        supabase.rpc('issue_individual_ingredient', {
+          p_material_id: material.id,
+          p_actual_qty: material.planned_qty,
+          p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
+        })
+      );
+
+      const results = await Promise.all(issuePromises);
+      
+      // Check for errors
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        throw new Error(`Failed to issue ${errors.length} ingredients: ${errors[0].error?.message}`);
+      }
+
+      // Record stock movements for all issued materials
+      const movements = detailMaterials.map(material => ({
+        movement_type: 'transfer_to_production',
+        raw_material_id: material.raw_material_id,
+        quantity: -Math.abs(material.planned_qty),
+        unit: material.unit,
+        notes: `Issued to production order ${selected.batch_number}`,
+        reference_type: 'production_order',
+        reference_id: selected.id,
+        batch_number: selected.batch_number,
+        movement_date: new Date().toISOString(),
+      }));
+
+      await supabase.from('stock_movements').insert(movements);
+
+      // Now update order status to materials_issued
+      await updateStatus('materials_issued');
+      
+      setSaving(false);
+    } catch (error: any) {
+      console.error('Error bulk issuing materials:', error);
+      setWorkflowError(`Failed to issue materials: ${error.message}`);
+      setSaving(false);
+    }
+  };
+
   // Enforce workflow sequence (Issue 2)
   const updateStatus = async (status: string) => {
     if (!selected) return;
@@ -456,16 +514,7 @@ export default function ProductionOrdersPage() {
         if (detailMaterials.length === 0) {
           throw new Error('Cannot issue materials — no ingredients linked to this order. Please set up the BOM for this formulation first.');
         }
-        if (!allMaterialsAvailable()) {
-          const insufficient = getInsufficientMaterials();
-          const insufficientList = insufficient.map(m => 
-            `${m.raw_materials?.name} (need ${m.planned_qty}${m.unit}, have ${m.raw_materials?.current_stock || 0}${m.unit})`
-          ).join(', ');
-          throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
-        }
-        if (!allIngredientsIssued()) {
-          throw new Error('Cannot mark materials as issued — not all ingredients have been issued individually. Please issue each ingredient separately from the Components tab.');
-        }
+        // Note: bulkIssueMaterials will handle issuing all ingredients before calling this
       }
       
       if (status === 'in_progress') {
@@ -1512,7 +1561,38 @@ export default function ProductionOrdersPage() {
               </div>
             )}
 
-            <div className="flex justify-end pt-4 border-t border-slate-200">
+            <div className="flex justify-between pt-4 border-t border-slate-200">
+              <div className="flex gap-2">
+                {selected.status === 'pending' && detailMaterials.length > 0 && (
+                  <button
+                    onClick={bulkIssueMaterials}
+                    disabled={saving || !allMaterialsAvailable()}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!allMaterialsAvailable() ? 'Insufficient stock for some materials' : 'Issue all materials and advance to Materials Issued'}
+                  >
+                    {saving ? 'Issuing...' : 'Approve/Issue Materials'}
+                  </button>
+                )}
+                {selected.status === 'materials_issued' && (
+                  <button
+                    onClick={() => updateStatus('in_progress')}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Starting...' : 'Start Production'}
+                  </button>
+                )}
+                {selected.status === 'in_progress' && (
+                  <button
+                    onClick={() => updateStatus('completed')}
+                    disabled={saving || output.actual_qty <= 0}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    title={output.actual_qty <= 0 ? 'Enter actual output quantity first' : 'Complete production order'}
+                  >
+                    {saving ? 'Completing...' : 'Complete Order'}
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setShowDetail(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
