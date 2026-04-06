@@ -396,10 +396,24 @@ export default function ProductionOrdersPage() {
       const unitCost = material.raw_materials?.cost_per_unit || 0;
       const totalCost = material.planned_qty * unitCost;
       
-      await supabase.from('production_order_materials').update({
+      console.log('DEBUG: Issuing ingredient', {
+        materialId: material.id,
+        materialName: material.raw_materials?.name,
+        rawMaterialsObj: material.raw_materials,
+        unitCost,
+        plannedQty: material.planned_qty,
+        totalCost
+      });
+      
+      const { error: updateError } = await supabase.from('production_order_materials').update({
         unit_cost: unitCost,
         total_cost: totalCost
       }).eq('id', material.id);
+      
+      if (updateError) {
+        console.error('ERROR updating unit_cost:', updateError);
+        throw updateError;
+      }
 
       // Record as a stock movement so Material Transfer page reflects it
       await supabase.from('stock_movements').insert({
@@ -487,13 +501,28 @@ export default function ProductionOrdersPage() {
       const costUpdates = detailMaterials.map(material => {
         const unitCost = material.raw_materials?.cost_per_unit || 0;
         const totalCost = material.planned_qty * unitCost;
+        
+        console.log('DEBUG: Bulk issuing ingredient', {
+          materialId: material.id,
+          materialName: material.raw_materials?.name,
+          rawMaterialsObj: material.raw_materials,
+          unitCost,
+          plannedQty: material.planned_qty,
+          totalCost
+        });
+        
         return supabase.from('production_order_materials').update({
           unit_cost: unitCost,
           total_cost: totalCost
         }).eq('id', material.id);
       });
 
-      await Promise.all(costUpdates);
+      const costResults = await Promise.all(costUpdates);
+      const costErrors = costResults.filter(r => r.error);
+      if (costErrors.length > 0) {
+        console.error('ERROR updating costs:', costErrors);
+        throw new Error(`Failed to update costs for ${costErrors.length} materials`);
+      }
 
       // Record stock movements for all issued materials
       const movements = detailMaterials.map(material => ({
