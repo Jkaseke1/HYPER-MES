@@ -48,7 +48,7 @@ export default function DispatchPage() {
     const load = async () => {
       const [b, w, f] = await Promise.all([
         supabase.from('branches').select('*').eq('is_active', true).order('name'),
-        supabase.from('warehouses').select('*').eq('is_active', true).eq('type', 'finished_goods').order('name'),
+        supabase.from('warehouses').select('*').eq('is_active', true).eq('type', 'finished_goods').is('branch_id', null).order('name'),
         supabase.from('formulations').select('*').eq('status', 'active').order('name'),
       ]);
       if (b.data) setBranches(b.data);
