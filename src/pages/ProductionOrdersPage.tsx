@@ -511,7 +511,7 @@ export default function ProductionOrdersPage() {
         throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
       }
 
-      // Issue all materials in parallel
+      // Issue all materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
       const issuePromises = detailMaterials.map(material =>
         supabase.rpc('issue_individual_ingredient', {
           p_material_id: material.id,
@@ -526,45 +526,6 @@ export default function ProductionOrdersPage() {
       const errors = results.filter(r => r.error);
       if (errors.length > 0) {
         throw new Error(`Failed to issue ${errors.length} ingredients: ${errors[0].error?.message}`);
-      }
-
-      // Update unit_cost and total_cost for all materials from raw materials
-      const costUpdates = detailMaterials.map(material => {
-        const unitCost = Math.round((material.raw_materials?.cost_per_unit || 0) * 10000) / 10000;
-        const totalCost = Math.round((material.planned_qty * unitCost) * 10000) / 10000;
-        
-        console.log('DEBUG: Bulk issuing ingredient', {
-          materialId: material.id,
-          materialName: material.raw_materials?.name,
-          rawMaterialsObj: material.raw_materials,
-          unitCost,
-          plannedQty: material.planned_qty,
-          totalCost
-        });
-        
-        return supabase.from('production_order_materials').update({
-          unit_cost: unitCost,
-          total_cost: totalCost
-        }).eq('id', material.id);
-      });
-
-      const costResults = await Promise.all(costUpdates);
-      const costErrors = costResults.filter(r => r.error);
-      
-      console.log('DEBUG: Cost update results', {
-        totalUpdates: costResults.length,
-        successCount: costResults.filter(r => !r.error).length,
-        errorCount: costErrors.length,
-        errors: costErrors.map(r => ({
-          message: r.error?.message,
-          code: r.error?.code,
-          details: r.error?.details
-        }))
-      });
-      
-      if (costErrors.length > 0) {
-        console.error('ERROR updating costs:', costErrors);
-        throw new Error(`Failed to update costs for ${costErrors.length} materials: ${costErrors[0].error?.message}`);
       }
 
       // Record stock movements for all issued materials
