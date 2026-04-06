@@ -403,8 +403,8 @@ export default function ProductionOrdersPage() {
       if (error) throw error;
 
       // Update unit_cost and total_cost from raw materials
-      const unitCost = material.raw_materials?.cost_per_unit || 0;
-      const totalCost = material.planned_qty * unitCost;
+      const unitCost = Math.round((material.raw_materials?.cost_per_unit || 0) * 10000) / 10000;
+      const totalCost = Math.round((material.planned_qty * unitCost) * 10000) / 10000;
       
       console.log('DEBUG: Issuing ingredient', {
         materialId: material.id,
@@ -522,8 +522,8 @@ export default function ProductionOrdersPage() {
 
       // Update unit_cost and total_cost for all materials from raw materials
       const costUpdates = detailMaterials.map(material => {
-        const unitCost = material.raw_materials?.cost_per_unit || 0;
-        const totalCost = material.planned_qty * unitCost;
+        const unitCost = Math.round((material.raw_materials?.cost_per_unit || 0) * 10000) / 10000;
+        const totalCost = Math.round((material.planned_qty * unitCost) * 10000) / 10000;
         
         console.log('DEBUG: Bulk issuing ingredient', {
           materialId: material.id,
