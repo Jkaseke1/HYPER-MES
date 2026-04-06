@@ -440,7 +440,7 @@ export default function ProductionOrdersPage() {
 
       // Record as a stock movement so Material Transfer page reflects it
       await supabase.from('stock_movements').insert({
-        movement_type: 'transfer_to_production',
+        movement_type: 'production_input',
         raw_material_id: material.raw_material_id,
         quantity: -Math.abs(material.planned_qty),
         unit: 'kg',
@@ -561,7 +561,7 @@ export default function ProductionOrdersPage() {
 
       // Record stock movements for all issued materials
       const movements = detailMaterials.map(material => ({
-        movement_type: 'transfer_to_production',
+        movement_type: 'production_input',
         raw_material_id: material.raw_material_id,
         quantity: -Math.abs(material.planned_qty),
         unit: material.unit,
