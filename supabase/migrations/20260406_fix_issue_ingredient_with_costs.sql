@@ -50,7 +50,7 @@ BEGIN
         reference_id,
         reference_type,
         status,
-        description,
+        message,
         details
     ) VALUES (
         'materials_issued',
