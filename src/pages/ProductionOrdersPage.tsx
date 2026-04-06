@@ -19,7 +19,17 @@ interface OrderMaterial {
   issued: boolean; 
   issued_at?: string;
   issued_by?: string;
-  raw_materials?: { name: string; code: string; cost_per_unit: number; current_stock: number; };
+  raw_materials?: any;
+}
+
+// Helper to normalize raw_materials from array to object
+const normalizeRawMaterials = (materials: any[]): OrderMaterial[] => {
+  return materials.map(m => ({
+    ...m,
+    raw_materials: Array.isArray(m.raw_materials) && m.raw_materials.length > 0 
+      ? m.raw_materials[0] 
+      : m.raw_materials
+  }));
 }
 
 type TabFilter = 'all' | 'pending' | 'materials_issued' | 'in_progress' | 'completed';
@@ -289,10 +299,10 @@ export default function ProductionOrdersPage() {
     // Load materials with issuance status
     const { data } = await supabase
       .from('production_order_materials')
-      .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
+      .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
       .eq('production_order_id', order.id);
     
-    const mats = (data as OrderMaterial[]) || [];
+    const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
@@ -431,10 +441,10 @@ export default function ProductionOrdersPage() {
       // Refresh materials
       const { data: refreshedData } = await supabase
         .from('production_order_materials')
-        .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
+        .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
         .eq('production_order_id', selected.id);
       
-      const refreshed = (refreshedData as OrderMaterial[]) || [];
+      const refreshed = normalizeRawMaterials((refreshedData as any[]) || []);
       setDetailMaterials(refreshed);
       setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(refreshed) }));
       
