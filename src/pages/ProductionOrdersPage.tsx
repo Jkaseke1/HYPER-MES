@@ -415,13 +415,26 @@ export default function ProductionOrdersPage() {
         totalCost
       });
       
-      const { error: updateError } = await supabase.from('production_order_materials').update({
+      console.log('DEBUG: About to update material', {
+        materialId: material.id,
+        updatePayload: { unit_cost: unitCost, total_cost: totalCost }
+      });
+
+      const { error: updateError, data: updateData } = await supabase.from('production_order_materials').update({
         unit_cost: unitCost,
         total_cost: totalCost
       }).eq('id', material.id);
       
+      console.log('DEBUG: Update response', { error: updateError, data: updateData });
+      
       if (updateError) {
-        console.error('ERROR updating unit_cost:', updateError);
+        console.error('ERROR updating unit_cost:', {
+          message: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+          fullError: updateError
+        });
         throw updateError;
       }
 
@@ -529,9 +542,21 @@ export default function ProductionOrdersPage() {
 
       const costResults = await Promise.all(costUpdates);
       const costErrors = costResults.filter(r => r.error);
+      
+      console.log('DEBUG: Cost update results', {
+        totalUpdates: costResults.length,
+        successCount: costResults.filter(r => !r.error).length,
+        errorCount: costErrors.length,
+        errors: costErrors.map(r => ({
+          message: r.error?.message,
+          code: r.error?.code,
+          details: r.error?.details
+        }))
+      });
+      
       if (costErrors.length > 0) {
         console.error('ERROR updating costs:', costErrors);
-        throw new Error(`Failed to update costs for ${costErrors.length} materials`);
+        throw new Error(`Failed to update costs for ${costErrors.length} materials: ${costErrors[0].error?.message}`);
       }
 
       // Record stock movements for all issued materials
