@@ -40,31 +40,5 @@ BEGIN
         unit_cost = ROUND(COALESCE(v_unit_cost, 0)::numeric, 4),
         total_cost = ROUND((p_actual_qty * COALESCE(v_unit_cost, 0))::numeric, 4)
     WHERE id = p_material_id;
-    
-    INSERT INTO sync_log (
-        id,
-        status,
-        description,
-        event_type,
-        reference_id,
-        reference_type,
-        message,
-        details
-    ) VALUES (
-        gen_random_uuid(),
-        'pending',
-        'Materials issued for production',
-        'materials_issued',
-        p_material_id,
-        'production_order_materials',
-        'Individual ingredient issued - ready for Sage sync',
-        json_build_object(
-            'material_id', p_material_id,
-            'production_order_id', v_production_order_id,
-            'actual_qty', p_actual_qty,
-            'unit_cost', ROUND(COALESCE(v_unit_cost, 0)::numeric, 4),
-            'total_cost', ROUND((p_actual_qty * COALESCE(v_unit_cost, 0))::numeric, 4)
-        )::jsonb
-    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
