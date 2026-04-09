@@ -407,7 +407,7 @@ export default function QualityInspectionPage() {
         </form>
       </Modal>
 
-      <Modal open={viewModalOpen} onClose={() => setViewModalOpen(false)} title="Inspection Details" size="md">
+      <Modal open={viewModalOpen} onClose={() => { setViewModalOpen(false); fetchData(); }} title="Inspection Details" size="md">
         {viewing && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
