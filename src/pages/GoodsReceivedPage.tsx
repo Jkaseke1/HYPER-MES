@@ -3,7 +3,7 @@ import { Plus, Search, Trash2, Package, Eye, Clock, CheckCircle2, DollarSign } f
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { GoodsReceivedNote, Supplier, Warehouse, RawMaterial } from '../types/database';
+import { GoodsReceivedNote, Supplier, RawMaterial } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
@@ -22,8 +22,9 @@ interface GRNItem {
 const emptyForm = {
   grn_number: '',
   supplier_id: '',
-  warehouse_id: '',
+  warehouse_id: 'raw_materials_warehouse',
   received_date: new Date().toISOString().split('T')[0],
+  weigh_bridge_ticket_no: '',
   status: 'pending' as const,
   notes: '',
 };
@@ -41,7 +42,6 @@ export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -60,15 +60,13 @@ export default function GoodsReceivedPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, warehousesRes, materialsRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
-      supabase.from('warehouses').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
-    setWarehouses(warehousesRes.data || []);
     setMaterials(materialsRes.data || []);
     setLoading(false);
   }
@@ -414,10 +412,13 @@ export default function GoodsReceivedPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Warehouse</label>
-              <select required value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} className={inputClass}>
-                <option value="">Select Warehouse</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.code})</option>)}
-              </select>
+              <div className="px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm text-slate-700 font-medium">
+                Raw Materials Warehouse
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Weigh Bridge Ticket No</label>
+              <input required type="text" value={form.weigh_bridge_ticket_no} onChange={(e) => setForm({ ...form, weigh_bridge_ticket_no: e.target.value })} className={inputClass} placeholder="e.g. WBT-2026-001" />
             </div>
           </div>
 
@@ -509,6 +510,10 @@ export default function GoodsReceivedPage() {
               <div>
                 <p className="text-xs text-slate-500 mb-1">Warehouse</p>
                 <p className="text-sm text-slate-700">{viewing.warehouses?.name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Weigh Bridge Ticket No</p>
+                <p className="text-sm font-mono text-slate-700">{(viewing as any).weigh_bridge_ticket_no || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Status</p>

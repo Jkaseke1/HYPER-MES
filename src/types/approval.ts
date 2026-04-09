@@ -32,13 +32,13 @@ export interface ApprovalHistoryWithUser extends ApprovalHistory {
 }
 
 export const APPROVAL_PERMISSIONS = {
-  grn: ['warehouse_manager', 'admin'],
+  grn: ['raw_material_manager', 'accountant', 'admin'],
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
   production_order: ['production_manager', 'admin'],
   dispatch_order: ['warehouse_manager', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
-  material_transfer: ['warehouse_manager', 'admin']
+  material_transfer: ['raw_material_manager', 'admin']
 } as const;
 
 export function canApprove(entityType: keyof typeof APPROVAL_PERMISSIONS, userRole: string): boolean {

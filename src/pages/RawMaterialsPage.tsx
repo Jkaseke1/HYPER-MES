@@ -219,7 +219,7 @@ export default function RawMaterialsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/50">
-                  {['Code', 'Name', 'Category', 'Unit', 'Cost/Unit', 'Current Stock', 'Reorder Level', 'Status', ''].map((h) => (
+                  {['Code', 'Name', 'Category', 'Unit', 'Cost/Unit', 'Current Stock', 'Valuation', 'Reorder Level', 'Status', ''].map((h) => (
                     <th key={h} className="text-left px-4 py-3 font-semibold text-slate-600">{h}</th>
                   ))}
                 </tr>
@@ -239,6 +239,9 @@ export default function RawMaterialsPage() {
                           {status === 'low_stock' && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
                           <span className={status === 'out_of_stock' ? 'text-red-600 font-medium' : 'text-slate-700'}>{m.current_stock.toLocaleString()}</span>
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 font-medium">
+                        {(m.current_stock * m.cost_per_unit).toLocaleString('en-US', { style: 'currency', currency: m.currency_code || 'USD' })}
                       </td>
                       <td className="px-4 py-3">
                         {editingReorder === m.id ? (
