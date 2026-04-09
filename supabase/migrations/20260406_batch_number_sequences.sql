@@ -13,13 +13,13 @@ CREATE TABLE IF NOT EXISTS batch_sequences (
 
 ALTER TABLE batch_sequences ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can read batch_sequences"
+CREATE POLICY IF NOT EXISTS "Authenticated users can read batch_sequences"
   ON batch_sequences FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Authenticated users can insert batch_sequences"
+CREATE POLICY IF NOT EXISTS "Authenticated users can insert batch_sequences"
   ON batch_sequences FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Authenticated users can update batch_sequences"
+CREATE POLICY IF NOT EXISTS "Authenticated users can update batch_sequences"
   ON batch_sequences FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- Create index for faster lookups
