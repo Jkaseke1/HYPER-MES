@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { canApprove, getApprovalActionLabel } from '../../types/approval';
 
 interface ApprovalButtonsProps {
-  entityType: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period';
+  entityType: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period' | 'material_transfer';
   entityId: string;
   currentStatus: string;
   onApproved: () => void;
@@ -189,7 +189,8 @@ function getTableName(entityType: string): string {
     production_order: 'production_orders',
     dispatch_order: 'dispatch_orders',
     work_order: 'maintenance_work_orders',
-    reconciliation_period: 'reconciliation_periods'
+    reconciliation_period: 'reconciliation_periods',
+    material_transfer: 'stock_movements'
   };
   return tableMap[entityType] || entityType;
 }
