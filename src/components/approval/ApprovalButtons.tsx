@@ -42,6 +42,10 @@ export default function ApprovalButtons({
     setProcessing(true);
 
     try {
+      // Get the actual user ID from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('User not authenticated');
+
       const tableName = getTableName(entityType);
       
       // Update entity status
@@ -49,7 +53,7 @@ export default function ApprovalButtons({
         .from(tableName)
         .update({
           status: approveStatus,
-          approved_by: profile.id,
+          approved_by: user.id,
           approved_at: new Date().toISOString()
         })
         .eq('id', entityId);
@@ -64,7 +68,7 @@ export default function ApprovalButtons({
           p_action: 'approved',
           p_previous_status: currentStatus,
           p_new_status: approveStatus,
-          p_approved_by: profile.id,
+          p_approved_by: user.id,
           p_comments: null
         });
       } catch (logError) {
@@ -89,6 +93,10 @@ export default function ApprovalButtons({
     setProcessing(true);
 
     try {
+      // Get the actual user ID from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('User not authenticated');
+
       const tableName = getTableName(entityType);
       
       // Update entity status
@@ -96,7 +104,7 @@ export default function ApprovalButtons({
         .from(tableName)
         .update({
           status: rejectStatus,
-          approved_by: profile.id,
+          approved_by: user.id,
           approved_at: new Date().toISOString(),
           rejection_reason: rejectionReason
         })
@@ -105,15 +113,20 @@ export default function ApprovalButtons({
       if (updateError) throw updateError;
 
       // Log rejection action
-      await supabase.rpc('log_approval_action', {
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_action: 'rejected',
-        p_previous_status: currentStatus,
-        p_new_status: rejectStatus,
-        p_approved_by: profile.id,
-        p_comments: rejectionReason
-      });
+      try {
+        await supabase.rpc('log_approval_action', {
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_action: 'rejected',
+          p_previous_status: currentStatus,
+          p_new_status: rejectStatus,
+          p_approved_by: user.id,
+          p_comments: rejectionReason
+        });
+      } catch (logError) {
+        console.warn('Failed to log rejection action:', logError);
+        // Continue anyway - rejection was successful
+      }
 
       setShowRejectModal(false);
       setRejectionReason('');
