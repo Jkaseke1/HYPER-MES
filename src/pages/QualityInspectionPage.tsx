@@ -18,11 +18,15 @@ interface QualityInspection {
   batch_number: string;
   inspection_date: string;
   result: string;
+  status: string;
   moisture_content: number | null;
   protein_content: number | null;
   fat_content: number | null;
   fiber_content: number | null;
   remarks: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
   goods_received_notes?: { grn_number: string };
   raw_materials?: { name: string };
 }
@@ -466,12 +470,19 @@ export default function QualityInspectionPage() {
               </div>
             )}
 
-            {viewing.result === 'pending' && (
+            {viewing.rejection_reason && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
+                <p className="text-sm text-red-700">{viewing.rejection_reason}</p>
+              </div>
+            )}
+
+            {viewing.status === 'pending' && (
               <div className="border-t border-slate-200 pt-4">
                 <ApprovalButtons
                   entityType="quality_inspection"
                   entityId={viewing.id}
-                  currentStatus={viewing.result}
+                  currentStatus={viewing.status}
                   approveStatus="passed"
                   rejectStatus="failed"
                   onApproved={() => {
