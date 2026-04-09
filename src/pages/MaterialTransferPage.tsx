@@ -73,7 +73,14 @@ export default function MaterialTransferPage() {
         .order('created_at', { ascending: false }),
     ]);
 
-    if (transfersRes.data) setTransfers(transfersRes.data as any);
+    if (transfersRes.data) {
+      // Ensure all transfers have a status field (for backward compatibility)
+      const transfersWithStatus = transfersRes.data.map((t: any) => ({
+        ...t,
+        status: t.status || 'pending'
+      }));
+      setTransfers(transfersWithStatus as any);
+    }
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);

@@ -429,7 +429,7 @@ export default function QualityInspectionPage() {
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Result</p>
-                <StatusBadge status={viewing.result} />
+                <StatusBadge status={viewing.status || viewing.result} />
               </div>
             </div>
 
