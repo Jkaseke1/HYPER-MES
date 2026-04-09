@@ -169,9 +169,9 @@ export default function QualityInspectionPage() {
 
   const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
 
-  const passed = inspections.filter(i => i.result === 'passed').length;
-  const failed = inspections.filter(i => i.result === 'failed').length;
-  const pending = inspections.filter(i => i.result === 'pending').length;
+  const passed = inspections.filter(i => i.status === 'passed' || i.result === 'passed').length;
+  const failed = inspections.filter(i => i.status === 'failed' || i.result === 'failed').length;
+  const pending = inspections.filter(i => i.status === 'pending' || i.result === 'pending').length;
   const passRate = inspections.length > 0 ? Math.round((passed / inspections.length) * 100) : 0;
 
   const resultChartData = [
@@ -315,7 +315,7 @@ export default function QualityInspectionPage() {
                     <td className="px-4 py-3 font-medium text-slate-800">{inspection.raw_materials?.name || '-'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{inspection.batch_number}</td>
                     <td className="px-4 py-3 text-slate-600">{format(new Date(inspection.inspection_date), 'dd MMM yyyy')}</td>
-                    <td className="px-4 py-3"><StatusBadge status={inspection.result} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={inspection.status || inspection.result} /></td>
                     <td className="px-4 py-3">
                       <button onClick={() => openView(inspection)} className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="View Details">
                         <Eye className="w-4 h-4" />
