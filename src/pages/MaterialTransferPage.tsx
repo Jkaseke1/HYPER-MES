@@ -410,7 +410,7 @@ export default function MaterialTransferPage() {
       {/* View Transfer Modal */}
       <Modal
         open={viewTransfer !== null}
-        onClose={() => setViewTransfer(null)}
+        onClose={() => { setViewTransfer(null); fetchData(); }}
         title="Transfer Details"
       >
         {viewTransfer && (
