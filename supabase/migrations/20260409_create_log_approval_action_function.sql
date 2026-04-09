@@ -1,8 +1,11 @@
 -- Create log_approval_action RPC function for approval audit trail
 -- This function logs all approval actions to the approval_history table
 
--- Drop all versions of the function
-DROP FUNCTION IF EXISTS log_approval_action CASCADE;
+-- Drop all versions of the function with explicit signatures
+DROP FUNCTION IF EXISTS log_approval_action(text, uuid, text, text, text, uuid) CASCADE;
+DROP FUNCTION IF EXISTS log_approval_action(text, uuid, text, text, text, uuid, text) CASCADE;
+DROP FUNCTION IF EXISTS log_approval_action(text, uuid, text, text, text, uuid, text, text) CASCADE;
+DROP FUNCTION IF EXISTS log_approval_action(text, uuid, text, text, text, uuid, text, text, text) CASCADE;
 
 CREATE FUNCTION log_approval_action(
   p_entity_type text,
