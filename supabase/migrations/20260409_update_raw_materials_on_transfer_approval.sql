@@ -11,7 +11,7 @@ BEGIN
     SET 
       current_stock = current_stock + NEW.quantity,
       updated_at = NOW()
-    WHERE id = NEW.material_id;
+    WHERE id = NEW.raw_material_id;
   END IF;
   
   RETURN NEW;
@@ -37,7 +37,7 @@ BEGIN
     current_stock = current_stock + sm.quantity,
     updated_at = NOW()
   FROM stock_movements sm
-  WHERE sm.material_id = rm.id
+  WHERE sm.raw_material_id = rm.id
     AND sm.movement_type = 'transfer'
     AND sm.status = 'approved'
     AND sm.approved_at IS NOT NULL
