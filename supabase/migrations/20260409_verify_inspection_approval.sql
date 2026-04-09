@@ -43,14 +43,12 @@ ORDER BY status;
 SELECT 
   grn.id as grn_id,
   grn.grn_number,
-  grn.material_id,
-  rm.name as material_name,
   qi.id as inspection_id,
   qi.status as inspection_status,
   qi.result,
-  qi.approved_at
+  qi.approved_at,
+  qi.approved_by
 FROM goods_received_notes grn
 LEFT JOIN quality_inspections qi ON grn.id = qi.grn_id
-LEFT JOIN raw_materials rm ON grn.material_id = rm.id
 ORDER BY grn.created_at DESC
 LIMIT 10;
