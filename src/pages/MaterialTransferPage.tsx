@@ -472,11 +472,15 @@ export default function MaterialTransferPage() {
                   approveStatus="approved"
                   rejectStatus="rejected"
                   onApproved={() => {
-                    setViewTransfer(null);
+                    // Update the viewed transfer with new status
+                    setViewTransfer({ ...viewTransfer, status: 'approved' });
+                    // Refresh the list in background
                     fetchData();
                   }}
                   onRejected={() => {
-                    setViewTransfer(null);
+                    // Update the viewed transfer with new status
+                    setViewTransfer({ ...viewTransfer, status: 'rejected' });
+                    // Refresh the list in background
                     fetchData();
                   }}
                 />
