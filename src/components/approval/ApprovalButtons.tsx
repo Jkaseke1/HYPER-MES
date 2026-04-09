@@ -56,16 +56,21 @@ export default function ApprovalButtons({
 
       if (updateError) throw updateError;
 
-      // Log approval action
-      await supabase.rpc('log_approval_action', {
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_action: 'approved',
-        p_previous_status: currentStatus,
-        p_new_status: approveStatus,
-        p_approved_by: profile.id,
-        p_comments: null
-      });
+      // Log approval action (non-blocking - continue even if logging fails)
+      try {
+        await supabase.rpc('log_approval_action', {
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_action: 'approved',
+          p_previous_status: currentStatus,
+          p_new_status: approveStatus,
+          p_approved_by: profile.id,
+          p_comments: null
+        });
+      } catch (logError) {
+        console.warn('Failed to log approval action:', logError);
+        // Continue anyway - approval was successful
+      }
 
       onApproved();
     } catch (error) {
