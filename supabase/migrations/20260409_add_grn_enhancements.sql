@@ -2,19 +2,16 @@
 ALTER TABLE goods_received_notes
 ADD COLUMN IF NOT EXISTS weigh_bridge_ticket_no VARCHAR(100);
 
--- Create attachments table for GRN files
+-- Attachments table for GRN files
 CREATE TABLE IF NOT EXISTS grn_attachments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  grn_id UUID NOT NULL REFERENCES goods_received_notes(id) ON DELETE CASCADE,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  grn_id UUID REFERENCES goods_received_notes(id) ON DELETE CASCADE,
   file_name VARCHAR(255) NOT NULL,
-  file_path VARCHAR(500) NOT NULL,
+  file_url TEXT NOT NULL,
+  file_size INTEGER,
   file_type VARCHAR(50),
-  file_size BIGINT,
-  attachment_type VARCHAR(50), -- 'delivery_note', 'weigh_bridge_slip', 'invoice', 'other'
-  uploaded_by UUID REFERENCES auth.users(id),
-  uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  uploaded_by UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Create index for GRN attachments
@@ -42,6 +39,22 @@ CREATE POLICY "Authenticated users can delete grn_attachments"
   ON grn_attachments
   FOR DELETE
   USING (auth.role() = 'authenticated');
+
+-- Valuation view for raw materials
+CREATE OR REPLACE VIEW vw_raw_material_valuation AS
+SELECT 
+  rm.id,
+  rm.code,
+  rm.name,
+  rm.category,
+  rm.current_stock,
+  rm.cost_per_unit,
+  ROUND((rm.current_stock * rm.cost_per_unit)::numeric, 2) as valuation,
+  rm.reorder_level,
+  rm.is_active
+FROM raw_materials rm
+WHERE rm.is_active = true
+ORDER BY valuation DESC;
 
 -- Add approval_step column to track multi-step approvals
 ALTER TABLE goods_received_notes
