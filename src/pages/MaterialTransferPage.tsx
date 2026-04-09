@@ -410,7 +410,21 @@ export default function MaterialTransferPage() {
       {/* View Transfer Modal */}
       <Modal
         open={viewTransfer !== null}
-        onClose={() => { setViewTransfer(null); fetchData(); }}
+        onClose={async () => {
+          // Fetch the latest data from database before closing
+          if (viewTransfer) {
+            const { data } = await supabase
+              .from('stock_movements')
+              .select('*, raw_materials(name, code), warehouses(name)')
+              .eq('id', viewTransfer.id)
+              .single();
+            if (data) {
+              setViewTransfer(data);
+            }
+          }
+          setViewTransfer(null);
+          fetchData();
+        }}
         title="Transfer Details"
       >
         {viewTransfer && (
