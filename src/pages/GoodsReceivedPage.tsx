@@ -588,6 +588,8 @@ export default function GoodsReceivedPage() {
                 <GRNApprovalButtons
                   grnId={viewing.id}
                   currentStatus={viewing.status}
+                  rm_approved_at={(viewing as any).rm_approved_at}
+                  accountant_approved_at={(viewing as any).accountant_approved_at}
                   onApproved={() => {
                     fetchData();
                   }}

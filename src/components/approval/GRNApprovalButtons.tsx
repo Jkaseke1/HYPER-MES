@@ -6,6 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 interface GRNApprovalButtonsProps {
   grnId: string;
   currentStatus: string;
+  rm_approved_at?: string | null;
+  accountant_approved_at?: string | null;
   onApproved: () => void;
   onRejected: () => void;
   className?: string;
@@ -14,6 +16,8 @@ interface GRNApprovalButtonsProps {
 export default function GRNApprovalButtons({
   grnId,
   currentStatus,
+  rm_approved_at,
+  accountant_approved_at,
   onApproved,
   onRejected,
   className = ''
@@ -30,10 +34,12 @@ export default function GRNApprovalButtons({
   const isAccountant = profile?.role === 'accountant' || profile?.role === 'admin';
 
   // Step 1: Raw Material Manager approval (pending → rm_approved)
-  const canApproveStep1 = isRawMaterialManager && currentStatus === 'pending';
+  // Only show if status is pending AND no rm_approved_at timestamp exists yet (prevents duplicate approval)
+  const canApproveStep1 = isRawMaterialManager && currentStatus === 'pending' && !rm_approved_at;
   
   // Step 2: Accountant approval (rm_approved → approved)
-  const canApproveStep2 = isAccountant && currentStatus === 'rm_approved';
+  // Only show if status is rm_approved AND no accountant_approved_at timestamp exists yet (prevents duplicate approval)
+  const canApproveStep2 = isAccountant && currentStatus === 'rm_approved' && !accountant_approved_at;
   
   // Only Raw Material Manager can reject at Step 1
   const canReject = isRawMaterialManager && currentStatus === 'pending';
