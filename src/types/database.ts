@@ -104,10 +104,16 @@ export interface GoodsReceivedNote {
   supplier_id: string | null;
   warehouse_id: string | null;
   received_date: string;
-  status: 'pending' | 'inspecting' | 'approved' | 'rejected';
+  weigh_bridge_ticket_no?: string | null;
+  status: 'pending' | 'rm_approved' | 'approved' | 'rejected' | 'inspecting';
   notes: string;
   received_by: string | null;
   total_value: number;
+  approval_step?: string | null;
+  rm_approved_by?: string | null;
+  rm_approved_at?: string | null;
+  accountant_approved_by?: string | null;
+  accountant_approved_at?: string | null;
   approved_by?: string | null;
   approved_at?: string | null;
   rejection_reason?: string | null;
