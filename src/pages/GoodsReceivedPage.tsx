@@ -73,8 +73,8 @@ export default function GoodsReceivedPage() {
     setMaterials(materialsRes.data || []);
     setWarehouses(warehousesRes.data || []);
     
-    // Find Raw Materials Warehouse UUID
-    const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.name === 'Raw Materials Warehouse');
+    // Find Raw Materials Warehouse UUID by code = 'RM'
+    const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.code === 'RM');
     if (rawMatWarehouse) {
       setRawMaterialsWarehouseId(rawMatWarehouse.id);
     }
