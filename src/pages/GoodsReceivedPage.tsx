@@ -43,6 +43,8 @@ export default function GoodsReceivedPage() {
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [rawMaterialsWarehouseId, setRawMaterialsWarehouseId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -60,21 +62,29 @@ export default function GoodsReceivedPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes, warehousesRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
+      supabase.from('warehouses').select('*').eq('is_active', true),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
+    setWarehouses(warehousesRes.data || []);
+    
+    // Find Raw Materials Warehouse UUID
+    const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.name === 'Raw Materials Warehouse');
+    if (rawMatWarehouse) {
+      setRawMaterialsWarehouseId(rawMatWarehouse.id);
+    }
     setLoading(false);
   }
 
   useEffect(() => { fetchData(); }, []);
 
   function openAdd() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, warehouse_id: rawMaterialsWarehouseId });
     setItems([emptyItem]);
     generateGRNNumber();
     setModalOpen(true);
