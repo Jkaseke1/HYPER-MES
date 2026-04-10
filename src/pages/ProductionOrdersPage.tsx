@@ -72,6 +72,11 @@ const emptyForm = {
   planned_start: '', 
   planned_end: '', 
   operator_id: '', 
+  shift: 'Day Shift',
+  operators: '',
+  actual_hours: '',
+  average_throughput: '',
+  week_number: '',
   notes: '',
 };
 
@@ -899,6 +904,61 @@ export default function ProductionOrdersPage() {
                   <option key={plan.id} value={plan.id}>{plan.plan_number}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className={labelCls}>Shift</label>
+              <select
+                value={form.shift}
+                onChange={(e) => setForm({ ...form, shift: e.target.value })}
+                className={inputCls}
+              >
+                <option value="Day Shift">Day Shift</option>
+                <option value="Night Shift">Night Shift</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Operators</label>
+              <input
+                type="text"
+                value={form.operators}
+                onChange={(e) => setForm({ ...form, operators: e.target.value })}
+                className={inputCls}
+                placeholder="e.g. A. Muza / K. Saini"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Actual Production Hours</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.actual_hours}
+                onChange={(e) => setForm({ ...form, actual_hours: e.target.value })}
+                className={inputCls}
+                placeholder="e.g. 4.5"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Average Throughput (mt/hr)</label>
+              <input
+                type="number"
+                step="0.001"
+                value={form.average_throughput}
+                onChange={(e) => setForm({ ...form, average_throughput: e.target.value })}
+                className={inputCls}
+                placeholder="e.g. 3.95"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Week Number</label>
+              <input
+                type="number"
+                min="1"
+                max="53"
+                value={form.week_number}
+                onChange={(e) => setForm({ ...form, week_number: e.target.value })}
+                className={inputCls}
+                placeholder="e.g. 15"
+              />
             </div>
           </div>
 
