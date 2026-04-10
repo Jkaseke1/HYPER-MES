@@ -167,7 +167,7 @@ export default function GoodsReceivedPage() {
         .from('goods_received_notes')
         .select('id')
         .eq('grn_number', form.grn_number)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         alert(`GRN number "${form.grn_number}" already exists. Please use a different number.`);
