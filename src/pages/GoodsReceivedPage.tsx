@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { GoodsReceivedNote, Supplier, RawMaterial } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import ApprovalButtons from '../components/approval/ApprovalButtons';
+import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 
@@ -520,6 +520,18 @@ export default function GoodsReceivedPage() {
                 <StatusBadge status={viewing.status} />
               </div>
               <div>
+                <p className="text-xs text-slate-500 mb-1">Approval Progress</p>
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`px-2 py-1 rounded ${viewing.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    ✓ Receipt
+                  </div>
+                  <span className="text-slate-400">→</span>
+                  <div className={`px-2 py-1 rounded ${viewing.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : viewing.status === 'rm_approved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {viewing.status === 'approved' ? '✓ Finance' : 'Finance'}
+                  </div>
+                </div>
+              </div>
+              <div>
                 <p className="text-xs text-slate-500 mb-1">Total Value</p>
                 <p className="text-sm font-semibold text-slate-800">{viewing.total_value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>
               </div>
@@ -561,16 +573,12 @@ export default function GoodsReceivedPage() {
               </div>
             </div>
 
-            {viewing.status === 'pending' && (
+            {(viewing.status === 'pending' || viewing.status === 'rm_approved') && (
               <div className="border-t border-slate-200 pt-4">
-                <ApprovalButtons
-                  entityType="grn"
-                  entityId={viewing.id}
+                <GRNApprovalButtons
+                  grnId={viewing.id}
                   currentStatus={viewing.status}
-                  approveStatus="approved"
-                  rejectStatus="rejected"
                   onApproved={() => {
-                    setViewModalOpen(false);
                     fetchData();
                   }}
                   onRejected={() => {
