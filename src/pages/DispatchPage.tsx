@@ -8,6 +8,8 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
+import { validateStockAvailability, StockError } from '../lib/stockValidation';
+import StockOverrideModal from '../components/stock/StockOverrideModal';
 
 type Tab = 'all' | 'pending' | 'loading' | 'dispatched' | 'in_transit' | 'delivered';
 const TABS: { key: Tab; label: string }[] = [
@@ -36,6 +38,9 @@ export default function DispatchPage() {
   const [items, setItems] = useState([{ ...EMPTY_ITEM }]);
   const [saving, setSaving] = useState(false);
   const [dispatchNumber, setDispatchNumber] = useState<string>('');
+  const [stockErrors, setStockErrors] = useState<StockError[]>([]);
+  const [showStockOverride, setShowStockOverride] = useState(false);
+  const [pendingDeliverCallback, setPendingDeliverCallback] = useState<(() => Promise<void>) | null>(null);
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
@@ -100,6 +105,31 @@ export default function DispatchPage() {
   };
 
   const updateStatus = async (id: string, status: string) => {
+    // Validate stock before marking as delivered
+    if (status === 'delivered' && viewOrder?.id === id) {
+      const itemsToCheck = viewItems
+        .filter(item => item.formulation_id)
+        .map(item => ({
+          raw_material_id: item.formulation_id!,
+          quantity: item.quantity,
+          name: (item.formulations as any)?.name || 'Unknown'
+        }));
+
+      const stockCheck = await validateStockAvailability(itemsToCheck);
+      if (!stockCheck.isValid) {
+        setStockErrors(stockCheck.errors);
+        setPendingDeliverCallback(() => async () => {
+          await performStatusUpdate(id, status);
+        });
+        setShowStockOverride(true);
+        return;
+      }
+    }
+
+    await performStatusUpdate(id, status);
+  };
+
+  const performStatusUpdate = async (id: string, status: string) => {
     const updates: any = { status };
     if (status === 'delivered') updates.delivered_at = new Date().toISOString();
     await supabase.from('dispatch_orders').update(updates).eq('id', id);
@@ -401,6 +431,23 @@ export default function DispatchPage() {
           </div>
         )}
       </Modal>
+
+      {/* Stock Override Modal */}
+      <StockOverrideModal
+        open={showStockOverride}
+        onClose={() => {
+          setShowStockOverride(false);
+          setStockErrors([]);
+          setPendingDeliverCallback(null);
+        }}
+        errors={stockErrors}
+        transactionType="dispatch_delivery"
+        onConfirm={async () => {
+          if (pendingDeliverCallback) {
+            await pendingDeliverCallback();
+          }
+        }}
+      />
     </div>
   );
 }

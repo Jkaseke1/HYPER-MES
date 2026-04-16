@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatCard from '../components/ui/StatCard';
+import { validateStockAvailability, StockError } from '../lib/stockValidation';
+import StockErrorBanner from '../components/stock/StockErrorBanner';
+import StockOverrideModal from '../components/stock/StockOverrideModal';
 
 /* ── Types ── */
 interface MacropackBom {
@@ -112,6 +115,11 @@ export default function MacropackManufacturingPage() {
 
   // Preview for new order
   const [previewIngredients, setPreviewIngredients] = useState<{ name: string; code: string; expected_grams: number }[]>([]);
+
+  // Stock validation
+  const [stockErrors, setStockErrors] = useState<StockError[]>([]);
+  const [showStockOverride, setShowStockOverride] = useState(false);
+  const [pendingCompleteCallback, setPendingCompleteCallback] = useState<(() => Promise<void>) | null>(null);
 
   async function fetchData() {
     setLoading(true);
@@ -293,6 +301,29 @@ export default function MacropackManufacturingPage() {
       }
     }
 
+    // Validate stock availability for all ingredients
+    const ingredientsToCheck = issueRows.map(r => ({
+      raw_material_id: r.raw_material_id,
+      quantity: r.expected_grams / 1000, // Convert grams to kg
+      name: r.ingredient_name
+    }));
+
+    const stockCheck = await validateStockAvailability(ingredientsToCheck);
+    if (!stockCheck.isValid) {
+      setStockErrors(stockCheck.errors);
+      setPendingCompleteCallback(() => async () => {
+        await completeOrderTransaction();
+      });
+      setShowStockOverride(true);
+      return;
+    }
+
+    setSaving(true);
+    await completeOrderTransaction();
+  }
+
+  async function completeOrderTransaction() {
+    if (!selectedOrder) return;
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -871,6 +902,23 @@ export default function MacropackManufacturingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Stock Override Modal */}
+      <StockOverrideModal
+        open={showStockOverride}
+        onClose={() => {
+          setShowStockOverride(false);
+          setStockErrors([]);
+          setPendingCompleteCallback(null);
+        }}
+        errors={stockErrors}
+        transactionType="macropack_manufacture"
+        onConfirm={async () => {
+          if (pendingCompleteCallback) {
+            await pendingCompleteCallback();
+          }
+        }}
+      />
     </div>
   );
 }
