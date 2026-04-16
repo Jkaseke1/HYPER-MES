@@ -403,10 +403,10 @@ export default function GrossMarginReportPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard title="Total Products" value={totalProducts} icon={<Package className="w-5 h-5 text-teal-600" />} />
-        <StatCard title="Average Margin" value={`${avgMargin.toFixed(1)}%`} icon={<TrendingUp className="w-5 h-5 text-emerald-600" />} />
-        <StatCard title="Below 25%" value={below25} icon={<AlertTriangle className="w-5 h-5 text-amber-600" />} />
-        <StatCard title="Below 15%" value={below15} icon={<AlertTriangle className="w-5 h-5 text-red-600" />} />
+        <StatCard title="Total Products" value={totalProducts} icon={Package} />
+        <StatCard title="Average Margin" value={`${avgMargin.toFixed(1)}%`} icon={TrendingUp} color="emerald" />
+        <StatCard title="Below 25%" value={below25} icon={AlertTriangle} color="amber" />
+        <StatCard title="Below 15%" value={below15} icon={AlertTriangle} color="red" />
       </div>
 
       {/* Tabs */}

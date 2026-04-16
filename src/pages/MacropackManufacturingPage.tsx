@@ -460,10 +460,10 @@ export default function MacropackManufacturingPage() {
       {/* Stats (Orders tab) */}
       {activeTab === 'Manufacturing Orders' && (
         <div className="grid grid-cols-4 gap-4">
-          <StatCard title="Total Orders" value={orderStats.total} icon={<Package className="w-5 h-5 text-teal-600" />} />
-          <StatCard title="Planned" value={orderStats.planned} icon={<Clock className="w-5 h-5 text-slate-600" />} />
-          <StatCard title="In Progress" value={orderStats.inProgress} icon={<Factory className="w-5 h-5 text-blue-600" />} />
-          <StatCard title="Completed" value={orderStats.completed} icon={<CheckCircle className="w-5 h-5 text-emerald-600" />} />
+          <StatCard title="Total Orders" value={orderStats.total} icon={Package} />
+          <StatCard title="Planned" value={orderStats.planned} icon={Clock} color="slate" />
+          <StatCard title="In Progress" value={orderStats.inProgress} icon={Factory} color="blue" />
+          <StatCard title="Completed" value={orderStats.completed} icon={CheckCircle} color="emerald" />
         </div>
       )}
 
