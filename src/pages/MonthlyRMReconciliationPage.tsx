@@ -402,10 +402,10 @@ export default function MonthlyRMReconciliationPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard title="Materials" value={totalItems} icon={<Package className="w-5 h-5 text-teal-600" />} />
-        <StatCard title="Counted" value={`${itemsCounted}/${totalItems}`} icon={<CheckCircle className="w-5 h-5 text-emerald-600" />} />
-        <StatCard title="With Variance" value={itemsWithVariance} icon={<AlertTriangle className="w-5 h-5 text-amber-600" />} />
-        <StatCard title="Total Variance" value={`${totalVarianceKg.toFixed(0)} kg`} icon={<Clock className="w-5 h-5 text-red-600" />} />
+        <StatCard title="Materials" value={totalItems} icon={Package} />
+        <StatCard title="Counted" value={`${itemsCounted}/${totalItems}`} icon={CheckCircle} color="emerald" />
+        <StatCard title="With Variance" value={itemsWithVariance} icon={AlertTriangle} color="amber" />
+        <StatCard title="Total Variance" value={`${totalVarianceKg.toFixed(0)} kg`} icon={Clock} color="red" />
       </div>
 
       {/* Tabs */}

@@ -70,7 +70,7 @@ const emptyExchangeForm = {
 };
 
 export default function RMCostRegisterPage() {
-  const { profile } = useAuth();
+  useAuth();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [costEntries, setCostEntries] = useState<CostEntry[]>([]);
   const [rateHistory, setRateHistory] = useState<RateEntry[]>([]);
@@ -264,13 +264,14 @@ export default function RMCostRegisterPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard title="Total Materials" value={totalMaterials} icon={<Package className="w-5 h-5 text-teal-600" />} />
-        <StatCard title="With Pricing" value={withPricing} icon={<DollarSign className="w-5 h-5 text-emerald-600" />} />
-        <StatCard title="No Pricing" value={withoutPricing} icon={<Package className="w-5 h-5 text-amber-600" />} />
+        <StatCard title="Total Materials" value={totalMaterials} icon={Package} />
+        <StatCard title="With Pricing" value={withPricing} icon={DollarSign} color="emerald" />
+        <StatCard title="No Pricing" value={withoutPricing} icon={Package} color="amber" />
         <StatCard
           title="Current USD:ZiG"
           value={latestRate ? latestRate.rate.toFixed(2) : 'N/A'}
-          icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
+          icon={TrendingUp}
+          color="blue"
         />
       </div>
 
@@ -358,7 +359,7 @@ export default function RMCostRegisterPage() {
       </div>
 
       {/* Add New Rate Modal */}
-      <Modal isOpen={addRateModalOpen} onClose={() => setAddRateModalOpen(false)} title="Add New Material Rate">
+      <Modal open={addRateModalOpen} onClose={() => setAddRateModalOpen(false)} title="Add New Material Rate">
         <form onSubmit={handleSaveRate} className="space-y-4">
           <div>
             <label className={labelCls}>Raw Material *</label>
@@ -439,7 +440,7 @@ export default function RMCostRegisterPage() {
       </Modal>
 
       {/* USD:ZiG Rate History Modal */}
-      <Modal isOpen={exchangeModalOpen} onClose={() => setExchangeModalOpen(false)} title="USD:ZiG Exchange Rate History">
+      <Modal open={exchangeModalOpen} onClose={() => setExchangeModalOpen(false)} title="USD:ZiG Exchange Rate History">
         <div className="space-y-4">
           {/* Current Rate */}
           {latestRate && (
@@ -514,7 +515,7 @@ export default function RMCostRegisterPage() {
       </Modal>
 
       {/* Material Price History Modal */}
-      <Modal isOpen={historyModalOpen} onClose={() => { setHistoryModalOpen(false); setHistoryMaterial(null); }} title={historyMaterial ? `Price History — ${historyMaterial.code} (${historyMaterial.name})` : 'Price History'}>
+      <Modal open={historyModalOpen} onClose={() => { setHistoryModalOpen(false); setHistoryMaterial(null); }} title={historyMaterial ? `Price History — ${historyMaterial.code} (${historyMaterial.name})` : 'Price History'}>
         <div className="space-y-4">
           {materialHistory.length === 0 ? (
             <div className="text-center text-slate-400 py-8">No price history for this material</div>
