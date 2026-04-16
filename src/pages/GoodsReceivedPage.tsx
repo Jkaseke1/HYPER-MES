@@ -9,6 +9,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
+import GRNAttachments from '../components/grn/GRNAttachments';
 
 interface GRNItem {
   raw_material_id: string;
@@ -43,7 +44,6 @@ export default function GoodsReceivedPage() {
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [rawMaterialsWarehouseId, setRawMaterialsWarehouseId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,7 +71,6 @@ export default function GoodsReceivedPage() {
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
-    setWarehouses(warehousesRes.data || []);
     
     // Find Raw Materials Warehouse UUID by code = 'RM'
     const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.code === 'RM');
@@ -213,7 +212,7 @@ export default function GoodsReceivedPage() {
       }
 
       // Filter out completely empty line items
-      const completeItems = items.filter((item, index) => validatedItems[index].hasData);
+      const completeItems = items.filter((_, index) => validatedItems[index].hasData);
 
       if (completeItems.length === 0) {
         alert('Please add at least one line item with all required fields filled in.');
@@ -358,7 +357,7 @@ export default function GoodsReceivedPage() {
                 <tr className="border-b border-slate-200 bg-slate-50/50">
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">GRN Number</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Supplier</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Warehouse</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Weigh Bridge Ref</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Received Date</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Total Value</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
@@ -370,7 +369,7 @@ export default function GoodsReceivedPage() {
                   <tr key={grn.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{grn.grn_number}</td>
                     <td className="px-4 py-3 font-medium text-slate-800">{grn.suppliers?.name || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">{grn.warehouses?.name || '-'}</td>
+                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{(grn as any).weigh_bridge_ticket_no || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{format(new Date(grn.received_date), 'dd MMM yyyy')}</td>
                     <td className="px-4 py-3 text-slate-700 font-medium">{grn.total_value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
                     <td className="px-4 py-3"><StatusBadge status={grn.status} /></td>
@@ -610,6 +609,10 @@ export default function GoodsReceivedPage() {
 
             <div className="border-t border-slate-200 pt-4">
               <ApprovalHistory entityType="grn" entityId={viewing.id} />
+            </div>
+
+            <div className="border-t border-slate-200 pt-4">
+              <GRNAttachments grnId={viewing.id} />
             </div>
 
             <div className="flex justify-end pt-2 border-t border-slate-200">
