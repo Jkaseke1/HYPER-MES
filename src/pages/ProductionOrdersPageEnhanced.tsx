@@ -9,6 +9,9 @@ import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
+import { validateStockAvailability, StockError } from '../lib/stockValidation';
+import StockErrorBanner from '../components/stock/StockErrorBanner';
+import StockOverrideModal from '../components/stock/StockOverrideModal';
 
 interface OrderMaterial {
   id: string; 
@@ -78,6 +81,9 @@ export default function ProductionOrdersPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [showPackagingDeclaration, setShowPackagingDeclaration] = useState(false);
   const [packagingLines, setPackagingLines] = useState<any[]>([]);
+  const [stockErrors, setStockErrors] = useState<StockError[]>([]);
+  const [showStockOverride, setShowStockOverride] = useState(false);
+  const [pendingIssueCallback, setPendingIssueCallback] = useState<(() => Promise<void>) | null>(null);
 
   const resetLogForm = () => {
     setLogForm({ log_type: 'start', description: '', started_at: '', ended_at: '', duration_minutes: '' });
@@ -241,6 +247,39 @@ export default function ProductionOrdersPage() {
     
     setSaving(true);
     try {
+      // Check stock availability first
+      const stockCheck = await validateStockAvailability([
+        {
+          raw_material_id: material.raw_material_id,
+          quantity: material.planned_qty,
+          name: material.raw_materials?.name
+        }
+      ]);
+
+      if (!stockCheck.isValid) {
+        setStockErrors(stockCheck.errors);
+        setPendingIssueCallback(() => async () => {
+          // This will be called if user overrides
+          const { error } = await supabase.rpc('issue_individual_ingredient', {
+            p_material_id: material.id,
+            p_actual_qty: material.planned_qty,
+            p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
+          });
+          if (error) throw error;
+          // Refresh after issue
+          const { data: refreshedData } = await supabase
+            .from('production_order_materials')
+            .select('*, raw_materials(name, code, cost_per_unit)')
+            .eq('production_order_id', selected.id);
+          const refreshed = (refreshedData as OrderMaterial[]) || [];
+          setDetailMaterials(refreshed);
+          setCosting((prev) => ({ ...prev, raw_material_cost: calculateMaterialCost(refreshed) }));
+        });
+        setShowStockOverride(true);
+        setSaving(false);
+        return;
+      }
+
       // Call the database function to issue individual ingredient
       const { error } = await supabase.rpc('issue_individual_ingredient', {
         p_material_id: material.id,
@@ -1117,6 +1156,23 @@ export default function ProductionOrdersPage() {
           />
         )}
       </Modal>
+
+      {/* Stock Override Modal */}
+      <StockOverrideModal
+        open={showStockOverride}
+        onClose={() => {
+          setShowStockOverride(false);
+          setStockErrors([]);
+          setPendingIssueCallback(null);
+        }}
+        errors={stockErrors}
+        transactionType="material_issue"
+        onConfirm={async () => {
+          if (pendingIssueCallback) {
+            await pendingIssueCallback();
+          }
+        }}
+      />
     </div>
   );
 }
