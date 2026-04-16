@@ -8,6 +8,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
+import PackagingDeclaration from '../components/production/PackagingDeclaration';
 
 interface OrderMaterial {
   id: string; 
@@ -75,6 +76,8 @@ export default function ProductionOrdersPage() {
   const [logSaving, setLogSaving] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [showPackagingDeclaration, setShowPackagingDeclaration] = useState(false);
+  const [packagingLines, setPackagingLines] = useState<any[]>([]);
 
   const resetLogForm = () => {
     setLogForm({ log_type: 'start', description: '', started_at: '', ended_at: '', duration_minutes: '' });
@@ -304,14 +307,10 @@ export default function ProductionOrdersPage() {
           throw new Error('Cannot complete production order — actual output quantities must be recorded first. Please enter production outputs in the Output tab.');
         }
         
-        const total = costing.raw_material_cost + costing.labour_cost + costing.machine_cost + costing.overhead_cost;
-        Object.assign(updates, { 
-          ...costing, 
-          ...output, 
-          total_cost: total,
-          cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
-          actual_end: new Date().toISOString() 
-        });
+        // Show packaging declaration instead of completing immediately
+        setShowPackagingDeclaration(true);
+        setSaving(false);
+        return;
       }
 
       const { error } = await supabase.from('production_orders').update(updates).eq('id', selected.id);
@@ -338,6 +337,87 @@ export default function ProductionOrdersPage() {
     } catch (error: any) {
       console.error('Error updating status:', error);
       setWorkflowError(error.message);
+      setSaving(false);
+    }
+  };
+
+  const handlePackagingDeclarationSave = async (lines: any[]) => {
+    if (!selected) return;
+    setSaving(true);
+
+    try {
+      const total = costing.raw_material_cost + costing.labour_cost + costing.machine_cost + costing.overhead_cost;
+      
+      // Complete the production order
+      const { error: updateError } = await supabase
+        .from('production_orders')
+        .update({
+          status: 'completed',
+          ...costing,
+          ...output,
+          total_cost: total,
+          cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
+          actual_end: new Date().toISOString()
+        })
+        .eq('id', selected.id);
+
+      if (updateError) throw updateError;
+
+      // Insert packaging declaration lines
+      const packagingData = lines.map((line) => ({
+        production_order_id: selected.id,
+        packaging_sku_id: line.packaging_sku_id,
+        bags_used: line.bags_used,
+        implied_tonnes: line.implied_tonnes
+      }));
+
+      const { error: packagingError } = await supabase
+        .from('batch_packaging_used')
+        .insert(packagingData);
+
+      if (packagingError) throw packagingError;
+
+      // Deduct packaging stock from packaging_stock table
+      for (const line of lines) {
+        // Get current stock
+        const { data: stockData } = await supabase
+          .from('packaging_stock')
+          .select('quantity_bags')
+          .eq('packaging_sku_id', line.packaging_sku_id)
+          .single();
+
+        if (stockData) {
+          const newQuantity = Math.max(0, (stockData.quantity_bags || 0) - line.bags_used);
+          await supabase
+            .from('packaging_stock')
+            .update({ quantity_bags: newQuantity })
+            .eq('packaging_sku_id', line.packaging_sku_id);
+        }
+      }
+
+      // Record stock movement for completed order
+      if (output.actual_qty > 0) {
+        await supabase.from('stock_movements').insert([{
+          movement_type: 'production_output',
+          formulation_id: selected.formulation_id,
+          quantity: output.actual_qty,
+          unit: selected.unit,
+          notes: 'Production output recorded',
+          reference_type: 'production_order',
+          reference_id: selected.id,
+          batch_number: selected.batch_number,
+          movement_date: new Date().toISOString()
+        }]);
+      }
+
+      setSaving(false);
+      setShowPackagingDeclaration(false);
+      setShowDetail(false);
+      setPackagingLines([]);
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Error saving packaging declaration:', error);
+      alert('Failed to save packaging declaration: ' + error.message);
       setSaving(false);
     }
   };
@@ -1024,6 +1104,17 @@ export default function ProductionOrdersPage() {
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Packaging Declaration Modal */}
+      <Modal open={showPackagingDeclaration} onClose={() => setShowPackagingDeclaration(false)} title="Declare Packaging Used" size="lg">
+        {selected && (
+          <PackagingDeclaration
+            actualOutputQty={output.actual_qty}
+            onSave={handlePackagingDeclarationSave}
+            disabled={saving}
+          />
         )}
       </Modal>
     </div>
