@@ -86,6 +86,7 @@ const navGroups: NavGroup[] = [
     icon: BarChart3Icon,
     items: [
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
+      { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },
       { to: '/admin/sync-log', icon: Activity, label: 'Sync Log' },
       { to: '/reports/production', icon: BarChart3Icon2, label: 'Production Report' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials Report' },
