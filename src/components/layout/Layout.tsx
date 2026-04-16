@@ -15,6 +15,7 @@ const pageTitles: Record<string, string> = {
   '/rm-prices': 'Raw Material Prices',
   '/production-orders': 'Production Orders',
   '/daily-production-report': 'Daily Production Reports',
+  '/macropack': 'Macropack Manufacturing',
   '/warehouse': 'Warehouse Management',
   '/dispatch': 'Dispatch Management',
   '/reconciliation': 'Material Reconciliation',
