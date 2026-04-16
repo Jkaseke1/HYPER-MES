@@ -30,6 +30,7 @@ import {
   Package as PackageIcon2,
   DollarSign,
   BarChart3 as BarChart3Icon2,
+  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -91,6 +92,7 @@ const navGroups: NavGroup[] = [
       { to: '/reports/production', icon: BarChart3Icon2, label: 'Production Report' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials Report' },
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
+      { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
       { to: '/reports', icon: FileText, label: 'Reports' },
     ],
   },

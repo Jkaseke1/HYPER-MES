@@ -19,6 +19,7 @@ const pageTitles: Record<string, string> = {
   '/dispatch': 'Dispatch Management',
   '/reconciliation': 'Material Reconciliation',
   '/reports/rm-reconciliation': 'Monthly RM Reconciliation',
+  '/reports/gross-margin': 'Gross Margin Report',
   '/reports': 'Reports & Analytics',
   '/maintenance-work-orders': 'Maintenance Work Orders',
   '/maintenance-schedules': 'PM Schedules',
