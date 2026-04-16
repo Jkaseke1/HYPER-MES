@@ -1,10 +1,11 @@
-import { Video as LucideIcon } from 'lucide-react';
+import { type LucideProps } from 'lucide-react';
+import { type ComponentType } from 'react';
 
 interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  icon: LucideIcon;
+  icon: ComponentType<LucideProps>;
   trend?: { value: number; label: string };
   color?: 'teal' | 'amber' | 'blue' | 'red' | 'emerald' | 'slate';
 }
