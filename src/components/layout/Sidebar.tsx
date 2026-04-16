@@ -62,6 +62,7 @@ const navGroups: NavGroup[] = [
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received' },
       { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
+      { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
     ],
   },
   {

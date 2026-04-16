@@ -12,6 +12,7 @@ const pageTitles: Record<string, string> = {
   '/goods-received': 'Goods Received',
   '/quality-inspection': 'Quality Inspection',
   '/material-transfer': 'Material Transfer',
+  '/rm-prices': 'Raw Material Prices',
   '/production-orders': 'Production Orders',
   '/daily-production-report': 'Daily Production Reports',
   '/warehouse': 'Warehouse Management',

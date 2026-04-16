@@ -100,6 +100,38 @@ export default function GRNApprovalButtons({
         console.warn('Failed to log approval action:', logError);
       }
 
+      // Auto-create rm_cost_register entries when GRN is fully approved
+      if (newStatus === 'approved') {
+        try {
+          // Fetch GRN details and line items
+          const [grnRes, itemsRes, latestRateRes] = await Promise.all([
+            supabase.from('goods_received_notes').select('received_date').eq('id', grnId).single(),
+            supabase.from('grn_items').select('raw_material_id, received_qty, unit_cost').eq('grn_id', grnId),
+            supabase.from('usd_zig_rate_history').select('rate').order('effective_date', { ascending: false }).limit(1),
+          ]);
+
+          const grnDate = grnRes.data?.received_date;
+          const items = itemsRes.data || [];
+          const latestRate = latestRateRes.data?.[0]?.rate || null;
+
+          if (items.length > 0 && grnDate) {
+            const costEntries = items.map((item: any) => ({
+              raw_material_id: item.raw_material_id,
+              cost_per_tonne_usd: item.unit_cost,
+              effective_date: grnDate,
+              source: 'GRN',
+              grn_id: grnId,
+              usd_zig_rate: latestRate,
+              created_by: user.id,
+            }));
+
+            await supabase.from('rm_cost_register').insert(costEntries);
+          }
+        } catch (costError) {
+          console.warn('Failed to auto-create RM cost entries:', costError);
+        }
+      }
+
       onApproved();
     } catch (error) {
       console.error('Approval error:', error);
