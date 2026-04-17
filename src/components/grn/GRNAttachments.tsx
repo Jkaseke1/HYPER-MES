@@ -10,7 +10,7 @@ interface Attachment {
   file_url: string;
   file_size: number;
   uploaded_by: string;
-  uploaded_at: string;
+  created_at: string;
   user_profiles?: { full_name: string };
 }
 
@@ -32,12 +32,15 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
         .from('grn_attachments')
         .select('*, user_profiles(full_name)')
         .eq('grn_id', grnId)
-        .order('uploaded_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setAttachments(data || []);
-    } catch (err) {
-      console.error('Failed to fetch attachments:', err);
+    } catch (err: any) {
+      // Only log if it's a real error, not just empty results
+      if (err?.message && !err.message.includes('No rows')) {
+        console.error('Failed to fetch attachments:', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -92,7 +95,6 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
           file_url: publicUrl,
           file_size: file.size,
           uploaded_by: user.id,
-          uploaded_at: new Date().toISOString(),
         });
 
       if (insertError) throw insertError;
@@ -176,7 +178,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{att.file_name}</p>
                   <p className="text-xs text-slate-500">
-                    {(att.file_size / 1024).toFixed(1)} KB • {att.user_profiles?.full_name || 'Unknown'} • {format(new Date(att.uploaded_at), 'dd MMM yyyy HH:mm')}
+                    {(att.file_size / 1024).toFixed(1)} KB • {att.user_profiles?.full_name || 'Unknown'} • {format(new Date(att.created_at), 'dd MMM yyyy HH:mm')}
                   </p>
                 </div>
               </div>
