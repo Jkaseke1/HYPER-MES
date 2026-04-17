@@ -590,6 +590,7 @@ export default function GoodsReceivedPage() {
                   rm_approved_at={(viewing as any).rm_approved_at}
                   accountant_approved_at={(viewing as any).accountant_approved_at}
                   onApproved={() => {
+                    setViewModalOpen(false);
                     fetchData();
                   }}
                   onRejected={() => {
