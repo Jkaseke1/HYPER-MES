@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Clock, User, MessageSquare } from 'lucide-react';
+import { Clock, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { ApprovalHistoryWithUser } from '../../types/approval';
+
+interface ApprovalEntry {
+  id: string;
+  action: string;
+  previous_status?: string;
+  new_status: string;
+  created_at: string;
+  approver?: { full_name: string };
+}
 
 interface ApprovalHistoryProps {
   entityType: string;
@@ -9,7 +17,7 @@ interface ApprovalHistoryProps {
 }
 
 export default function ApprovalHistory({ entityType, entityId }: ApprovalHistoryProps) {
-  const [history, setHistory] = useState<ApprovalHistoryWithUser[]>([]);
+  const [history, setHistory] = useState<ApprovalEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,15 +26,64 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
 
   async function fetchHistory() {
     setLoading(true);
-    const { data } = await supabase
-      .from('approval_history')
-      .select('*, approver:profiles!approved_by(id, full_name, email)')
-      .eq('entity_type', entityType)
-      .eq('entity_id', entityId)
-      .order('created_at', { ascending: false });
+    try {
+      // For GRN approvals, fetch the GRN and derive approval history from status fields
+      if (entityType === 'grn') {
+        const { data: grn } = await supabase
+          .from('goods_received_notes')
+          .select('*, rm_approved_by_user:profiles!rm_approved_by(full_name), accountant_approved_by_user:profiles!accountant_approved_by(full_name)')
+          .eq('id', entityId)
+          .single();
 
-    setHistory((data as any) || []);
-    setLoading(false);
+        if (grn) {
+          const entries: ApprovalEntry[] = [];
+
+          // Add RM approval if it exists
+          if (grn.rm_approved_at) {
+            entries.push({
+              id: `rm_${grn.id}`,
+              action: 'approved',
+              previous_status: 'pending',
+              new_status: 'rm_approved',
+              created_at: grn.rm_approved_at,
+              approver: grn.rm_approved_by_user
+            });
+          }
+
+          // Add Accountant approval if it exists
+          if (grn.accountant_approved_at) {
+            entries.push({
+              id: `accountant_${grn.id}`,
+              action: 'approved',
+              previous_status: 'rm_approved',
+              new_status: 'approved',
+              created_at: grn.accountant_approved_at,
+              approver: grn.accountant_approved_by_user
+            });
+          }
+
+          // Add rejection if it exists
+          if (grn.status === 'rejected' && grn.rm_approved_at) {
+            entries.push({
+              id: `rejected_${grn.id}`,
+              action: 'rejected',
+              previous_status: 'pending',
+              new_status: 'rejected',
+              created_at: grn.rm_approved_at,
+              approver: grn.rm_approved_by_user
+            });
+          }
+
+          // Sort by date descending
+          entries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          setHistory(entries);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch approval history:', error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (loading) {
@@ -76,13 +133,6 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
               <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
                 <User className="w-3 h-3" />
                 <span>{entry.approver.full_name}</span>
-              </div>
-            )}
-            
-            {entry.comments && (
-              <div className="flex items-start gap-2 text-xs text-slate-600 bg-white rounded p-2 border border-slate-200">
-                <MessageSquare className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                <span>{entry.comments}</span>
               </div>
             )}
           </div>
