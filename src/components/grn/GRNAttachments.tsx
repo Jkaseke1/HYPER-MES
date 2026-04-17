@@ -122,23 +122,18 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
         return;
       }
 
-      // Get signed URL for download
+      // Get signed URL for viewing
       const { data, error } = await supabase.storage
         .from('grn-attachments')
-        .createSignedUrl(attachment.storage_path, 60); // 60 second expiry
+        .createSignedUrl(attachment.storage_path, 3600); // 1 hour expiry
 
       if (error) throw error;
 
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = data.signedUrl;
-      link.download = attachment.file_name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Open in new tab/page
+      window.open(data.signedUrl, '_blank');
     } catch (error) {
-      console.error('Download failed:', error);
-      alert('Failed to download file. Please try again.');
+      console.error('Open file failed:', error);
+      alert('Failed to open file. Please try again.');
     }
   }
 
