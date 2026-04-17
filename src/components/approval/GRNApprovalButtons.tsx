@@ -85,21 +85,6 @@ export default function GRNApprovalButtons({
 
       if (updateError) throw updateError;
 
-      // Log approval action (non-blocking)
-      try {
-        await supabase.rpc('log_approval_action', {
-          p_entity_type: 'grn',
-          p_entity_id: grnId,
-          p_action: 'approved',
-          p_previous_status: currentStatus,
-          p_new_status: newStatus,
-          p_approved_by: user.id,
-          p_comments: null
-        });
-      } catch (logError) {
-        console.warn('Failed to log approval action:', logError);
-      }
-
       // Auto-create rm_cost_register entries when GRN is fully approved
       if (newStatus === 'approved') {
         try {
@@ -164,21 +149,6 @@ export default function GRNApprovalButtons({
         .eq('id', grnId);
 
       if (updateError) throw updateError;
-
-      // Log rejection action
-      try {
-        await supabase.rpc('log_approval_action', {
-          p_entity_type: 'grn',
-          p_entity_id: grnId,
-          p_action: 'rejected',
-          p_previous_status: currentStatus,
-          p_new_status: 'rejected',
-          p_approved_by: user.id,
-          p_comments: rejectionReason
-        });
-      } catch (logError) {
-        console.warn('Failed to log rejection action:', logError);
-      }
 
       setShowRejectModal(false);
       setRejectionReason('');
