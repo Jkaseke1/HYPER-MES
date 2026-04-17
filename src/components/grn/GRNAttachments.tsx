@@ -11,7 +11,7 @@ interface Attachment {
   file_size: number;
   uploaded_by: string;
   created_at: string;
-  user_profiles?: { full_name: string };
+  profiles?: { full_name: string };
 }
 
 interface GRNAttachmentsProps {
@@ -30,7 +30,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
     try {
       const { data, error } = await supabase
         .from('grn_attachments')
-        .select('*, user_profiles(full_name)')
+        .select('*, profiles(full_name)')
         .eq('grn_id', grnId)
         .order('created_at', { ascending: false });
 
@@ -178,7 +178,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{att.file_name}</p>
                   <p className="text-xs text-slate-500">
-                    {(att.file_size / 1024).toFixed(1)} KB • {att.user_profiles?.full_name || 'Unknown'} • {format(new Date(att.created_at), 'dd MMM yyyy HH:mm')}
+                    {(att.file_size / 1024).toFixed(1)} KB • {att.profiles?.full_name || 'Unknown'} • {format(new Date(att.created_at), 'dd MMM yyyy HH:mm')}
                   </p>
                 </div>
               </div>
