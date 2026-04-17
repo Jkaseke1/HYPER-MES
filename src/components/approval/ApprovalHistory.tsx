@@ -74,7 +74,7 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
             });
           }
 
-          // Sort by date descending
+          // Sort by date descending (newest first)
           entries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           setHistory(entries);
         }
