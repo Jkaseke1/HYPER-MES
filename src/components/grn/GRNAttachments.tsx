@@ -8,6 +8,7 @@ interface Attachment {
   grn_id: string;
   file_name: string;
   file_url: string;
+  storage_path?: string;
   file_size: number;
   uploaded_by: string;
   created_at: string;
@@ -94,6 +95,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
           grn_id: grnId,
           file_name: file.name,
           file_url: publicUrl,
+          storage_path: fileName,
           file_size: file.size,
           uploaded_by: user.id,
         });
@@ -113,17 +115,43 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
     }
   }
 
+  async function handleDownload(attachment: Attachment) {
+    try {
+      if (!attachment.storage_path) {
+        alert('File path not available');
+        return;
+      }
+
+      // Get signed URL for download
+      const { data, error } = await supabase.storage
+        .from('grn-attachments')
+        .createSignedUrl(attachment.storage_path, 60); // 60 second expiry
+
+      if (error) throw error;
+
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.download = attachment.file_name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download file. Please try again.');
+    }
+  }
+
   async function handleDelete(attachment: Attachment) {
     if (!confirm(`Delete "${attachment.file_name}"?`)) return;
 
     setDeleting(attachment.id);
     try {
-      // Delete from storage
-      const filePath = attachment.file_url.split('/').pop();
-      if (filePath) {
+      // Delete from storage using storage_path
+      if (attachment.storage_path) {
         await supabase.storage
           .from('grn-attachments')
-          .remove([`${grnId}/${filePath}`]);
+          .remove([attachment.storage_path]);
       }
 
       // Delete record
@@ -188,14 +216,13 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
                 </div>
               </div>
               <div className="flex items-center gap-2 ml-2">
-                <a
-                  href={att.file_url}
-                  download={att.file_name}
+                <button
+                  onClick={() => handleDownload(att)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
                   title="Download"
                 >
                   <Download className="w-4 h-4" />
-                </a>
+                </button>
                 {!readOnly && (
                   <button
                     onClick={() => handleDelete(att)}
