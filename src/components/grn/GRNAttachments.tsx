@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, Download, Trash2, File, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
@@ -24,6 +24,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchAttachments() {
     setLoading(true);
@@ -100,7 +101,10 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
       if (insertError) throw insertError;
 
       fetchAttachments();
-      e.currentTarget.value = ''; // Reset input
+      // Reset input safely using ref
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Failed to upload file. Please try again.');
@@ -149,6 +153,7 @@ export default function GRNAttachments({ grnId, readOnly = false }: GRNAttachmen
             <Upload className="w-4 h-4" />
             Upload File
             <input
+              ref={fileInputRef}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png"
               onChange={handleFileUpload}
