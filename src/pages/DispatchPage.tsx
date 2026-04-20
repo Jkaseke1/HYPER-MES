@@ -8,7 +8,7 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
-import { validateStockAvailability, StockError } from '../lib/stockValidation';
+import { validateFGStockAvailability, StockError } from '../lib/stockValidation';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
 
 type Tab = 'all' | 'pending' | 'loading' | 'dispatched' | 'in_transit' | 'delivered';
@@ -151,17 +151,17 @@ export default function DispatchPage() {
   };
 
   const updateStatus = async (id: string, status: string) => {
-    // Validate stock before marking as delivered
+    // Validate FG stock before marking as delivered
     if (status === 'delivered' && viewOrder?.id === id) {
       const itemsToCheck = viewItems
         .filter(item => item.formulation_id)
         .map(item => ({
-          raw_material_id: item.formulation_id!,
+          formulation_id: item.formulation_id!,
           quantity: item.quantity,
           name: (item.formulations as any)?.name || 'Unknown'
         }));
 
-      const stockCheck = await validateStockAvailability(itemsToCheck);
+      const stockCheck = await validateFGStockAvailability(itemsToCheck);
       if (!stockCheck.isValid) {
         setStockErrors(stockCheck.errors);
         setPendingDeliverCallback(() => async () => {
@@ -179,6 +179,26 @@ export default function DispatchPage() {
     const updates: any = { status };
     if (status === 'delivered') updates.delivered_at = new Date().toISOString();
     await supabase.from('dispatch_orders').update(updates).eq('id', id);
+
+    // Write dispatch_out movements so FG ledger balance stays accurate
+    if (status === 'delivered') {
+      const itemsForMovement = viewOrder?.id === id ? viewItems : [];
+      const movements = itemsForMovement
+        .filter((item) => item.formulation_id)
+        .map((item) => ({
+          movement_type: 'dispatch_out',
+          formulation_id: item.formulation_id,
+          quantity: item.quantity,
+          unit: item.unit,
+          notes: `Dispatched — ${viewOrder?.dispatch_number || id}`,
+          reference_type: 'dispatch_order',
+          reference_id: id,
+          batch_number: item.batch_number || null,
+          movement_date: new Date().toISOString(),
+        }));
+      if (movements.length) await supabase.from('stock_movements').insert(movements);
+    }
+
     if (viewOrder?.id === id) setViewOrder({ ...viewOrder, ...updates });
     fetchOrders();
   };

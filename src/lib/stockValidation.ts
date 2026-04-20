@@ -76,6 +76,61 @@ export async function validateStockAvailability(
 }
 
 /**
+ * Check if finished goods have sufficient stock before dispatch (uses stock_movements ledger)
+ */
+export async function validateFGStockAvailability(
+  items: Array<{ formulation_id: string; quantity: number; name?: string }>
+): Promise<StockCheckResult> {
+  if (!items || items.length === 0) return { isValid: true, errors: [] };
+
+  try {
+    const formulationIds = items.map((i) => i.formulation_id).filter(Boolean);
+
+    const [{ data: inbound }, { data: outbound }] = await Promise.all([
+      supabase
+        .from('stock_movements')
+        .select('formulation_id, quantity')
+        .in('formulation_id', formulationIds)
+        .eq('movement_type', 'production_output'),
+      supabase
+        .from('stock_movements')
+        .select('formulation_id, quantity')
+        .in('formulation_id', formulationIds)
+        .eq('movement_type', 'dispatch_out'),
+    ]);
+
+    const netStock: Record<string, number> = {};
+    for (const id of formulationIds) {
+      const totalIn = (inbound || []).filter((r) => r.formulation_id === id).reduce((s, r) => s + r.quantity, 0);
+      const totalOut = (outbound || []).filter((r) => r.formulation_id === id).reduce((s, r) => s + r.quantity, 0);
+      netStock[id] = totalIn - totalOut;
+    }
+
+    const errors: StockError[] = [];
+    for (const item of items) {
+      const available = netStock[item.formulation_id] || 0;
+      if (available < item.quantity) {
+        errors.push({
+          materialId: item.formulation_id,
+          materialName: item.name || 'Unknown Product',
+          available,
+          requested: item.quantity,
+          shortfall: item.quantity - available,
+        });
+      }
+    }
+
+    return { isValid: errors.length === 0, errors };
+  } catch (error) {
+    console.error('FG stock validation error:', error);
+    return {
+      isValid: false,
+      errors: [{ materialId: '', materialName: 'System Error', available: 0, requested: 0, shortfall: 0 }],
+    };
+  }
+}
+
+/**
  * Log a stock exception when override is needed
  */
 export async function logStockException(
