@@ -102,7 +102,7 @@ export default function GRNApprovalButtons({
           if (items.length > 0 && grnDate) {
             const costEntries = items.map((item: any) => ({
               raw_material_id: item.raw_material_id,
-              cost_per_tonne_usd: item.unit_cost,
+              cost_per_tonne_usd: item.unit_cost * 1000,
               effective_date: grnDate,
               source: 'GRN',
               grn_id: grnId,
