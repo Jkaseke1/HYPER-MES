@@ -466,7 +466,7 @@ export default function GoodsReceivedPage() {
               wb_nett_mass: form.wb_nett_mass,
               wb_driver_signed: form.wb_driver_signed,
             }}
-            onChange={(field, value) => setForm({ ...form, [field]: value })}
+            onChange={(field, value) => setForm(prev => ({ ...prev, [field]: value }))}
           />
 
           <div>
