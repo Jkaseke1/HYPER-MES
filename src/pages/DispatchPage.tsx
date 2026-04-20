@@ -42,6 +42,7 @@ export default function DispatchPage() {
   const [showStockOverride, setShowStockOverride] = useState(false);
   const [pendingDeliverCallback, setPendingDeliverCallback] = useState<(() => Promise<void>) | null>(null);
   const [batchNumbers, setBatchNumbers] = useState<{ [key: string]: string[] }>({});
+  const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
@@ -76,11 +77,11 @@ export default function DispatchPage() {
   const updateItem = (idx: number, key: string, value: any) => {
     const newItems = [...items];
     newItems[idx] = { ...newItems[idx], [key]: value };
+    if (key === 'formulation_id') newItems[idx].batch_number = '';
     setItems(newItems);
-    
-    // Fetch batch numbers when product changes
     if (key === 'formulation_id' && value) {
       fetchBatchNumbers(value);
+      fetchFGStock(value);
     }
   };
 
@@ -127,21 +128,25 @@ export default function DispatchPage() {
 
   const fetchBatchNumbers = async (formulationId: string) => {
     if (!formulationId) return;
-    if (batchNumbers[formulationId]) return; // Already cached
-    
+    if (batchNumbers[formulationId]) return;
     const { data } = await supabase
       .from('production_orders')
       .select('batch_number')
       .eq('formulation_id', formulationId)
       .eq('status', 'completed')
       .order('batch_number', { ascending: false });
-    
-    if (data) {
-      setBatchNumbers(prev => ({
-        ...prev,
-        [formulationId]: data.map(d => d.batch_number)
-      }));
-    }
+    if (data) setBatchNumbers(prev => ({ ...prev, [formulationId]: data.map(d => d.batch_number) }));
+  };
+
+  const fetchFGStock = async (formulationId: string) => {
+    if (!formulationId) return;
+    const [{ data: inbound }, { data: outbound }] = await Promise.all([
+      supabase.from('stock_movements').select('quantity').eq('formulation_id', formulationId).eq('movement_type', 'production_output'),
+      supabase.from('stock_movements').select('quantity').eq('formulation_id', formulationId).eq('movement_type', 'dispatch_out'),
+    ]);
+    const totalIn = (inbound || []).reduce((s, r) => s + r.quantity, 0);
+    const totalOut = (outbound || []).reduce((s, r) => s + r.quantity, 0);
+    setStockBalances(prev => ({ ...prev, [formulationId]: totalIn - totalOut }));
   };
 
   const openView = async (order: DispatchOrder) => {
@@ -354,9 +359,14 @@ export default function DispatchPage() {
                   <tr key={idx}>
                     <td className="px-3 py-1.5">
                       <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
-                        <option value="">Select</option>
+                        <option value="">Select product</option>
                         {formulations.map((f) => <option key={f.id} value={f.id}>{f.sage_code} — {f.name}</option>)}
                       </select>
+                      {item.formulation_id && (
+                        <p className={`text-xs mt-0.5 font-semibold ${(stockBalances[item.formulation_id] ?? 0) > 0 ? 'text-teal-600' : 'text-amber-600'}`}>
+                          Available: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-1.5">
                       {batchNumbers[item.formulation_id]?.length ? (

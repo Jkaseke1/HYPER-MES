@@ -382,7 +382,14 @@ export default function GoodsReceivedPage() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((grn) => (
                   <tr key={grn.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{grn.grn_number}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {(grn as any).wb_transaction_no && (
+                          <span title="Weigh Bridge data captured"><Scale className="w-3.5 h-3.5 text-teal-500 shrink-0" /></span>
+                        )}
+                        <span className="font-mono text-xs text-slate-500">{grn.grn_number}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-800">{grn.suppliers?.name || '-'}</td>
                     <td className="px-4 py-3 text-slate-600 font-mono text-xs">{(grn as any).weigh_bridge_ticket_no || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{format(new Date(grn.received_date), 'dd MMM yyyy')}</td>
@@ -612,6 +619,77 @@ export default function GoodsReceivedPage() {
                 </table>
               </div>
             </div>
+
+            {/* Weigh Bridge Ticket Card */}
+            {(viewing as any).wb_transaction_no && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Scale className="w-4 h-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
+                </div>
+                <div className="border border-teal-200 rounded-xl bg-teal-50/30 p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Transaction No</p>
+                      <p className="text-sm font-semibold font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Vehicle Reg</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_vehicle_reg || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Haulier Code</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_haulier_code || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Driver Name</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_driver_name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Driver ID</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_driver_id || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Trailer Number</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_trailer_number || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Time In</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_time_in ? format(new Date((viewing as any).wb_time_in), 'dd MMM yyyy HH:mm') : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">1st Mass</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_first_mass != null ? `${Number((viewing as any).wb_first_mass).toLocaleString()} kg` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">Time Out</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_time_out ? format(new Date((viewing as any).wb_time_out), 'dd MMM yyyy HH:mm') : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-0.5">2nd Mass</p>
+                      <p className="text-sm text-slate-700">{(viewing as any).wb_second_mass != null ? `${Number((viewing as any).wb_second_mass).toLocaleString()} kg` : '—'}</p>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-teal-100 border border-teal-300 rounded-lg flex items-center justify-between">
+                    <p className="text-xs font-bold text-teal-700 uppercase tracking-wide">Nett Mass</p>
+                    <p className="text-xl font-bold text-teal-800">
+                      {(viewing as any).wb_nett_mass != null ? `${Number((viewing as any).wb_nett_mass).toLocaleString()} kg` : '—'}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">Driver Signed</p>
+                    {(viewing as any).wb_driver_signed ? (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Signed ✓
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">Not signed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(viewing.status === 'pending' || viewing.status === 'rm_approved') && (
               <div className="border-t border-slate-200 pt-4">
