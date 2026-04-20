@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, Package, Eye, Clock, CheckCircle2, DollarSign } from 'lucide-react';
+import { Plus, Search, Trash2, Package, Eye, Clock, CheckCircle2, DollarSign, Scale } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 import GRNAttachments from '../components/grn/GRNAttachments';
+import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 
 interface GRNItem {
   raw_material_id: string;
@@ -28,6 +29,20 @@ const emptyForm = {
   weigh_bridge_ticket_no: '',
   status: 'pending' as const,
   notes: '',
+  wb_transaction_no: '',
+  wb_vehicle_reg: '',
+  wb_haulier_code: 'HYPER',
+  wb_product_code: '',
+  wb_comment: '',
+  wb_trailer_number: '',
+  wb_driver_name: '',
+  wb_driver_id: '',
+  wb_time_in: '',
+  wb_first_mass: '',
+  wb_time_out: '',
+  wb_second_mass: '',
+  wb_nett_mass: '',
+  wb_driver_signed: false,
 };
 
 const emptyItem: GRNItem = {
@@ -425,11 +440,27 @@ export default function GoodsReceivedPage() {
                 Raw Materials Warehouse
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Weigh Bridge Ticket No</label>
-              <input required type="text" value={form.weigh_bridge_ticket_no} onChange={(e) => setForm({ ...form, weigh_bridge_ticket_no: e.target.value })} className={inputClass} placeholder="e.g. WBT-2026-001" />
-            </div>
           </div>
+
+          <WeighBridgeTicket
+            data={{
+              wb_transaction_no: form.wb_transaction_no,
+              wb_vehicle_reg: form.wb_vehicle_reg,
+              wb_haulier_code: form.wb_haulier_code,
+              wb_product_code: form.wb_product_code,
+              wb_comment: form.wb_comment,
+              wb_trailer_number: form.wb_trailer_number,
+              wb_driver_name: form.wb_driver_name,
+              wb_driver_id: form.wb_driver_id,
+              wb_time_in: form.wb_time_in,
+              wb_first_mass: form.wb_first_mass,
+              wb_time_out: form.wb_time_out,
+              wb_second_mass: form.wb_second_mass,
+              wb_nett_mass: form.wb_nett_mass,
+              wb_driver_signed: form.wb_driver_signed,
+            }}
+            onChange={(field, value) => setForm({ ...form, [field]: value })}
+          />
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Notes</label>
