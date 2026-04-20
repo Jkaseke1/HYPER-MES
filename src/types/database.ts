@@ -158,6 +158,7 @@ export interface Formulation {
   approved_by: string | null;
   created_at: string;
   updated_at: string;
+  current_stock: number;
 }
 
 export interface FormulationIngredient {
