@@ -41,6 +41,7 @@ export default function DispatchPage() {
   const [stockErrors, setStockErrors] = useState<StockError[]>([]);
   const [showStockOverride, setShowStockOverride] = useState(false);
   const [pendingDeliverCallback, setPendingDeliverCallback] = useState<(() => Promise<void>) | null>(null);
+  const [batchNumbers, setBatchNumbers] = useState<{ [key: string]: string[] }>({});
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
@@ -59,11 +60,29 @@ export default function DispatchPage() {
         supabase.from('formulations').select('*').eq('status', 'active').order('name'),
       ]);
       if (b.data) setBranches(b.data);
-      if (w.data) setWarehouses(w.data);
+      if (w.data) {
+        setWarehouses(w.data);
+        // Default warehouse to Despatch Warehouse (DSP)
+        const dspWarehouse = w.data.find(wh => wh.code === 'DSP');
+        if (dspWarehouse) {
+          setForm(prev => ({ ...prev, warehouse_id: dspWarehouse.id }));
+        }
+      }
       if (f.data) setFormulations(f.data);
     };
     load();
   }, []);
+
+  const updateItem = (idx: number, key: string, value: any) => {
+    const newItems = [...items];
+    newItems[idx] = { ...newItems[idx], [key]: value };
+    setItems(newItems);
+    
+    // Fetch batch numbers when product changes
+    if (key === 'formulation_id' && value) {
+      fetchBatchNumbers(value);
+    }
+  };
 
   const totalWeight = items.reduce((s, i) => s + (i.quantity || 0), 0);
   const totalValue = items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
@@ -96,7 +115,34 @@ export default function DispatchPage() {
     }
   };
 
-  const resetForm = () => { setForm(initForm); setItems([{ ...EMPTY_ITEM }]); };
+  const resetForm = () => { 
+    setForm(initForm); 
+    setItems([{ ...EMPTY_ITEM }]); 
+    // Re-apply DSP warehouse default
+    const dspWarehouse = warehouses.find(wh => wh.code === 'DSP');
+    if (dspWarehouse) {
+      setForm(prev => ({ ...prev, warehouse_id: dspWarehouse.id }));
+    }
+  };
+
+  const fetchBatchNumbers = async (formulationId: string) => {
+    if (!formulationId) return;
+    if (batchNumbers[formulationId]) return; // Already cached
+    
+    const { data } = await supabase
+      .from('production_orders')
+      .select('batch_number')
+      .eq('formulation_id', formulationId)
+      .eq('status', 'completed')
+      .order('batch_number', { ascending: false });
+    
+    if (data) {
+      setBatchNumbers(prev => ({
+        ...prev,
+        [formulationId]: data.map(d => d.batch_number)
+      }));
+    }
+  };
 
   const openView = async (order: DispatchOrder) => {
     setViewOrder(order);
@@ -163,21 +209,6 @@ export default function DispatchPage() {
 
   const STATUS_FLOW: Record<string, { label: string; next: string }> = { pending: { label: 'Start Loading', next: 'loading' }, loading: { label: 'Mark Dispatched', next: 'dispatched' }, dispatched: { label: 'In Transit', next: 'in_transit' }, in_transit: { label: 'Mark Delivered', next: 'delivered' } };
   const nextStatus = (s: string) => STATUS_FLOW[s] || null;
-
-  const updateItem = (idx: number, field: string, value: any) => {
-    const updated = [...items];
-    updated[idx] = { ...updated[idx], [field]: value };
-    
-    // Auto-populate batch_number when formulation is selected
-    if (field === 'formulation_id' && value) {
-      const selectedFormulation = formulations.find(f => f.id === value);
-      if (selectedFormulation) {
-        updated[idx].batch_number = selectedFormulation.code || '';
-      }
-    }
-    
-    setItems(updated);
-  };
 
   return (
     <div className="p-6 space-y-6">
@@ -304,10 +335,19 @@ export default function DispatchPage() {
                     <td className="px-3 py-1.5">
                       <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
                         <option value="">Select</option>
-                        {formulations.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        {formulations.map((f) => <option key={f.id} value={f.id}>{f.sage_code} — {f.name}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-1.5"><input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" /></td>
+                    <td className="px-3 py-1.5">
+                      {batchNumbers[item.formulation_id]?.length ? (
+                        <select value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
+                          <option value="">Select batch</option>
+                          {batchNumbers[item.formulation_id].map((bn) => <option key={bn} value={bn}>{bn}</option>)}
+                        </select>
+                      ) : (
+                        <input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} placeholder="e.g. BATCH-2026-103" className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                      )}
+                    </td>
                     <td className="px-3 py-1.5"><input type="number" value={item.quantity || ''} onChange={(e) => updateItem(idx, 'quantity', +e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" /></td>
                     <td className="px-3 py-1.5">
                       <select value={item.unit} onChange={(e) => updateItem(idx, 'unit', e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
