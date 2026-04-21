@@ -14,7 +14,17 @@ interface SyncLog {
   updated_at: string;
 }
 
-const EVENT_TYPES = ['grn_confirmed', 'materials_issued', 'production_completed', 'dispatch_delivered'];
+const EVENT_TYPES = [
+  'grn_confirmed',
+  'materials_issued',
+  'production_completed',
+  'dispatch_delivered',
+  'material_variance_alert',
+  'macropack_manufactured',
+  'reconciliation_variance_approved',
+  'rm_cost_updated',
+  'reconciliation_completed',
+];
 const STATUS_FILTERS = ['all', 'success', 'failed', 'pending', 'processing'];
 
 const statusConfig: Record<string, { color: string; icon: any; label: string }> = {
