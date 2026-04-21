@@ -661,14 +661,12 @@ export default function ProductionOrdersPage() {
           throw new Error('Cannot complete production order — actual output quantities must be recorded first. Please enter production outputs in the Output tab.');
         }
         
-        // Compute production line cost from hardcoded per-tonne labour rate
-        const lineRateOnSave = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
-        const productionLineCostOnSave = Math.round(lineRateOnSave * (output.actual_qty / 1000) * 100) / 100;
-        const total = costing.raw_material_cost + costing.labour_cost + productionLineCostOnSave + costing.overhead_cost;
+        // Production Line cost deprecated (double-counted labour). Labour card holds the authoritative per-tonne labour cost.
+        const total = costing.raw_material_cost + costing.labour_cost + costing.overhead_cost;
         Object.assign(updates, {
           ...costing,
-          production_line_cost: productionLineCostOnSave,
-          machine_cost: productionLineCostOnSave,
+          production_line_cost: 0,
+          machine_cost: 0,
           ...output,
           total_cost: Math.round(total * 100) / 100,
           cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
@@ -1403,20 +1401,15 @@ export default function ProductionOrdersPage() {
                 <h3 className="text-lg font-semibold text-slate-800">Cost Breakdown</h3>
                 
                 {(() => {
-                  // Calculate all costs
+                  // Calculate all costs. Production Line card is deprecated (double-counted labour); Labour card is authoritative.
                   const rawMaterialCost = costing.raw_material_cost;
-                  const lineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
                   const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
-                  const productionLineCost = lineRate * actualTonnes;
-                  const totalCost = rawMaterialCost + productionLineCost + costing.labour_cost + costing.overhead_cost;
+                  const totalCost = rawMaterialCost + costing.labour_cost + costing.overhead_cost;
                   const costPerKg = output.actual_qty > 0 ? totalCost / output.actual_qty : 0;
-                  
+
                   // Planned cost calculation
-                  const plannedLineRate = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
-                  const plannedTonnes = selected.planned_qty > 0 ? selected.planned_qty / 1000 : 0;
-                  const plannedLineCost = plannedLineRate * plannedTonnes;
                   const plannedBomCost = calculatePlannedMaterialCost(detailMaterials);
-                  const plannedTotalCost = plannedBomCost + plannedLineCost + costing.labour_cost + costing.overhead_cost;
+                  const plannedTotalCost = plannedBomCost + costing.labour_cost + costing.overhead_cost;
                   const plannedCostPerKg = selected.planned_qty > 0 ? plannedTotalCost / selected.planned_qty : 0;
                   
                   const varianceCostPerKg = costPerKg - plannedCostPerKg;
@@ -1424,16 +1417,11 @@ export default function ProductionOrdersPage() {
                   return (
                     <>
                       {/* Cost Summary Cards */}
-                      <div className="grid grid-cols-5 gap-3">
+                      <div className="grid grid-cols-4 gap-3">
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-slate-500 mb-1">Raw Material</div>
                           <div className="text-xl font-bold text-slate-800">${rawMaterialCost.toFixed(2)}</div>
                           <div className="text-xs text-slate-400 mt-1">Issued ingredients</div>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                          <div className="text-xs font-medium text-blue-600 mb-1">Production Line</div>
-                          <div className="text-xl font-bold text-blue-700">${productionLineCost.toFixed(2)}</div>
-                          <div className="text-xs text-blue-600 mt-1">{lineRate}/tonne</div>
                         </div>
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
@@ -1559,17 +1547,6 @@ export default function ProductionOrdersPage() {
                             disabled
                           />
                           <div className="text-xs text-slate-500 mt-1">Sum of {detailMaterials.filter(m => m.issued).length} issued ingredients</div>
-                        </div>
-                        <div>
-                          <label className={labelCls}>Production Line Cost (Auto-calculated)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={productionLineCost}
-                            className={`${inputCls} bg-slate-100 cursor-not-allowed`}
-                            disabled
-                          />
-                          <div className="text-xs text-slate-500 mt-1">{output.actual_qty} kg × ${lineRate}/tonne</div>
                         </div>
                       </div>
                     </>
