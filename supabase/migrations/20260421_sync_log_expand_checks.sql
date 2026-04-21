@@ -40,7 +40,29 @@ BEGIN
   END IF;
 END $$;
 
--- Recreate with expanded, forward-compatible lists
+-- Diagnostic: surface whatever event_type / status values already exist so we
+-- know what legacy data was in the table before expanding the CHECKs.
+DO $$
+DECLARE
+  r record;
+BEGIN
+  RAISE NOTICE 'Existing distinct sync_log.event_type values:';
+  FOR r IN SELECT DISTINCT event_type FROM public.sync_log ORDER BY 1 LOOP
+    RAISE NOTICE '  - %', r.event_type;
+  END LOOP;
+  RAISE NOTICE 'Existing distinct sync_log.status values:';
+  FOR r IN SELECT DISTINCT status FROM public.sync_log ORDER BY 1 LOOP
+    RAISE NOTICE '  - %', r.status;
+  END LOOP;
+END $$;
+
+-- Recreate with expanded, forward-compatible lists.
+-- NOT VALID => constraint enforces on INSERT/UPDATE from now on, but Postgres
+-- skips the one-time full-table scan. Any legacy rows whose event_type is not
+-- in the list below are grandfathered and remain in the table untouched.
+-- To strictly enforce later, clean legacy rows and run:
+--   ALTER TABLE public.sync_log VALIDATE CONSTRAINT sync_log_event_type_check;
+--   ALTER TABLE public.sync_log VALIDATE CONSTRAINT sync_log_status_check;
 ALTER TABLE public.sync_log
   ADD CONSTRAINT sync_log_event_type_check
   CHECK (event_type IN (
@@ -59,7 +81,7 @@ ALTER TABLE public.sync_log
     'reconciliation_variance_approved',
     'rm_cost_updated',
     'reconciliation_completed'
-  ));
+  )) NOT VALID;
 
 ALTER TABLE public.sync_log
   ADD CONSTRAINT sync_log_status_check
@@ -69,7 +91,7 @@ ALTER TABLE public.sync_log
     'success',
     'failed',
     'retry'
-  ));
+  )) NOT VALID;
 
 COMMENT ON CONSTRAINT sync_log_event_type_check ON public.sync_log
   IS 'Expanded 2026-04-21: added material_variance_alert, macropack_manufactured, reconciliation_variance_approved, rm_cost_updated, reconciliation_completed.';
