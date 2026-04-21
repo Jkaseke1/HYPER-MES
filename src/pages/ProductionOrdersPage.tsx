@@ -182,7 +182,20 @@ export default function ProductionOrdersPage() {
     if (!sel) return;
     
     setSelectedFormulation(sel);
-    
+
+    // Auto-set unit size from unit_size_variants or formulation name
+    const variants = sel.unit_size_variants;
+    let inferredSize: string | null = null;
+    if (variants && variants.length > 0) {
+      const parsed = parseInt(variants[0].size);
+      if (!isNaN(parsed)) inferredSize = String(parsed);
+    }
+    if (!inferredSize) {
+      const m = sel.name.match(/(\d+)\s*kg/i);
+      if (m) inferredSize = m[1];
+    }
+    if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
+
     // Check if BOM exists for this formulation
     const { data: bomData, error: bomError } = await supabase
       .from('formulation_ingredients')
