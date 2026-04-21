@@ -2,8 +2,8 @@
 // Reads from goods_received_notes + grn_items by reference_id from sync_log
 // Posts to Sage Pastel as supplier invoice/stock receipt
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { supabase } = require('./lib/supabase');
+const sageClient = require('./lib/sageClient');
 
 async function handleGoodsReceiptConfirmed(syncLogEntry) {
   try {

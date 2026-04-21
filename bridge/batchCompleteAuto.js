@@ -2,8 +2,8 @@
 // Reads from production_orders + production_outputs by reference_id from sync_log
 // Posts to Sage Pastel as finished goods receipt/inventory addition
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { supabase } = require('./lib/supabase');
+const sageClient = require('./lib/sageClient');
 
 async function handleBatchCompleted(syncLogEntry) {
   try {

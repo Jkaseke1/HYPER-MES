@@ -2,8 +2,8 @@
 // Reads from production_order_materials by reference_id from sync_log
 // Posts to Sage Pastel as material consumption/cost of goods sold
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { supabase } = require('./lib/supabase');
+const sageClient = require('./lib/sageClient');
 
 async function handleGoodsIssued(syncLogEntry) {
   try {

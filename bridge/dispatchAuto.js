@@ -2,8 +2,8 @@
 // Reads from dispatch_orders + dispatch_items by reference_id from sync_log
 // Posts to Sage Pastel as customer invoice/delivery note
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { supabase } = require('./lib/supabase');
+const sageClient = require('./lib/sageClient');
 
 async function handleDispatchDelivered(syncLogEntry) {
   try {

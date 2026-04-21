@@ -1,7 +1,7 @@
 // bridgeWorker.js - Main bridge worker that polls sync_log and processes events
 // Coordinates all auto event handlers and runs continuously
 
-const { supabase } = require('../lib/supabase');
+const { supabase } = require('./lib/supabase');
 const { 
   processPendingGoodsReceiptEvents 
 } = require('./goodsReceiptAuto');
