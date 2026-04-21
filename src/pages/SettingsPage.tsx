@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import type { Branch, Warehouse, Machine, Supplier } from '../types/database';
+import type { Branch, Warehouse, Machine, Supplier, Formulation } from '../types/database';
 
 type Tab = 'branches' | 'warehouses' | 'machines' | 'suppliers' | 'cost_rates' | 'profile';
 const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
@@ -35,7 +35,9 @@ export default function SettingsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
-  const [labourRates, setLabourRates] = useState<Record<string, number>>({}); // machine_id -> rate
+  const [labourRates, setLabourRates] = useState<Record<string, number>>({}); // formulation_id -> rate per tonne
+  const [formulations, setFormulations] = useState<Formulation[]>([]);
+  const [rateSearch, setRateSearch] = useState<string>('');
   const [overheadPctInput, setOverheadPctInput] = useState<string>('5');
   const [rateSaving, setRateSaving] = useState(false);
   const [rateSavedAt, setRateSavedAt] = useState<number | null>(null);
@@ -57,15 +59,15 @@ export default function SettingsPage() {
       const { data } = await supabase.from('suppliers').select('*').order('name');
       setSuppliers(data || []);
     } else if (t === 'cost_rates') {
-      const [machinesRes, ratesRes, settingsRes] = await Promise.all([
-        supabase.from('machines').select('*').order('name'),
-        supabase.from('labour_rates').select('machine_id, rate_per_hour_usd, effective_date').order('effective_date', { ascending: false }),
+      const [formulationsRes, ratesRes, settingsRes] = await Promise.all([
+        supabase.from('formulations').select('id, name, code, sage_code, category, status').eq('status', 'active').order('sage_code'),
+        supabase.from('labour_rates').select('formulation_id, rate_per_tonne_usd, effective_date').order('effective_date', { ascending: false }),
         supabase.from('cost_settings').select('value').eq('key', 'overhead_rate_percent').maybeSingle(),
       ]);
-      setMachines(machinesRes.data || []);
+      setFormulations((formulationsRes.data as Formulation[]) || []);
       const latest: Record<string, number> = {};
       (ratesRes.data || []).forEach((r: any) => {
-        if (latest[r.machine_id] === undefined) latest[r.machine_id] = Number(r.rate_per_hour_usd);
+        if (latest[r.formulation_id] === undefined) latest[r.formulation_id] = Number(r.rate_per_tonne_usd);
       });
       setLabourRates(latest);
       setOverheadPctInput(String(settingsRes.data?.value ?? 5));
@@ -125,14 +127,16 @@ export default function SettingsPage() {
     setRateSaving(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      // Upsert a new labour_rate row per machine with today's effective_date
-      const rows = Object.entries(labourRates).map(([machine_id, rate]) => ({
-        machine_id,
-        rate_per_hour_usd: rate,
-        effective_date: today,
-      }));
+      // Upsert a new labour_rate row per formulation with today's effective_date
+      const rows = Object.entries(labourRates)
+        .filter(([, rate]) => !isNaN(rate) && rate >= 0)
+        .map(([formulation_id, rate]) => ({
+          formulation_id,
+          rate_per_tonne_usd: rate,
+          effective_date: today,
+        }));
       if (rows.length > 0) {
-        await supabase.from('labour_rates').upsert(rows, { onConflict: 'machine_id,effective_date' });
+        await supabase.from('labour_rates').upsert(rows, { onConflict: 'formulation_id,effective_date' });
       }
       const pct = Number(overheadPctInput);
       if (!isNaN(pct)) {
@@ -259,39 +263,51 @@ export default function SettingsPage() {
             </div>
 
             <div className="border-t border-slate-200 pt-6">
-              <h3 className="text-base font-semibold text-slate-800 mb-1">Labour Rate per Production Line</h3>
-              <p className="text-xs text-slate-500 mb-3">Hourly rate used to auto-calculate labour cost: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">labour_force × actual_hours × rate</code>. Saving adds a new effective-dated row.</p>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-base font-semibold text-slate-800">Labour Rate per Formulation</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input value={rateSearch} onChange={e => setRateSearch(e.target.value)} placeholder="Search code or name..." className={`${inputCls} pl-8 w-64 !py-1.5 text-xs`} />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">Per-tonne rate used to auto-calculate labour cost: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">labour_cost = (actual_qty / 1000) × rate</code>. Saving adds a new effective-dated row per formulation.</p>
+              <div className="border border-slate-200 rounded-lg overflow-hidden max-h-[480px] overflow-y-auto">
                 <table className="w-full">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 sticky top-0">
                     <tr>
-                      <th className={thCls}>Code</th>
-                      <th className={thCls}>Production Line</th>
-                      <th className={thCls}>Rate (USD/hour)</th>
+                      <th className={thCls}>Sage Code</th>
+                      <th className={thCls}>Formulation</th>
+                      <th className={thCls}>Category</th>
+                      <th className={thCls}>Rate (USD/tonne)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {machines.length === 0 ? (
-                      <tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-slate-400">No machines configured. Add one in the Machines tab.</td></tr>
-                    ) : machines.map(m => (
-                      <tr key={m.id}>
-                        <td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{m.code}</span></td>
-                        <td className={`${tdCls} font-medium`}>{m.name}</td>
-                        <td className={tdCls}>
-                          <div className="flex items-center gap-2 max-w-[180px]">
-                            <span className="text-slate-500 text-sm">$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={labourRates[m.id] ?? 2.5}
-                              onChange={e => setLabourRates(prev => ({ ...prev, [m.id]: Number(e.target.value) }))}
-                              className={inputCls}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {formulations.length === 0 ? (
+                      <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-400">No active formulations found.</td></tr>
+                    ) : formulations
+                      .filter(f => !rateSearch || (f.sage_code || '').toLowerCase().includes(rateSearch.toLowerCase()) || f.name.toLowerCase().includes(rateSearch.toLowerCase()))
+                      .map(fm => (
+                        <tr key={fm.id}>
+                          <td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{fm.sage_code || '—'}</span></td>
+                          <td className={`${tdCls} font-medium`}>{fm.name}</td>
+                          <td className={tdCls}><span className="text-xs text-slate-500">{fm.category || '—'}</span></td>
+                          <td className={tdCls}>
+                            <div className="flex items-center gap-2 max-w-[180px]">
+                              <span className="text-slate-500 text-sm">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={labourRates[fm.id] ?? ''}
+                                placeholder="5.00"
+                                onChange={e => setLabourRates(prev => ({ ...prev, [fm.id]: Number(e.target.value) }))}
+                                className={inputCls}
+                              />
+                              <span className="text-xs text-slate-500">/t</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>

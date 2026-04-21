@@ -99,7 +99,7 @@ export default function ProductionOrdersPage() {
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs'>('materials');
   const [downtimeEntries, setDowntimeEntries] = useState<any[]>([]);
   const [downtimeForm, setDowntimeForm] = useState({ downtime_hours: '', category: 'Mechanical', reason: '' });
-  const [labourHourlyRate, setLabourHourlyRate] = useState<number>(2.50);
+  const [labourRatePerTonne, setLabourRatePerTonne] = useState<number>(5.00);
   const [overheadPct, setOverheadPct] = useState<number>(5);
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
@@ -348,18 +348,18 @@ export default function ProductionOrdersPage() {
     setDowntimeEntries(downtimeData || []);
     setDowntimeForm({ downtime_hours: '', category: 'Mechanical', reason: '' });
 
-    // Resolve labour hourly rate for this machine (latest effective_date) + overhead %
-    let hourly = 2.50;
-    if (order.machine_id) {
+    // Resolve labour rate per tonne for this formulation (latest effective_date) + overhead %
+    let ratePerTonne = 5.00;
+    if (order.formulation_id) {
       const { data: rateRows } = await supabase
         .from('labour_rates')
-        .select('rate_per_hour_usd')
-        .eq('machine_id', order.machine_id)
+        .select('rate_per_tonne_usd')
+        .eq('formulation_id', order.formulation_id)
         .order('effective_date', { ascending: false })
         .limit(1);
-      if (rateRows && rateRows.length > 0) hourly = Number(rateRows[0].rate_per_hour_usd) || 2.50;
+      if (rateRows && rateRows.length > 0) ratePerTonne = Number(rateRows[0].rate_per_tonne_usd) || 5.00;
     }
-    setLabourHourlyRate(hourly);
+    setLabourRatePerTonne(ratePerTonne);
 
     const { data: ohRow } = await supabase
       .from('cost_settings')
@@ -370,9 +370,8 @@ export default function ProductionOrdersPage() {
     setOverheadPct(ohPct);
 
     // Auto-seed Labour/Overhead if the order hasn't stored values yet (treat 0/null as unset)
-    const lf = Number((order as any).labour_force || 0);
-    const hrs = Number((order as any).actual_hours || 0);
-    const autoLabour = lf > 0 && hrs > 0 ? Math.round(lf * hrs * hourly * 100) / 100 : 0;
+    const actualTonnes = (order.actual_qty || 0) / 1000;
+    const autoLabour = actualTonnes > 0 ? Math.round(actualTonnes * ratePerTonne * 100) / 100 : 0;
     const rmCost = calculateIssuedMaterialCost(mats);
     const autoOverhead = rmCost > 0 ? Math.round(rmCost * (ohPct / 100) * 100) / 100 : 0;
     setCosting((prev) => ({
@@ -1429,7 +1428,7 @@ export default function ProductionOrdersPage() {
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
                           <div className="text-xl font-bold text-purple-700">${costing.labour_cost.toFixed(2)}</div>
-                          <div className="text-xs text-purple-600 mt-1">{((selected as any).labour_force || 0)} × {((selected as any).actual_hours || 0)}hr × ${labourHourlyRate.toFixed(2)}</div>
+                          <div className="text-xs text-purple-600 mt-1">{actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t</div>
                         </div>
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-orange-600 mb-1">Overhead</div>
@@ -1470,9 +1469,7 @@ export default function ProductionOrdersPage() {
 
                       {/* Editable Fields with auto-calc */}
                       {(() => {
-                        const lf = Number((selected as any).labour_force || 0);
-                        const hrs = Number((selected as any).actual_hours || 0);
-                        const autoLabour = lf > 0 && hrs > 0 ? Math.round(lf * hrs * labourHourlyRate * 100) / 100 : 0;
+                        const autoLabour = actualTonnes > 0 ? Math.round(actualTonnes * labourRatePerTonne * 100) / 100 : 0;
                         const autoOverhead = rawMaterialCost > 0 ? Math.round(rawMaterialCost * (overheadPct / 100) * 100) / 100 : 0;
                         const labourOverridden = Math.abs(costing.labour_cost - autoLabour) > 0.01 && costing.labour_cost > 0;
                         const overheadOverridden = Math.abs(costing.overhead_cost - autoOverhead) > 0.01 && costing.overhead_cost > 0;
@@ -1500,9 +1497,9 @@ export default function ProductionOrdersPage() {
                               />
                               <div className="text-xs text-slate-500 mt-1">
                                 {autoLabour > 0 ? (
-                                  <>Auto-calculated: {lf} × {hrs}hr × ${labourHourlyRate.toFixed(2)}/hr = <strong>${autoLabour.toFixed(2)}</strong>{labourOverridden && ' (overridden)'}</>
+                                  <>Auto-calculated: {actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t = <strong>${autoLabour.toFixed(2)}</strong>{labourOverridden && ' (overridden)'}</>
                                 ) : (
-                                  <>Enter <em>labour_force</em> and <em>actual_hours</em> on the order to auto-calculate. Rate: ${labourHourlyRate.toFixed(2)}/hr</>
+                                  <>Record <em>actual output quantity</em> to auto-calculate. Rate: ${labourRatePerTonne.toFixed(2)}/tonne</>
                                 )}
                               </div>
                             </div>

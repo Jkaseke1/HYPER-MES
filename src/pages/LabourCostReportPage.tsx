@@ -95,27 +95,44 @@ export default function LabourCostReportPage() {
     try {
       const startDate = new Date(selectedYear, selectedMonth - 1, 1);
       const endDate = new Date(selectedYear, selectedMonth, 0);
-      
-      // Fetch completed production orders for the selected month
-      const { data: orders, error: ordersError } = await supabase
-        .from('production_orders')
-        .select(`
-          id,
-          actual_qty,
-          status,
-          created_at,
-          formulations!inner(
-            id,
-            name,
-            sage_code
-          )
-        `)
-        .eq('status', 'completed')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .order('created_at');
 
+      // Fetch completed production orders + current labour rates from DB
+      const [ordersRes, ratesRes] = await Promise.all([
+        supabase
+          .from('production_orders')
+          .select(`
+            id,
+            actual_qty,
+            status,
+            created_at,
+            formulation_id,
+            formulations!inner(
+              id,
+              name,
+              sage_code
+            )
+          `)
+          .eq('status', 'completed')
+          .gte('created_at', startDate.toISOString())
+          .lte('created_at', endDate.toISOString())
+          .order('created_at'),
+        supabase
+          .from('labour_rates')
+          .select('formulation_id, rate_per_tonne_usd, effective_date')
+          .order('effective_date', { ascending: false }),
+      ]);
+
+      const orders = ordersRes.data;
+      const ordersError = ordersRes.error;
       if (ordersError) throw ordersError;
+
+      // Build latest-effective rate map keyed by formulation_id
+      const dbRatesByFormulation: Record<string, number> = {};
+      (ratesRes.data || []).forEach((r: any) => {
+        if (dbRatesByFormulation[r.formulation_id] === undefined) {
+          dbRatesByFormulation[r.formulation_id] = Number(r.rate_per_tonne_usd);
+        }
+      });
 
       // Process data for labour cost calculation
       const formulationMap = new Map<string, {
@@ -152,10 +169,13 @@ export default function LabourCostReportPage() {
           }
         }
         
-        // Determine labour rate
+        // Determine labour rate: DB (formulation_id) > hardcoded sage_code map > default
         if (!existing.labour_rate) {
-          if (isPigPellet(formulationName)) {
-            existing.labour_rate = LABOUR_RATES['MIS0001']; // Pig pellets rate
+          const fromDb = dbRatesByFormulation[(order as any).formulation_id];
+          if (typeof fromDb === 'number' && !isNaN(fromDb)) {
+            existing.labour_rate = fromDb;
+          } else if (isPigPellet(formulationName)) {
+            existing.labour_rate = LABOUR_RATES['MIS0001'];
           } else {
             existing.labour_rate = LABOUR_RATES[sageCode] || LABOUR_RATES['DEFAULT'];
           }
