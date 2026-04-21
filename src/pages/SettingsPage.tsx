@@ -39,6 +39,7 @@ export default function SettingsPage() {
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [rateSearch, setRateSearch] = useState<string>('');
   const [overheadPctInput, setOverheadPctInput] = useState<string>('5');
+  const [usdZigRate, setUsdZigRate] = useState<number | null>(null);
   const [rateSaving, setRateSaving] = useState(false);
   const [rateSavedAt, setRateSavedAt] = useState<number | null>(null);
   const [modal, setModal] = useState<{ type: 'add' | 'edit'; tab: Tab; data?: any } | null>(null);
@@ -59,10 +60,11 @@ export default function SettingsPage() {
       const { data } = await supabase.from('suppliers').select('*').order('name');
       setSuppliers(data || []);
     } else if (t === 'cost_rates') {
-      const [formulationsRes, ratesRes, settingsRes] = await Promise.all([
+      const [formulationsRes, ratesRes, settingsRes, fxRes] = await Promise.all([
         supabase.from('formulations').select('id, name, code, sage_code, category, status').eq('status', 'active').order('sage_code'),
         supabase.from('labour_rates').select('formulation_id, rate_per_tonne_usd, effective_date').order('effective_date', { ascending: false }),
         supabase.from('cost_settings').select('value').eq('key', 'overhead_rate_percent').maybeSingle(),
+        supabase.from('usd_zig_rate_history').select('rate').order('effective_date', { ascending: false }).limit(1).maybeSingle(),
       ]);
       setFormulations((formulationsRes.data as Formulation[]) || []);
       const latest: Record<string, number> = {};
@@ -71,6 +73,7 @@ export default function SettingsPage() {
       });
       setLabourRates(latest);
       setOverheadPctInput(String(settingsRes.data?.value ?? 5));
+      setUsdZigRate(fxRes.data?.rate ? Number(fxRes.data.rate) : null);
     } else if (t === 'profile' && authProfile) {
       setProfileForm({ full_name: authProfile.full_name || '', phone: authProfile.phone || '' });
     }
@@ -270,7 +273,12 @@ export default function SettingsPage() {
                   <input value={rateSearch} onChange={e => setRateSearch(e.target.value)} placeholder="Search code or name..." className={`${inputCls} pl-8 w-64 !py-1.5 text-xs`} />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mb-3">Per-tonne rate used to auto-calculate labour cost: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">labour_cost = (actual_qty / 1000) × rate</code>. Saving adds a new effective-dated row per formulation.</p>
+              <p className="text-xs text-slate-500 mb-3">
+                Per-tonne rate used to auto-calculate labour cost: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">labour_cost = (actual_qty / 1000) × rate</code>. Saving adds a new effective-dated row per formulation.
+                {usdZigRate !== null && (
+                  <span className="ml-2 text-slate-600">ZIG equivalent shown using latest FX rate <strong>1 USD = {usdZigRate.toFixed(2)} ZiG</strong> from RM Cost Register.</span>
+                )}
+              </p>
               <div className="border border-slate-200 rounded-lg overflow-hidden max-h-[480px] overflow-y-auto">
                 <table className="w-full">
                   <thead className="bg-slate-50 sticky top-0">
@@ -279,11 +287,12 @@ export default function SettingsPage() {
                       <th className={thCls}>Formulation</th>
                       <th className={thCls}>Category</th>
                       <th className={thCls}>Rate (USD/tonne)</th>
+                      <th className={thCls}>Equivalent (ZiG/tonne)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {formulations.length === 0 ? (
-                      <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-400">No active formulations found.</td></tr>
+                      <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">No active formulations found.</td></tr>
                     ) : formulations
                       .filter(f => !rateSearch || (f.sage_code || '').toLowerCase().includes(rateSearch.toLowerCase()) || f.name.toLowerCase().includes(rateSearch.toLowerCase()))
                       .map(fm => (
@@ -305,6 +314,13 @@ export default function SettingsPage() {
                               />
                               <span className="text-xs text-slate-500">/t</span>
                             </div>
+                          </td>
+                          <td className={tdCls}>
+                            {usdZigRate !== null && labourRates[fm.id] != null && !isNaN(labourRates[fm.id]) ? (
+                              <span className="text-sm text-slate-600">ZiG {(labourRates[fm.id] * usdZigRate).toFixed(2)}/t</span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

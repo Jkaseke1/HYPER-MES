@@ -89,6 +89,7 @@ export default function LabourCostReportPage() {
   const [labourData, setLabourData] = useState<LabourCostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [usdZigRate, setUsdZigRate] = useState<number | null>(null);
 
   async function fetchLabourData() {
     setLoading(true);
@@ -96,8 +97,8 @@ export default function LabourCostReportPage() {
       const startDate = new Date(selectedYear, selectedMonth - 1, 1);
       const endDate = new Date(selectedYear, selectedMonth, 0);
 
-      // Fetch completed production orders + current labour rates from DB
-      const [ordersRes, ratesRes] = await Promise.all([
+      // Fetch completed production orders + current labour rates + latest FX rate
+      const [ordersRes, ratesRes, fxRes] = await Promise.all([
         supabase
           .from('production_orders')
           .select(`
@@ -120,7 +121,14 @@ export default function LabourCostReportPage() {
           .from('labour_rates')
           .select('formulation_id, rate_per_tonne_usd, effective_date')
           .order('effective_date', { ascending: false }),
+        supabase
+          .from('usd_zig_rate_history')
+          .select('rate')
+          .order('effective_date', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
+      setUsdZigRate(fxRes.data?.rate ? Number(fxRes.data.rate) : null);
 
       const orders = ordersRes.data;
       const ordersError = ordersRes.error;
@@ -239,8 +247,8 @@ export default function LabourCostReportPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Production Line', 'Formulation', 'Tonnes Produced', 
-      'Labour Rate ($/tonne)', 'Total Labour Cost ($)', '% of Total'
+      'Production Line', 'Formulation', 'Tonnes Produced',
+      'Labour Rate (USD/tonne)', 'Total Labour Cost (USD)', 'Total Labour Cost (ZiG)', '% of Total'
     ];
     const rows = labourData.map(item => [
       item.production_line,
@@ -248,6 +256,7 @@ export default function LabourCostReportPage() {
       item.tonnes_produced.toFixed(2),
       item.labour_rate.toFixed(2),
       item.total_labour_cost.toFixed(2),
+      usdZigRate !== null ? (item.total_labour_cost * usdZigRate).toFixed(2) : '',
       `${item.percentage_of_total.toFixed(2)}%`
     ]);
 
@@ -311,11 +320,12 @@ export default function LabourCostReportPage() {
           icon={BarChart3} 
           color="teal" 
         />
-        <StatCard 
-          title="Total Labour Cost" 
-          value={`$${totalLabourCost.toLocaleString()}`} 
-          icon={DollarSign} 
-          color="emerald" 
+        <StatCard
+          title="Total Labour Cost"
+          value={`$${totalLabourCost.toLocaleString()}`}
+          icon={DollarSign}
+          color="emerald"
+          subtitle={usdZigRate !== null ? `≈ ZiG ${(totalLabourCost * usdZigRate).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : undefined}
         />
         <StatCard 
           title="Avg Labour Cost per Tonne" 
@@ -339,14 +349,15 @@ export default function LabourCostReportPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Formulation</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Tonnes Produced</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Labour Rate ($/tonne)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Total Labour Cost ($)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Total Labour Cost (USD)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Total Labour Cost (ZiG)</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">% of Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-20 text-center">
+                  <td colSpan={7} className="px-4 py-20 text-center">
                     <div className="flex items-center justify-center">
                       <RefreshCw className="w-6 h-6 animate-spin text-teal-600" />
                     </div>
@@ -354,7 +365,7 @@ export default function LabourCostReportPage() {
                 </tr>
               ) : labourData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-20 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-20 text-center text-slate-500">
                     <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p className="text-sm font-medium">No labour cost data found</p>
                   </td>
@@ -372,6 +383,9 @@ export default function LabourCostReportPage() {
                     <td className="px-4 py-3 text-right">${item.labour_rate.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-emerald-600">
                       ${item.total_labour_cost.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-600">
+                      {usdZigRate !== null ? `ZiG ${(item.total_labour_cost * usdZigRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-medium text-slate-700">

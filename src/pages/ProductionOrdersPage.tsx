@@ -101,6 +101,7 @@ export default function ProductionOrdersPage() {
   const [downtimeForm, setDowntimeForm] = useState({ downtime_hours: '', category: 'Mechanical', reason: '' });
   const [labourRatePerTonne, setLabourRatePerTonne] = useState<number>(5.00);
   const [overheadPct, setOverheadPct] = useState<number>(5);
+  const [usdZigRate, setUsdZigRate] = useState<number | null>(null);
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
   const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
@@ -368,6 +369,15 @@ export default function ProductionOrdersPage() {
       .maybeSingle();
     const ohPct = ohRow?.value != null ? Number(ohRow.value) : 5;
     setOverheadPct(ohPct);
+
+    // Latest USD:ZiG FX rate for dual-currency display
+    const { data: fxRow } = await supabase
+      .from('usd_zig_rate_history')
+      .select('rate')
+      .order('effective_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setUsdZigRate(fxRow?.rate ? Number(fxRow.rate) : null);
 
     // Auto-seed Labour/Overhead if the order hasn't stored values yet (treat 0/null as unset)
     const actualTonnes = (order.actual_qty || 0) / 1000;
@@ -1428,7 +1438,10 @@ export default function ProductionOrdersPage() {
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
                           <div className="text-xl font-bold text-purple-700">${costing.labour_cost.toFixed(2)}</div>
-                          <div className="text-xs text-purple-600 mt-1">{actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t</div>
+                          <div className="text-xs text-purple-600 mt-1">
+                            {actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t
+                            {usdZigRate !== null && <span className="block text-purple-500">≈ ZiG {(costing.labour_cost * usdZigRate).toFixed(2)}</span>}
+                          </div>
                         </div>
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-orange-600 mb-1">Overhead</div>
@@ -1438,7 +1451,10 @@ export default function ProductionOrdersPage() {
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-emerald-600 mb-1">Total Cost</div>
                           <div className="text-xl font-bold text-emerald-700">${totalCost.toFixed(2)}</div>
-                          <div className="text-xs text-emerald-600 mt-1">All costs</div>
+                          <div className="text-xs text-emerald-600 mt-1">
+                            All costs
+                            {usdZigRate !== null && <span className="block text-emerald-500">≈ ZiG {(totalCost * usdZigRate).toFixed(2)}</span>}
+                          </div>
                         </div>
                       </div>
 
@@ -1497,9 +1513,9 @@ export default function ProductionOrdersPage() {
                               />
                               <div className="text-xs text-slate-500 mt-1">
                                 {autoLabour > 0 ? (
-                                  <>Auto-calculated: {actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t = <strong>${autoLabour.toFixed(2)}</strong>{labourOverridden && ' (overridden)'}</>
+                                  <>Auto-calculated: {actualTonnes.toFixed(2)}t × ${labourRatePerTonne.toFixed(2)}/t = <strong>${autoLabour.toFixed(2)}</strong>{usdZigRate !== null && <> (≈ ZiG {(autoLabour * usdZigRate).toFixed(2)})</>}{labourOverridden && ' — overridden'}</>
                                 ) : (
-                                  <>Record <em>actual output quantity</em> to auto-calculate. Rate: ${labourRatePerTonne.toFixed(2)}/tonne</>
+                                  <>Record <em>actual output quantity</em> to auto-calculate. Rate: ${labourRatePerTonne.toFixed(2)}/tonne{usdZigRate !== null && <> (≈ ZiG {(labourRatePerTonne * usdZigRate).toFixed(2)}/t)</>}</>
                                 )}
                               </div>
                             </div>
