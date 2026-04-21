@@ -75,8 +75,6 @@ const emptyForm = {
   shift: 'Day Shift',
   operators: '',
   labour_force: '',
-  actual_hours: '',
-  average_throughput: '',
   week_number: '',
   notes: '',
 };
@@ -104,7 +102,7 @@ export default function ProductionOrdersPage() {
   const [usdZigRate, setUsdZigRate] = useState<number | null>(null);
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
-  const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
+  const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0, actual_hours: '' as string, average_throughput: '' as string });
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -288,8 +286,6 @@ export default function ProductionOrdersPage() {
         shift: form.shift,
         operators: form.operators || null,
         labour_force: form.labour_force === '' ? null : Number(form.labour_force),
-        actual_hours: form.actual_hours === '' ? null : Number(form.actual_hours),
-        average_throughput: form.average_throughput === '' ? null : Number(form.average_throughput),
         week_number: form.week_number === '' ? null : Number(form.week_number),
         notes: form.notes, 
         status: 'pending',
@@ -323,7 +319,13 @@ export default function ProductionOrdersPage() {
   const openDetail = async (order: ProductionOrder) => {
     setSelected(order);
     setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
-    setOutput({ actual_qty: order.actual_qty, rejected_qty: order.rejected_qty, wastage_qty: order.wastage_qty });
+    setOutput({
+      actual_qty: order.actual_qty,
+      rejected_qty: order.rejected_qty,
+      wastage_qty: order.wastage_qty,
+      actual_hours: order.actual_hours != null ? String(order.actual_hours) : '',
+      average_throughput: order.average_throughput != null ? String(order.average_throughput) : '',
+    });
     setDetailTab('materials');
     
     // Load materials with issuance status
@@ -400,12 +402,21 @@ export default function ProductionOrdersPage() {
     setSaving(true);
     try {
       // Update production order with output quantities
+      // Auto-derive average throughput (mt/hr) if hours provided but throughput left blank
+      const hoursNum = output.actual_hours === '' ? null : Number(output.actual_hours);
+      let throughputNum: number | null = output.average_throughput === '' ? null : Number(output.average_throughput);
+      if (throughputNum === null && hoursNum && hoursNum > 0 && output.actual_qty > 0) {
+        throughputNum = Math.round(((output.actual_qty / 1000) / hoursNum) * 1000) / 1000;
+      }
+
       const { error: orderError } = await supabase
         .from('production_orders')
         .update({
           actual_qty: output.actual_qty,
           rejected_qty: output.rejected_qty,
-          wastage_qty: output.wastage_qty
+          wastage_qty: output.wastage_qty,
+          actual_hours: hoursNum,
+          average_throughput: throughputNum,
         })
         .eq('id', selected.id);
 
@@ -1011,28 +1022,6 @@ export default function ProductionOrdersPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Actual Production Hours</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.actual_hours}
-                onChange={(e) => setForm({ ...form, actual_hours: e.target.value })}
-                className={inputCls}
-                placeholder="e.g. 4.5"
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Average Throughput (mt/hr)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={form.average_throughput}
-                onChange={(e) => setForm({ ...form, average_throughput: e.target.value })}
-                className={inputCls}
-                placeholder="e.g. 3.95"
-              />
-            </div>
-            <div>
               <label className={labelCls}>Week Number</label>
               <input
                 type="number"
@@ -1561,7 +1550,7 @@ export default function ProductionOrdersPage() {
                 <h3 className="text-lg font-semibold text-slate-800">Production Output</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className={labelCls}>Actual Quantity</label>
+                    <label className={labelCls}>Actual Quantity (kg)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -1572,7 +1561,7 @@ export default function ProductionOrdersPage() {
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>Rejected Quantity</label>
+                    <label className={labelCls}>Rejected Quantity (kg)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -1583,7 +1572,7 @@ export default function ProductionOrdersPage() {
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>Wastage Quantity</label>
+                    <label className={labelCls}>Wastage Quantity (kg)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -1592,6 +1581,31 @@ export default function ProductionOrdersPage() {
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Actual Production Hours</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={output.actual_hours}
+                      onChange={(e) => setOutput({ ...output, actual_hours: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 4.5"
+                      disabled={selected.status !== 'in_progress'}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Average Throughput (mt/hr)</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={output.average_throughput}
+                      onChange={(e) => setOutput({ ...output, average_throughput: e.target.value })}
+                      className={inputCls}
+                      placeholder={output.actual_hours && output.actual_qty > 0 ? `auto = ${((output.actual_qty/1000)/Number(output.actual_hours)).toFixed(3)}` : 'e.g. 3.95'}
+                      disabled={selected.status !== 'in_progress'}
+                    />
+                    <div className="text-xs text-slate-400 mt-1">Leave blank to auto-calc from Actual Qty ÷ Hours.</div>
                   </div>
                 </div>
 
