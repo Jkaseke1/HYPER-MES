@@ -5,12 +5,40 @@ import {
 } from 'recharts';
 import {
   Factory, ClipboardList, Package, FlaskConical, Truck, TrendingUp, AlertTriangle, Radio, RefreshCw,
+  type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
-import StatCard from '../components/ui/StatCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
+
+// Compact stat tile for the dashboard — denser than the shared StatCard
+function StatTile({ icon: Icon, label, value, subtitle, tone = 'teal' }: {
+  icon: LucideIcon; label: string; value: string | number; subtitle?: string;
+  tone?: 'teal' | 'amber' | 'blue' | 'emerald' | 'slate';
+}) {
+  const tones: Record<string, string> = {
+    teal: 'bg-teal-50 text-teal-600',
+    amber: 'bg-amber-50 text-amber-600',
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    slate: 'bg-slate-100 text-slate-600',
+  };
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 px-3.5 py-3 hover:shadow-sm transition-shadow">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide truncate">{label}</p>
+          <p className="text-xl font-bold text-slate-800 mt-0.5 leading-tight">{value}</p>
+          {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{subtitle}</p>}
+        </div>
+        <div className={`p-2 rounded-lg ${tones[tone]} shrink-0`}>
+          <Icon className="w-4 h-4" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface DashboardStats {
   totalProduction: number;
@@ -145,64 +173,62 @@ export default function DashboardPage() {
         <p className="text-sm text-slate-500 mt-1">Manufacturing overview and key metrics</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard title="Total Production" value={`${stats.totalProduction} t`} icon={Factory} color="teal" subtitle="Completed output" />
-        <StatCard title="Active Orders" value={stats.activeOrders} icon={ClipboardList} color="teal" subtitle="In pipeline" />
-        <StatCard title="Raw Materials" value={stats.rawMaterialCount} icon={Package} color="teal" subtitle="Registered items" />
-        <StatCard title="Formulations" value={stats.formulationCount} icon={FlaskConical} color="teal" subtitle="Active recipes" />
-        <StatCard title="Pending Dispatches" value={stats.pendingDispatches} icon={Truck} color="amber" subtitle="Awaiting shipment" />
-        <StatCard title="Efficiency" value={`${stats.efficiency}%`} icon={TrendingUp} color="teal" subtitle="Actual vs planned" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatTile icon={Factory} label="Total Production" value={`${stats.totalProduction} t`} subtitle="Completed output" tone="teal" />
+        <StatTile icon={ClipboardList} label="Active Orders" value={stats.activeOrders} subtitle="In pipeline" tone="blue" />
+        <StatTile icon={Package} label="Raw Materials" value={stats.rawMaterialCount} subtitle="Registered items" tone="slate" />
+        <StatTile icon={FlaskConical} label="Formulations" value={stats.formulationCount} subtitle="Active recipes" tone="emerald" />
+        <StatTile icon={Truck} label="Pending Dispatches" value={stats.pendingDispatches} subtitle="Awaiting shipment" tone="amber" />
+        <StatTile icon={TrendingUp} label="Efficiency" value={`${stats.efficiency}%`} subtitle="Actual vs planned" tone="teal" />
       </div>
 
-      {/* Live Production Floor */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-4">
+      {/* Live Production Floor — compact */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="relative flex items-center justify-center">
               <Radio className="w-4 h-4 text-teal-600" />
-              <span className="absolute w-2.5 h-2.5 bg-teal-500 rounded-full top-0 right-0 animate-ping opacity-75" />
+              <span className="absolute w-2 h-2 bg-teal-500 rounded-full top-0 right-0 animate-ping opacity-75" />
             </div>
-            <h2 className="text-base font-semibold text-slate-800">Live Production Floor</h2>
-            <span className="text-xs text-slate-400 ml-1">Real-time</span>
+            <h2 className="text-sm font-semibold text-slate-800">Live Production Floor</h2>
+            <span className="text-xs text-slate-400 ml-1">Real-time · {liveOrders.length}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">Updated {format(lastUpdated, 'HH:mm:ss')}</span>
-            <button onClick={fetchLiveOrders} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Refresh">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">{format(lastUpdated, 'HH:mm:ss')}</span>
+            <button onClick={fetchLiveOrders} className="p-1 hover:bg-slate-100 rounded transition-colors" title="Refresh">
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
             </button>
           </div>
         </div>
         {liveOrders.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center">No active production orders on the floor</p>
+          <p className="text-sm text-slate-400 py-5 text-center">No active production orders on the floor</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {liveOrders.map(order => {
               const yieldPct = order.planned_qty > 0 ? Math.min(100, Math.round(((order.actual_qty || 0) / order.planned_qty) * 100)) : 0;
               const statusColor = order.status === 'in_progress' ? 'bg-teal-500' : order.status === 'materials_issued' ? 'bg-amber-500' : 'bg-slate-400';
-              const statusBg = order.status === 'in_progress' ? 'border-teal-200 bg-teal-50/30' : order.status === 'materials_issued' ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200';
+              const statusBg = order.status === 'in_progress' ? 'border-teal-200 bg-teal-50/40' : order.status === 'materials_issued' ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white';
+              const label = order.status === 'in_progress' ? 'Running' : order.status === 'materials_issued' ? 'Issued' : 'Pending';
               return (
-                <div key={order.id} className={`rounded-xl border p-4 space-y-3 ${statusBg}`}>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-mono text-slate-500">{order.batch_number}</p>
-                      <p className="text-sm font-semibold text-slate-800 mt-0.5 leading-tight">{order.formulations?.name || '—'}</p>
+                <div key={order.id} className={`rounded-lg border p-2.5 ${statusBg}`}>
+                  <div className="flex items-start justify-between gap-1 mb-1.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-mono text-slate-500 truncate">{order.batch_number}</p>
+                      <p className="text-xs font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-1">{order.formulations?.name || '—'}</p>
                     </div>
-                    <span className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full text-white ${statusColor}`}>
-                      {order.status === 'in_progress' ? 'Running' : order.status === 'materials_issued' ? 'Issued' : 'Pending'}
+                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded text-white ${statusColor} shrink-0`}>
+                      {label}
                     </span>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-slate-500 mb-1">
-                      <span>Progress</span>
-                      <span className="font-medium text-slate-700">{order.actual_qty || 0} / {order.planned_qty} {order.unit}</span>
-                    </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${order.status === 'in_progress' ? 'bg-teal-500' : 'bg-amber-400'}`}
-                        style={{ width: `${yieldPct}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 text-right">{yieldPct}% complete</p>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                    <span className="font-medium text-slate-600">{(order.actual_qty || 0).toLocaleString()} / {order.planned_qty.toLocaleString()} {order.unit}</span>
+                    <span className="font-semibold text-slate-700">{yieldPct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${order.status === 'in_progress' ? 'bg-teal-500' : 'bg-amber-400'}`}
+                      style={{ width: `${yieldPct}%` }}
+                    />
                   </div>
                 </div>
               );
@@ -211,7 +237,42 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <PendingApprovalsWidget />
+      {/* Approvals + Stock Alerts side-by-side for better use of width */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        <div className="xl:col-span-3">
+          <PendingApprovalsWidget limit={5} compact />
+        </div>
+        <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <h2 className="text-sm font-semibold text-slate-800">Stock Alerts</h2>
+            </div>
+            <span className="text-xs text-slate-400">{filteredLowStock.length} items</span>
+          </div>
+          {filteredLowStock.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">All stock levels are healthy</p>
+          ) : (
+            <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
+              {filteredLowStock.map(({ item, severity }) => (
+                <div key={item.id} className={`flex items-center justify-between px-4 py-2.5 ${severity === 'critical' ? 'bg-red-50/40' : 'bg-amber-50/30'}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">{item.name}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">{item.code}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className={`text-sm font-bold ${severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}>{item.current_stock.toLocaleString()} {item.unit}</p>
+                    <p className="text-[11px] text-slate-400">Min: {item.reorder_level} {item.unit}</p>
+                    {typeof forecastMap[item.id]?.days_to_depletion === 'number' && (
+                      <p className="text-[11px] text-slate-500">~{Math.round(forecastMap[item.id]!.days_to_depletion!)}d cover</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
@@ -276,10 +337,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="text-base font-semibold text-slate-800">Inventory Depletion Forecast</h2>
           <span className="text-xs text-slate-400">Avg daily usage (30d)</span>
         </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Computed from <span className="font-mono text-slate-500">stock_movements</span> (production_input/issue) over the last 30 days · Days to depletion = current stock ÷ avg daily usage. &ldquo;Stable&rdquo; means no consumption recorded in the window.
+        </p>
         {inventoryForecasts.length === 0 ? (
           <p className="text-sm text-slate-400">No usage history yet.</p>
         ) : (

@@ -17,8 +17,11 @@ interface PendingApproval {
   branch_id?: string;
 }
 
-export default function PendingApprovalsWidget() {
+interface WidgetProps { limit?: number; compact?: boolean; }
+
+export default function PendingApprovalsWidget({ limit = 10, compact = false }: WidgetProps) {
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [creatorNames, setCreatorNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
@@ -26,7 +29,7 @@ export default function PendingApprovalsWidget() {
 
   useEffect(() => {
     fetchPendingApprovals();
-  }, []);
+  }, [limit]);
 
   async function fetchPendingApprovals() {
     setLoading(true);
@@ -34,7 +37,14 @@ export default function PendingApprovalsWidget() {
       .from('pending_approvals')
       .select('*')
       .order('created_at', { ascending: true })
-      .limit(10);
+      .limit(limit);
+
+    // Get total count (filtered by role on client side)
+    const { data: allData } = await supabase.from('pending_approvals').select('entity_type');
+    if (allData && profile?.role) {
+      const total = allData.filter((i: any) => canApprove(i.entity_type, profile.role)).length;
+      setTotalCount(total);
+    }
 
     if (data && profile?.role) {
       const filtered = data.filter((item: PendingApproval) =>
@@ -79,31 +89,34 @@ export default function PendingApprovalsWidget() {
     );
   }
 
+  const pad = compact ? 'px-4 py-2.5' : 'px-6 py-4';
+  const headerPad = compact ? 'px-4 py-3' : 'px-6 py-4';
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-      <div className="px-6 py-4 border-b border-slate-200">
+      <div className={`${headerPad} border-b border-slate-200`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 rounded-lg">
-              <Clock className="w-5 h-5 text-amber-600" />
+          <div className="flex items-center gap-2.5">
+            <div className={`${compact ? 'p-1.5' : 'p-2'} bg-amber-100 rounded-lg`}>
+              <Clock className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} text-amber-600`} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Pending Approvals</h3>
+              <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-bold text-slate-800`}>Pending Approvals</h3>
               <p className="text-xs text-slate-500">Items requiring your approval</p>
             </div>
           </div>
-          {approvals.length > 0 && (
+          {totalCount > 0 && (
             <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
-              {approvals.length}
+              {totalCount}
             </span>
           )}
         </div>
       </div>
 
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
         {approvals.length === 0 ? (
-          <div className="px-6 py-8 text-center">
-            <AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <div className={`${compact ? 'px-4 py-5' : 'px-6 py-8'} text-center`}>
+            <AlertCircle className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} text-slate-300 mx-auto mb-2`} />
             <p className="text-sm text-slate-500">No pending approvals</p>
             <p className="text-xs text-slate-400 mt-1">All caught up!</p>
           </div>
@@ -112,11 +125,11 @@ export default function PendingApprovalsWidget() {
             <button
               key={`${approval.entity_type}-${approval.entity_id}`}
               onClick={() => navigateToEntity(approval)}
-              className="w-full px-6 py-4 hover:bg-slate-50 transition-colors text-left group"
+              className={`w-full ${pad} hover:bg-slate-50 transition-colors text-left group`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-sm font-semibold text-slate-800 truncate">
                       {approval.entity_name}
                     </span>
@@ -127,8 +140,8 @@ export default function PendingApprovalsWidget() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <StatusBadge status={approval.status} />
                     {approval.created_by && creatorNames.get(approval.created_by) && (
-                      <span className="text-xs text-slate-500">
-                        Created by <span className="font-medium text-slate-700">{creatorNames.get(approval.created_by)}</span>
+                      <span className="text-xs text-slate-500 truncate">
+                        By <span className="font-medium text-slate-700">{creatorNames.get(approval.created_by)}</span>
                       </span>
                     )}
                     <span className="text-xs text-slate-400">
@@ -136,7 +149,7 @@ export default function PendingApprovalsWidget() {
                     </span>
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-teal-500 transition-colors flex-shrink-0 ml-2" />
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 transition-colors flex-shrink-0 ml-2" />
               </div>
             </button>
           ))
@@ -144,10 +157,15 @@ export default function PendingApprovalsWidget() {
       </div>
 
       {approvals.length > 0 && (
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200">
-          <p className="text-xs text-slate-500 text-center">
-            Click any item to review and approve
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            {totalCount > approvals.length ? `Showing ${approvals.length} of ${totalCount}` : 'Click an item to review'}
           </p>
+          {totalCount > approvals.length && (
+            <button onClick={() => navigate('/goods-received')} className="text-xs font-semibold text-teal-600 hover:text-teal-700">
+              View all →
+            </button>
+          )}
         </div>
       )}
     </div>
