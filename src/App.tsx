@@ -28,6 +28,7 @@ const RMCostRegisterPage = lazy(() => import('./pages/RMCostRegisterPage'));
 const MonthlyRMReconciliationPage = lazy(() => import('./pages/MonthlyRMReconciliationPage'));
 const GrossMarginReportPage = lazy(() => import('./pages/GrossMarginReportPage'));
 const MacropackManufacturingPage = lazy(() => import('./pages/MacropackManufacturingPage'));
+const ShiftReportsPage = lazy(() => import('./pages/ShiftReportsPage'));
 const MaintenanceWorkOrdersPage = lazy(() => import('./pages/MaintenanceWorkOrdersPage'));
 const MaintenanceSchedulePage = lazy(() => import('./pages/MaintenanceSchedulePage'));
 const SparePartsPage = lazy(() => import('./pages/SparePartsPage'));
@@ -101,6 +102,7 @@ function AppRoutes() {
           <Route path="/production-planning" element={<ProductionPlanningPage />} />
           <Route path="/production-orders" element={<ProductionOrdersPage />} />
           <Route path="/daily-production-report" element={<DailyProductionReportPage />} />
+          <Route path="/shift-reports" element={<ShiftReportsPage />} />
           <Route path="/material-transfer" element={<MaterialTransferPage />} />
           <Route path="/rm-prices" element={<RMCostRegisterPage />} />
           <Route path="/macropack" element={<MacropackManufacturingPage />} />

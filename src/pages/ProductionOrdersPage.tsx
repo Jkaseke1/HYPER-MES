@@ -74,6 +74,7 @@ const emptyForm = {
   operator_id: '', 
   shift: 'Day Shift',
   operators: '',
+  labour_force: '',
   actual_hours: '',
   average_throughput: '',
   week_number: '',
@@ -95,7 +96,9 @@ export default function ProductionOrdersPage() {
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [logs, setLogs] = useState<ProductionLog[]>([]);
-  const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'logs'>('materials');
+  const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs'>('materials');
+  const [downtimeEntries, setDowntimeEntries] = useState<any[]>([]);
+  const [downtimeForm, setDowntimeForm] = useState({ downtime_hours: '', category: 'Mechanical', reason: '' });
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
   const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
@@ -279,6 +282,12 @@ export default function ProductionOrdersPage() {
         planned_start: form.planned_start || null,
         planned_end: form.planned_end || null, 
         operator_id: form.operator_id || null,
+        shift: form.shift,
+        operators: form.operators || null,
+        labour_force: form.labour_force === '' ? null : Number(form.labour_force),
+        actual_hours: form.actual_hours === '' ? null : Number(form.actual_hours),
+        average_throughput: form.average_throughput === '' ? null : Number(form.average_throughput),
+        week_number: form.week_number === '' ? null : Number(form.week_number),
         notes: form.notes, 
         status: 'pending',
       });
@@ -332,6 +341,10 @@ export default function ProductionOrdersPage() {
     
     const { data: logData } = await supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true });
     setLogs((logData as ProductionLog[]) || []);
+
+    const { data: downtimeData } = await supabase.from('production_order_downtime').select('*').eq('production_order_id', order.id).order('created_at', { ascending: true });
+    setDowntimeEntries(downtimeData || []);
+    setDowntimeForm({ downtime_hours: '', category: 'Mechanical', reason: '' });
     setWorkflowError(null);
     setShowDetail(true);
   };
@@ -940,6 +953,17 @@ export default function ProductionOrdersPage() {
               />
             </div>
             <div>
+              <label className={labelCls}>Labour Force</label>
+              <input
+                type="number"
+                min="0"
+                value={form.labour_force}
+                onChange={(e) => setForm({ ...form, labour_force: e.target.value })}
+                className={inputCls}
+                placeholder="e.g. 5"
+              />
+            </div>
+            <div>
               <label className={labelCls}>Actual Production Hours</label>
               <input
                 type="number"
@@ -1126,7 +1150,15 @@ export default function ProductionOrdersPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500">Status</label>
-                <div><StatusBadge status={selected.status} /></div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={selected.status} />
+                  {downtimeEntries.length > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full" title="Total downtime hours">
+                      <Clock className="w-3 h-3" />
+                      {downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)} hrs
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1187,7 +1219,7 @@ export default function ProductionOrdersPage() {
             {/* Detail Tabs */}
             <div className="border-b border-slate-200">
               <div className="flex gap-4">
-                {(['materials', 'costing', 'output', 'variance', 'logs'] as const).map((t) => (
+                {(['materials', 'costing', 'output', 'variance', 'downtime', 'logs'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDetailTab(t)}
@@ -1647,6 +1679,113 @@ export default function ProductionOrdersPage() {
                       </div>
                     </div>
                   </>
+                )}
+              </div>
+            )}
+
+            {/* Downtime Tab */}
+            {detailTab === 'downtime' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-800">Downtime</h3>
+                  <div className="text-sm text-slate-600">
+                    Total: <strong className="text-slate-800">{downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)} hrs</strong>
+                  </div>
+                </div>
+
+                {(selected.status === 'in_progress' || selected.status === 'completed') ? (
+                  <div className="grid grid-cols-12 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      value={downtimeForm.downtime_hours}
+                      onChange={(e) => setDowntimeForm({ ...downtimeForm, downtime_hours: e.target.value })}
+                      placeholder="Hours"
+                      className="col-span-2 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    />
+                    <select
+                      value={downtimeForm.category}
+                      onChange={(e) => setDowntimeForm({ ...downtimeForm, category: e.target.value })}
+                      className="col-span-3 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    >
+                      {['Mechanical','Electrical','Power Outage','Waiting - Materials','Waiting - Maintenance','Other'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={downtimeForm.reason}
+                      onChange={(e) => setDowntimeForm({ ...downtimeForm, reason: e.target.value })}
+                      placeholder="Reason"
+                      className="col-span-5 px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!downtimeForm.downtime_hours || !downtimeForm.reason) return;
+                        const { data: { user } } = await supabase.auth.getUser();
+                        const { error } = await supabase.from('production_order_downtime').insert({
+                          production_order_id: selected.id,
+                          downtime_hours: Number(downtimeForm.downtime_hours),
+                          category: downtimeForm.category,
+                          reason: downtimeForm.reason,
+                          created_by: user?.id || null,
+                        });
+                        if (error) { alert('Failed to save downtime: ' + error.message); return; }
+                        const { data } = await supabase.from('production_order_downtime').select('*').eq('production_order_id', selected.id).order('created_at', { ascending: true });
+                        setDowntimeEntries(data || []);
+                        setDowntimeForm({ downtime_hours: '', category: 'Mechanical', reason: '' });
+                      }}
+                      className="col-span-2 px-3 py-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white rounded transition-colors"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Downtime can only be added once production is In Progress or Completed.</p>
+                )}
+
+                {downtimeEntries.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <Clock className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm">No downtime recorded for this order</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Hours</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Category</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Reason</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Logged</th>
+                          <th className="text-center px-3 py-2 font-medium text-slate-600"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {downtimeEntries.map((d) => (
+                          <tr key={d.id}>
+                            <td className="px-3 py-2 font-medium text-slate-800">{Number(d.downtime_hours).toFixed(2)}</td>
+                            <td className="px-3 py-2 text-slate-700">{d.category}</td>
+                            <td className="px-3 py-2 text-slate-600">{d.reason}</td>
+                            <td className="px-3 py-2 text-slate-500 text-xs">{format(new Date(d.created_at), 'dd MMM HH:mm')}</td>
+                            <td className="px-3 py-2 text-center">
+                              {(selected.status === 'in_progress' || selected.status === 'completed') && (
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm('Delete this downtime entry?')) return;
+                                    await supabase.from('production_order_downtime').delete().eq('id', d.id);
+                                    setDowntimeEntries(prev => prev.filter(x => x.id !== d.id));
+                                  }}
+                                  className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
