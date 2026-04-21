@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, Building2, Warehouse as WarehouseIcon, Cog, Users, MapPin, Search } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, Building2, Warehouse as WarehouseIcon, Cog, Users, MapPin, Search, DollarSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import type { Branch, Warehouse, Machine, Supplier } from '../types/database';
 
-type Tab = 'branches' | 'warehouses' | 'machines' | 'suppliers' | 'profile';
+type Tab = 'branches' | 'warehouses' | 'machines' | 'suppliers' | 'cost_rates' | 'profile';
 const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'branches', label: 'Branches', icon: Building2 },
   { key: 'warehouses', label: 'Warehouses', icon: WarehouseIcon },
   { key: 'machines', label: 'Machines', icon: Cog },
   { key: 'suppliers', label: 'Suppliers', icon: Users },
+  { key: 'cost_rates', label: 'Cost Rates', icon: DollarSign },
   { key: 'profile', label: 'Profile', icon: MapPin },
 ];
 
@@ -34,6 +35,10 @@ export default function SettingsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [profileForm, setProfileForm] = useState({ full_name: '', phone: '' });
+  const [labourRates, setLabourRates] = useState<Record<string, number>>({}); // machine_id -> rate
+  const [overheadPctInput, setOverheadPctInput] = useState<string>('5');
+  const [rateSaving, setRateSaving] = useState(false);
+  const [rateSavedAt, setRateSavedAt] = useState<number | null>(null);
   const [modal, setModal] = useState<{ type: 'add' | 'edit'; tab: Tab; data?: any } | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
@@ -51,6 +56,19 @@ export default function SettingsPage() {
     } else if (t === 'suppliers') {
       const { data } = await supabase.from('suppliers').select('*').order('name');
       setSuppliers(data || []);
+    } else if (t === 'cost_rates') {
+      const [machinesRes, ratesRes, settingsRes] = await Promise.all([
+        supabase.from('machines').select('*').order('name'),
+        supabase.from('labour_rates').select('machine_id, rate_per_hour_usd, effective_date').order('effective_date', { ascending: false }),
+        supabase.from('cost_settings').select('value').eq('key', 'overhead_rate_percent').maybeSingle(),
+      ]);
+      setMachines(machinesRes.data || []);
+      const latest: Record<string, number> = {};
+      (ratesRes.data || []).forEach((r: any) => {
+        if (latest[r.machine_id] === undefined) latest[r.machine_id] = Number(r.rate_per_hour_usd);
+      });
+      setLabourRates(latest);
+      setOverheadPctInput(String(settingsRes.data?.value ?? 5));
     } else if (t === 'profile' && authProfile) {
       setProfileForm({ full_name: authProfile.full_name || '', phone: authProfile.phone || '' });
     }
@@ -70,6 +88,7 @@ export default function SettingsPage() {
       warehouses: { name: '', code: '', type: 'raw_material', branch_id: '', location: '', is_active: true },
       machines: { name: '', code: '', type: '', capacity_per_hour: 0, capacity_unit: 'kg', status: 'operational' },
       suppliers: { name: '', code: '', contact_person: '', email: '', phone: '', address: '', payment_terms: '', is_active: true },
+      cost_rates: {},
       profile: {},
     };
     setForm(defaults[tab]);
@@ -100,6 +119,34 @@ export default function SettingsPage() {
     if (!confirm('Are you sure you want to delete this record?')) return;
     await supabase.from(tab).delete().eq('id', id);
     load(tab);
+  }
+
+  async function saveCostRates() {
+    setRateSaving(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      // Upsert a new labour_rate row per machine with today's effective_date
+      const rows = Object.entries(labourRates).map(([machine_id, rate]) => ({
+        machine_id,
+        rate_per_hour_usd: rate,
+        effective_date: today,
+      }));
+      if (rows.length > 0) {
+        await supabase.from('labour_rates').upsert(rows, { onConflict: 'machine_id,effective_date' });
+      }
+      const pct = Number(overheadPctInput);
+      if (!isNaN(pct)) {
+        await supabase.from('cost_settings').upsert(
+          { key: 'overhead_rate_percent', value: pct, description: 'Overhead cost as % of raw material cost' },
+          { onConflict: 'key' }
+        );
+      }
+      setRateSavedAt(Date.now());
+    } catch (e: any) {
+      alert('Failed to save rates: ' + e.message);
+    } finally {
+      setRateSaving(false);
+    }
   }
 
   async function saveProfile() {
@@ -134,7 +181,7 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab !== 'profile' && (
+      {tab !== 'profile' && tab !== 'cost_rates' && (
         <div className="flex items-center justify-between">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -191,6 +238,74 @@ export default function SettingsPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {tab === 'cost_rates' && (
+          <div className="p-6 space-y-6">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800 mb-1">Overhead Rate</h3>
+              <p className="text-xs text-slate-500 mb-3">Overhead cost is auto-calculated as this percentage of each production order's raw material cost.</p>
+              <div className="flex items-center gap-3 max-w-sm">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={overheadPctInput}
+                  onChange={e => setOverheadPctInput(e.target.value)}
+                  className={inputCls}
+                />
+                <span className="text-sm font-medium text-slate-600">% of RM cost</span>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-6">
+              <h3 className="text-base font-semibold text-slate-800 mb-1">Labour Rate per Production Line</h3>
+              <p className="text-xs text-slate-500 mb-3">Hourly rate used to auto-calculate labour cost: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">labour_force × actual_hours × rate</code>. Saving adds a new effective-dated row.</p>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className={thCls}>Code</th>
+                      <th className={thCls}>Production Line</th>
+                      <th className={thCls}>Rate (USD/hour)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {machines.length === 0 ? (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-sm text-slate-400">No machines configured. Add one in the Machines tab.</td></tr>
+                    ) : machines.map(m => (
+                      <tr key={m.id}>
+                        <td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{m.code}</span></td>
+                        <td className={`${tdCls} font-medium`}>{m.name}</td>
+                        <td className={tdCls}>
+                          <div className="flex items-center gap-2 max-w-[180px]">
+                            <span className="text-slate-500 text-sm">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={labourRates[m.id] ?? 2.5}
+                              onChange={e => setLabourRates(prev => ({ ...prev, [m.id]: Number(e.target.value) }))}
+                              className={inputCls}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={saveCostRates} disabled={rateSaving} className={btnPrimary}>
+                {rateSaving ? 'Saving...' : 'Save Cost Rates'}
+              </button>
+              {rateSavedAt && Date.now() - rateSavedAt < 3000 && (
+                <span className="text-sm text-emerald-600 font-medium">✓ Saved</span>
+              )}
+            </div>
+          </div>
         )}
 
         {tab === 'profile' && authProfile && (

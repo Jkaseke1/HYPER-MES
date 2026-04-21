@@ -99,6 +99,8 @@ export default function ProductionOrdersPage() {
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs'>('materials');
   const [downtimeEntries, setDowntimeEntries] = useState<any[]>([]);
   const [downtimeForm, setDowntimeForm] = useState({ downtime_hours: '', category: 'Mechanical', reason: '' });
+  const [labourHourlyRate, setLabourHourlyRate] = useState<number>(2.50);
+  const [overheadPct, setOverheadPct] = useState<number>(5);
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
   const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0 });
@@ -345,6 +347,39 @@ export default function ProductionOrdersPage() {
     const { data: downtimeData } = await supabase.from('production_order_downtime').select('*').eq('production_order_id', order.id).order('created_at', { ascending: true });
     setDowntimeEntries(downtimeData || []);
     setDowntimeForm({ downtime_hours: '', category: 'Mechanical', reason: '' });
+
+    // Resolve labour hourly rate for this machine (latest effective_date) + overhead %
+    let hourly = 2.50;
+    if (order.machine_id) {
+      const { data: rateRows } = await supabase
+        .from('labour_rates')
+        .select('rate_per_hour_usd')
+        .eq('machine_id', order.machine_id)
+        .order('effective_date', { ascending: false })
+        .limit(1);
+      if (rateRows && rateRows.length > 0) hourly = Number(rateRows[0].rate_per_hour_usd) || 2.50;
+    }
+    setLabourHourlyRate(hourly);
+
+    const { data: ohRow } = await supabase
+      .from('cost_settings')
+      .select('value')
+      .eq('key', 'overhead_rate_percent')
+      .maybeSingle();
+    const ohPct = ohRow?.value != null ? Number(ohRow.value) : 5;
+    setOverheadPct(ohPct);
+
+    // Auto-seed Labour/Overhead if the order hasn't stored values yet (treat 0/null as unset)
+    const lf = Number((order as any).labour_force || 0);
+    const hrs = Number((order as any).actual_hours || 0);
+    const autoLabour = lf > 0 && hrs > 0 ? Math.round(lf * hrs * hourly * 100) / 100 : 0;
+    const rmCost = calculateIssuedMaterialCost(mats);
+    const autoOverhead = rmCost > 0 ? Math.round(rmCost * (ohPct / 100) * 100) / 100 : 0;
+    setCosting((prev) => ({
+      ...prev,
+      labour_cost: order.labour_cost > 0 ? order.labour_cost : autoLabour,
+      overhead_cost: order.overhead_cost > 0 ? order.overhead_cost : autoOverhead,
+    }));
     setWorkflowError(null);
     setShowDetail(true);
   };
@@ -617,13 +652,18 @@ export default function ProductionOrdersPage() {
           throw new Error('Cannot complete production order — actual output quantities must be recorded first. Please enter production outputs in the Output tab.');
         }
         
-        const total = costing.raw_material_cost + costing.labour_cost + costing.production_line_cost + costing.overhead_cost;
-        Object.assign(updates, { 
-          ...costing, 
-          ...output, 
-          total_cost: total,
+        // Compute production line cost from hardcoded per-tonne labour rate
+        const lineRateOnSave = selected.machines?.name ? LABOUR_RATES[selected.machines.name] || 0 : 0;
+        const productionLineCostOnSave = Math.round(lineRateOnSave * (output.actual_qty / 1000) * 100) / 100;
+        const total = costing.raw_material_cost + costing.labour_cost + productionLineCostOnSave + costing.overhead_cost;
+        Object.assign(updates, {
+          ...costing,
+          production_line_cost: productionLineCostOnSave,
+          machine_cost: productionLineCostOnSave,
+          ...output,
+          total_cost: Math.round(total * 100) / 100,
           cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
-          actual_end: new Date().toISOString() 
+          actual_end: new Date().toISOString()
         });
       }
 
@@ -1389,12 +1429,12 @@ export default function ProductionOrdersPage() {
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
                           <div className="text-xl font-bold text-purple-700">${costing.labour_cost.toFixed(2)}</div>
-                          <div className="text-xs text-purple-600 mt-1">Editable</div>
+                          <div className="text-xs text-purple-600 mt-1">{((selected as any).labour_force || 0)} × {((selected as any).actual_hours || 0)}hr × ${labourHourlyRate.toFixed(2)}</div>
                         </div>
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-orange-600 mb-1">Overhead</div>
                           <div className="text-xl font-bold text-orange-700">${costing.overhead_cost.toFixed(2)}</div>
-                          <div className="text-xs text-orange-600 mt-1">Editable</div>
+                          <div className="text-xs text-orange-600 mt-1">{overheadPct}% of RM cost</div>
                         </div>
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-emerald-600 mb-1">Total Cost</div>
@@ -1428,33 +1468,71 @@ export default function ProductionOrdersPage() {
                         </div>
                       </div>
 
-                      {/* Editable Fields */}
-                      <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
-                        <div>
-                          <label className={labelCls}>Labour Cost (Editable)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={costing.labour_cost}
-                            onChange={(e) => setCosting({ ...costing, labour_cost: parseFloat(e.target.value) || 0 })}
-                            className={inputCls}
-                            disabled={selected.status !== 'in_progress'}
-                          />
-                          <div className="text-xs text-slate-500 mt-1">Manual override for labour costs</div>
-                        </div>
-                        <div>
-                          <label className={labelCls}>Overhead Cost (Editable)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={costing.overhead_cost}
-                            onChange={(e) => setCosting({ ...costing, overhead_cost: parseFloat(e.target.value) || 0 })}
-                            className={inputCls}
-                            disabled={selected.status !== 'in_progress'}
-                          />
-                          <div className="text-xs text-slate-500 mt-1">Utilities, maintenance, etc.</div>
-                        </div>
-                      </div>
+                      {/* Editable Fields with auto-calc */}
+                      {(() => {
+                        const lf = Number((selected as any).labour_force || 0);
+                        const hrs = Number((selected as any).actual_hours || 0);
+                        const autoLabour = lf > 0 && hrs > 0 ? Math.round(lf * hrs * labourHourlyRate * 100) / 100 : 0;
+                        const autoOverhead = rawMaterialCost > 0 ? Math.round(rawMaterialCost * (overheadPct / 100) * 100) / 100 : 0;
+                        const labourOverridden = Math.abs(costing.labour_cost - autoLabour) > 0.01 && costing.labour_cost > 0;
+                        const overheadOverridden = Math.abs(costing.overhead_cost - autoOverhead) > 0.01 && costing.overhead_cost > 0;
+                        return (
+                          <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className={labelCls + ' !mb-0'}>Labour Cost</label>
+                                {autoLabour > 0 && labourOverridden && selected.status === 'in_progress' && (
+                                  <button
+                                    onClick={() => setCosting({ ...costing, labour_cost: autoLabour })}
+                                    className="text-xs font-medium text-teal-600 hover:text-teal-700"
+                                  >
+                                    Reset to auto (${autoLabour.toFixed(2)})
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={costing.labour_cost}
+                                onChange={(e) => setCosting({ ...costing, labour_cost: parseFloat(e.target.value) || 0 })}
+                                className={inputCls}
+                                disabled={selected.status !== 'in_progress'}
+                              />
+                              <div className="text-xs text-slate-500 mt-1">
+                                {autoLabour > 0 ? (
+                                  <>Auto-calculated: {lf} × {hrs}hr × ${labourHourlyRate.toFixed(2)}/hr = <strong>${autoLabour.toFixed(2)}</strong>{labourOverridden && ' (overridden)'}</>
+                                ) : (
+                                  <>Enter <em>labour_force</em> and <em>actual_hours</em> on the order to auto-calculate. Rate: ${labourHourlyRate.toFixed(2)}/hr</>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className={labelCls + ' !mb-0'}>Overhead Cost</label>
+                                {autoOverhead > 0 && overheadOverridden && selected.status === 'in_progress' && (
+                                  <button
+                                    onClick={() => setCosting({ ...costing, overhead_cost: autoOverhead })}
+                                    className="text-xs font-medium text-teal-600 hover:text-teal-700"
+                                  >
+                                    Reset to auto (${autoOverhead.toFixed(2)})
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={costing.overhead_cost}
+                                onChange={(e) => setCosting({ ...costing, overhead_cost: parseFloat(e.target.value) || 0 })}
+                                className={inputCls}
+                                disabled={selected.status !== 'in_progress'}
+                              />
+                              <div className="text-xs text-slate-500 mt-1">
+                                Auto-calculated: {overheadPct}% of ${rawMaterialCost.toFixed(2)} RM = <strong>${autoOverhead.toFixed(2)}</strong>{overheadOverridden && ' (overridden)'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Read-only Fields */}
                       <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
