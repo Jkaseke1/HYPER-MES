@@ -188,8 +188,11 @@ export default function FormulationsPage() {
       return;
     }
 
-    if (!form.batch_size) {
-      alert('Please provide a batch size.');
+    // Batch size can be supplied either at the top level OR via the first Unit Size Variant row.
+    const firstVariantBatch = form.unit_size_variants?.[0]?.batch_size || 0;
+    const resolvedBatchSize = Number(form.batch_size) || firstVariantBatch;
+    if (!resolvedBatchSize || resolvedBatchSize <= 0) {
+      alert('Please provide a batch size (either on the Unit Size Variant row or at the top-level Batch Size field).');
       return;
     }
 
@@ -211,7 +214,7 @@ export default function FormulationsPage() {
       const payload = {
         ...form,
         unit_size_variants: validVariants.length > 0 ? validVariants : null,
-        batch_size: Number(form.batch_size) || 0,
+        batch_size: resolvedBatchSize,
         target_protein: Number(form.target_protein) || 0,
         target_fat: Number(form.target_fat) || 0,
         target_fiber: Number(form.target_fiber) || 0,
