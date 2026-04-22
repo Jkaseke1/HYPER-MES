@@ -26,7 +26,6 @@ const emptyForm = {
   supplier_id: '',
   warehouse_id: 'raw_materials_warehouse',
   received_date: new Date().toISOString().split('T')[0],
-  weigh_bridge_ticket_no: '',
   status: 'pending' as const,
   notes: '',
   wb_transaction_no: '',
@@ -391,7 +390,7 @@ export default function GoodsReceivedPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">{grn.suppliers?.name || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{(grn as any).weigh_bridge_ticket_no || '-'}</td>
+                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{format(new Date(grn.received_date), 'dd MMM yyyy')}</td>
                     <td className="px-4 py-3 text-slate-700 font-medium">{grn.total_value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
                     <td className="px-4 py-3"><StatusBadge status={grn.status} /></td>
@@ -560,7 +559,7 @@ export default function GoodsReceivedPage() {
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Weigh Bridge Ticket No</p>
-                <p className="text-sm font-mono text-slate-700">{(viewing as any).weigh_bridge_ticket_no || '-'}</p>
+                <p className="text-sm font-mono text-slate-700">{(viewing as any).wb_transaction_no || (viewing as any).weigh_bridge_ticket_no || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Status</p>
