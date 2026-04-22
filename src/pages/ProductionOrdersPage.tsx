@@ -614,20 +614,7 @@ export default function ProductionOrdersPage() {
         throw new Error(`Failed to issue ${errors.length} ingredients: ${errors[0].error?.message}`);
       }
 
-      // Record stock movements for all issued materials
-      const movements = detailMaterials.map(material => ({
-        movement_type: 'production_input',
-        raw_material_id: material.raw_material_id,
-        quantity: -Math.abs(material.planned_qty),
-        unit: material.unit,
-        notes: `Issued to production order ${selected.batch_number}`,
-        reference_type: 'production_order',
-        reference_id: selected.id,
-        batch_number: selected.batch_number,
-        movement_date: new Date().toISOString(),
-      }));
-
-      await supabase.from('stock_movements').insert(movements);
+      // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
 
       // Now update order status to materials_issued
       await updateStatus('materials_issued');
