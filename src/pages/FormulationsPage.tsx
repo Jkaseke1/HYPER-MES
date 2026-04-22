@@ -52,7 +52,7 @@ const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', 
 export default function FormulationsPage() {
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<{ code: string; name: string }[]>([]);
   const [formulationIngredientCounts, setFormulationIngredientCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
@@ -100,9 +100,17 @@ export default function FormulationsPage() {
   }, []);
 
   const fetchCategories = useCallback(async () => {
-    const { data } = await supabase.from('raw_materials').select('category').eq('is_active', true);
-    const uniqueCategories = Array.from(new Set(data?.map(d => d.category).filter(Boolean) || [])).sort();
-    setCategories(uniqueCategories);
+    const { data, error } = await supabase
+      .from('formulation_categories')
+      .select('code, name')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (error) {
+      console.error('Failed to load formulation categories:', error);
+      setCategories([]);
+      return;
+    }
+    setCategories((data as { code: string; name: string }[]) || []);
   }, []);
 
   useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
@@ -383,13 +391,13 @@ export default function FormulationsPage() {
             >
               All
             </button>
-            {categories.map((c: string) => (
+            {categories.map((c) => (
               <button
-                key={c}
-                onClick={() => setFilter(c)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === c ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+                key={c.code}
+                onClick={() => setFilter(c.code)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === c.code ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
               >
-                {formatLabel(c)}
+                {c.name}
               </button>
             ))}
           </div>
@@ -830,8 +838,8 @@ export default function FormulationsPage() {
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
               >
                 <option value="">Select a category...</option>
-                {categories.map((c: string) => (
-                  <option key={c} value={c}>{formatLabel(c)}</option>
+                {categories.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
                 ))}
               </select></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
