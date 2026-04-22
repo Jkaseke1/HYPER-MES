@@ -259,7 +259,14 @@ export default function FormulationsPage() {
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving formulation:', error);
-      alert(`Failed to save formulation: ${error.message || error}`);
+      // Friendlier message for unique-constraint collisions
+      if (error?.code === '23505' && /formulations_code_key/.test(error?.message || '')) {
+        alert(`A formulation with code "${form.code}" already exists. Use a different code, or open the existing one and click Edit.`);
+      } else if (error?.code === '23505') {
+        alert(`Duplicate value: ${error.details || error.message}`);
+      } else {
+        alert(`Failed to save formulation: ${error.message || error}`);
+      }
     } finally {
       setSaving(false);
     }
