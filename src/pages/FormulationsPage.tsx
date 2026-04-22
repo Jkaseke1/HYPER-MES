@@ -163,13 +163,13 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Load an existing formulation into the form for editing. Fully populates all fields.
-  // Selecting a formulation switches the modal into Edit mode (save = UPDATE).
-  // Leaving the selector blank keeps the modal in New mode (save = INSERT).
-  async function loadFormulationIntoForm(sourceId: string) {
+  // Optional helper: pre-fill the New Formula form from an existing formulation.
+  // Populates every field (name, code, sage_code, sizes, category, BOM, nutritional targets) as a starting point.
+  // The modal stays in New mode — user must edit Code (and usually Name/Sage Code) to unique values before saving.
+  // The duplicate-code alert in handleSave catches forgotten renames.
+  async function prefillFromFormulation(sourceId: string) {
     if (!sourceId) {
-      // Reset to blank New mode
-      setEditId(null);
+      // Reset to blank
       setForm({ ...emptyForm });
       setIngs([emptyIng()]);
       return;
@@ -183,15 +183,15 @@ export default function FormulationsPage() {
       .eq('formulation_id', src.id)
       .order('sort_order');
     if (error) {
-      alert('Failed to load formulation: ' + error.message);
+      alert('Failed to load BOM from source formulation: ' + error.message);
       return;
     }
-    setEditId(src.id);  // switch to Edit mode — save becomes UPDATE
+    // Keep editId = null (always New mode)
     setForm({
       name: src.name,
       code: src.code,
       sage_code: (src as any).sage_code || '',
-      version: src.version,
+      version: 1,
       category: src.category || '',
       description: src.description || '',
       batch_size: src.batch_size.toString(),
@@ -201,8 +201,8 @@ export default function FormulationsPage() {
       target_fat: src.target_fat.toString(),
       target_fiber: src.target_fiber.toString(),
       target_moisture: src.target_moisture.toString(),
-      estimated_cost_per_unit: src.estimated_cost_per_unit,
-      status: src.status,
+      estimated_cost_per_unit: 0,
+      status: 'draft',
     });
     setIngs((srcIngs || []).length > 0 ? (srcIngs || []).map(i => ({
       raw_material_id: i.raw_material_id,
@@ -853,18 +853,22 @@ export default function FormulationsPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Formulation / BOM</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Copy from existing BOM (optional)</label>
               <select
-                value={editId || ''}
-                onChange={e => loadFormulationIntoForm(e.target.value)}
+                value=""
+                onChange={e => { const v = e.target.value; e.target.value = ''; prefillFromFormulation(v); }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
-                title="Pick an existing formulation to edit it, or leave blank to create a new one from scratch"
+                disabled={!!editId}
+                title={editId ? 'Not available in Edit mode' : 'Pre-fill all fields from an existing formulation. Remember to change Code to a unique value before saving.'}
               >
-                <option value="">— New formulation —</option>
+                <option value="">— Start blank —</option>
                 {formulations.map(f => (
                   <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
                 ))}
               </select>
+              {!editId && form.code && (
+                <p className="text-[11px] text-amber-600 mt-1">⚠ Copying from an existing BOM — change <strong>Code</strong> to a unique value before saving.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
