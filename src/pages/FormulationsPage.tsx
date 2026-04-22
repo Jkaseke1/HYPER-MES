@@ -163,6 +163,46 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
+  // Copy BOM, sizes, category and nutritional targets from an existing formulation into the New Formula form.
+  // Intentionally clears code/sage_code so the user must enter new unique codes (avoids UNIQUE collision).
+  async function copyFromFormulation(sourceId: string) {
+    if (!sourceId) return;
+    const src = formulations.find(f => f.id === sourceId);
+    if (!src) return;
+    const variants = (src as any).unit_size_variants;
+    const { data: srcIngs, error } = await supabase
+      .from('formulation_ingredients')
+      .select('raw_material_id, quantity, unit, percentage, is_critical')
+      .eq('formulation_id', src.id)
+      .order('sort_order');
+    if (error) {
+      alert('Failed to load source BOM: ' + error.message);
+      return;
+    }
+    setForm(prev => ({
+      ...prev,
+      name: `${src.name} (copy)`,
+      code: '',              // force user to set unique code
+      sage_code: '',         // force user to set unique sage code
+      category: src.category || '',
+      description: src.description || '',
+      batch_size: src.batch_size.toString(),
+      batch_unit: src.batch_unit,
+      unit_size_variants: Array.isArray(variants) ? variants : [{ size: '', batch_size: 0 }],
+      target_protein: src.target_protein.toString(),
+      target_fat: src.target_fat.toString(),
+      target_fiber: src.target_fiber.toString(),
+      target_moisture: src.target_moisture.toString(),
+    }));
+    setIngs((srcIngs || []).map(i => ({
+      raw_material_id: i.raw_material_id,
+      quantity: Number(i.quantity) || 0,
+      unit: i.unit || 'kg',
+      percentage: Number(i.percentage) || 0,
+      is_critical: !!i.is_critical,
+    })));
+  }
+
   async function openEdit(f: Formulation) {
     setEditId(f.id);
     const variants = (f as any).unit_size_variants;
@@ -802,29 +842,33 @@ export default function FormulationsPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">BOM</label>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Copy from (optional)</label>
               <select
-                value={form.name}
-                onChange={e => {
-                  const selectedBom = formulations.find(f => f.name === e.target.value);
-                  setForm({
-                    ...form,
-                    name: e.target.value,
-                    code: selectedBom?.code || '',
-                    sage_code: selectedBom?.sage_code || ''
-                  });
-                }}
+                value=""
+                onChange={e => { if (e.target.value) copyFromFormulation(e.target.value); e.target.value = ''; }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                disabled={!!editId}
+                title={editId ? 'Copy-from only available on new formulations' : 'Pre-fill BOM, sizes and nutritional targets from an existing formulation'}
               >
-                <option value="">Select BOM...</option>
+                <option value="">— Select template to copy —</option>
                 {formulations.map(f => (
-                  <option key={f.id} value={f.name}>{f.name}</option>
+                  <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
                 ))}
-              </select></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
-              <input type="text" value={form.code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Sage Code</label>
-              <input type="text" value={form.sage_code} readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 cursor-not-allowed text-slate-600" /></div>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., Broiler Grower Crumbs 50kg" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Code *</label>
+              <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., BGC50-V2" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Sage Code</label>
+              <input type="text" value={form.sage_code} onChange={e => setForm({ ...form, sage_code: e.target.value.toUpperCase() })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., BGC50" />
+            </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
