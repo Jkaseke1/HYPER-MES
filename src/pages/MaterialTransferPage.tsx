@@ -33,6 +33,7 @@ export default function MaterialTransferPage() {
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
+  const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -49,12 +50,30 @@ export default function MaterialTransferPage() {
     transfer_date: format(new Date(), 'yyyy-MM-dd'),
     purpose: '',
     production_order_id: '',
+    source_lot_id: '',
     notes: '',
   });
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Load available lots (FIFO order) whenever the selected raw material changes
+  useEffect(() => {
+    async function loadLots() {
+      if (!form.raw_material_id) { setAvailableLots([]); return; }
+      const { data, error } = await supabase
+        .from('v_rm_available_lots')
+        .select('lot_id, batch_number, qty_remaining, unit, received_date, grn_number, source')
+        .eq('raw_material_id', form.raw_material_id);
+      if (error) { console.error('Failed to load lots:', error); setAvailableLots([]); return; }
+      setAvailableLots(data || []);
+    }
+    loadLots();
+    // Clear any previously selected lot when material changes
+    setForm(f => ({ ...f, source_lot_id: '' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.raw_material_id]);
 
   async function fetchData() {
     setLoading(true);
@@ -90,6 +109,8 @@ export default function MaterialTransferPage() {
   async function createTransfer() {
     setSaving(true);
     try {
+      // Resolve batch_number from the selected lot so it is stored on the movement
+      const selectedLot = availableLots.find(l => l.lot_id === form.source_lot_id);
       const { error } = await supabase.from('stock_movements').insert({
         movement_type: 'transfer',
         raw_material_id: form.raw_material_id,
@@ -97,6 +118,8 @@ export default function MaterialTransferPage() {
         quantity: -Math.abs(form.quantity), // Negative for outbound
         unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
         movement_date: form.transfer_date,
+        batch_number: selectedLot?.batch_number || '',
+        source_lot_id: form.source_lot_id || null,
         notes: `Transfer to ${form.to_location}. Purpose: ${form.purpose}. ${form.notes}`,
       });
 
@@ -116,6 +139,7 @@ export default function MaterialTransferPage() {
         transfer_date: format(new Date(), 'yyyy-MM-dd'),
         purpose: '',
         production_order_id: '',
+        source_lot_id: '',
         notes: '',
       });
       setSuccessMessage('Transfer created successfully!');
@@ -339,6 +363,46 @@ export default function MaterialTransferPage() {
                 className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Source Batch / GRN Lot {availableLots.length > 0 && <span className="text-xs text-slate-400">(FIFO — oldest first)</span>}
+              </label>
+              <select
+                value={form.source_lot_id}
+                onChange={(e) => {
+                  const lot = availableLots.find(l => l.lot_id === e.target.value);
+                  setForm({
+                    ...form,
+                    source_lot_id: e.target.value,
+                    quantity: lot ? Math.min(form.quantity || lot.qty_remaining, lot.qty_remaining) : form.quantity,
+                  });
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                disabled={!form.raw_material_id}
+              >
+                <option value="">
+                  {!form.raw_material_id ? 'Select a raw material first' : availableLots.length === 0 ? 'No available lots — check GRN approvals' : 'Select source batch (optional)'}
+                </option>
+                {availableLots.map((lot) => (
+                  <option key={lot.lot_id} value={lot.lot_id}>
+                    {lot.batch_number} · {Number(lot.qty_remaining).toLocaleString()} {lot.unit} available {lot.grn_number ? `· GRN ${lot.grn_number}` : lot.source === 'opening_balance' ? '· Opening' : ''} · {new Date(lot.received_date).toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+              {form.source_lot_id && (() => {
+                const lot = availableLots.find(l => l.lot_id === form.source_lot_id);
+                if (!lot) return null;
+                const over = form.quantity > Number(lot.qty_remaining);
+                return (
+                  <p className={`text-[11px] mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
+                    {over
+                      ? `⚠ Transfer quantity exceeds lot balance (${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}).`
+                      : `Lot balance: ${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}.`}
+                  </p>
+                );
+              })()}
             </div>
 
             <div>
