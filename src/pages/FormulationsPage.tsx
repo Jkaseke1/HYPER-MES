@@ -163,10 +163,17 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Copy BOM, sizes, category and nutritional targets from an existing formulation into the New Formula form.
-  // Intentionally clears code/sage_code so the user must enter new unique codes (avoids UNIQUE collision).
-  async function copyFromFormulation(sourceId: string) {
-    if (!sourceId) return;
+  // Load an existing formulation into the form for editing. Fully populates all fields.
+  // Selecting a formulation switches the modal into Edit mode (save = UPDATE).
+  // Leaving the selector blank keeps the modal in New mode (save = INSERT).
+  async function loadFormulationIntoForm(sourceId: string) {
+    if (!sourceId) {
+      // Reset to blank New mode
+      setEditId(null);
+      setForm({ ...emptyForm });
+      setIngs([emptyIng()]);
+      return;
+    }
     const src = formulations.find(f => f.id === sourceId);
     if (!src) return;
     const variants = (src as any).unit_size_variants;
@@ -176,14 +183,15 @@ export default function FormulationsPage() {
       .eq('formulation_id', src.id)
       .order('sort_order');
     if (error) {
-      alert('Failed to load source BOM: ' + error.message);
+      alert('Failed to load formulation: ' + error.message);
       return;
     }
-    setForm(prev => ({
-      ...prev,
-      name: `${src.name} (copy)`,
-      code: '',              // force user to set unique code
-      sage_code: '',         // force user to set unique sage code
+    setEditId(src.id);  // switch to Edit mode — save becomes UPDATE
+    setForm({
+      name: src.name,
+      code: src.code,
+      sage_code: (src as any).sage_code || '',
+      version: src.version,
       category: src.category || '',
       description: src.description || '',
       batch_size: src.batch_size.toString(),
@@ -193,14 +201,16 @@ export default function FormulationsPage() {
       target_fat: src.target_fat.toString(),
       target_fiber: src.target_fiber.toString(),
       target_moisture: src.target_moisture.toString(),
-    }));
-    setIngs((srcIngs || []).map(i => ({
+      estimated_cost_per_unit: src.estimated_cost_per_unit,
+      status: src.status,
+    });
+    setIngs((srcIngs || []).length > 0 ? (srcIngs || []).map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
       unit: i.unit || 'kg',
       percentage: Number(i.percentage) || 0,
       is_critical: !!i.is_critical,
-    })));
+    })) : [emptyIng()]);
   }
 
   async function openEdit(f: Formulation) {
@@ -843,15 +853,14 @@ export default function FormulationsPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Copy from (optional)</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Formulation / BOM</label>
               <select
-                value=""
-                onChange={e => { if (e.target.value) copyFromFormulation(e.target.value); e.target.value = ''; }}
+                value={editId || ''}
+                onChange={e => loadFormulationIntoForm(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
-                disabled={!!editId}
-                title={editId ? 'Copy-from only available on new formulations' : 'Pre-fill BOM, sizes and nutritional targets from an existing formulation'}
+                title="Pick an existing formulation to edit it, or leave blank to create a new one from scratch"
               >
-                <option value="">— Select template to copy —</option>
+                <option value="">— New formulation —</option>
                 {formulations.map(f => (
                   <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
                 ))}
