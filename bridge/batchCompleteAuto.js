@@ -1,184 +1,125 @@
 // batchCompleteAuto.js - Event 3: Production Completion Handler
-// Reads from production_orders + production_outputs by reference_id from sync_log
-// Posts to Sage Pastel as finished goods receipt/inventory addition
+// Reads from production_orders by reference_id from sync_log
+// Posts to Sage Pastel via direct MSSQL: FG receipt into Despatch Warehouse (WhseID=20)
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { sql, sageConfig, supabase, safeWrite } = require('./lib/db');
 
-async function handleBatchCompleted(syncLogEntry) {
+async function handleBatchComplete(syncEvent) {
+  console.log('\n  → Event 3: Batch Complete (Auto)');
+
+  const orderId = syncEvent.reference_id;
+
+  const { data: order, error } = await supabase
+    .from('production_orders')
+    .select(`
+      id, batch_number, actual_qty, actual_end,
+      cost_per_unit, rejected_qty,
+      formulations ( id, name, sage_code )
+    `)
+    .eq('id', orderId)
+    .single();
+
+  if (error || !order) throw new Error(`Production order not found: ${orderId}`);
+
+  const sageCode = order.formulations?.sage_code;
+  const netQty   = Number(order.actual_qty || 0) - Number(order.rejected_qty || 0);
+
+  console.log(`  Batch: ${order.batch_number}`);
+  console.log(`  Product: ${sageCode} — ${netQty}kg net`);
+
+  if (!sageCode) throw new Error(`No sage_code for formulation`);
+  if (netQty <= 0) throw new Error(`Invalid net quantity: ${netQty}`);
+
+  const { data: materials } = await supabase
+    .from('production_order_materials')
+    .select('unit_cost, actual_qty')
+    .eq('production_order_id', orderId);
+
+  const totalMaterialCost = materials?.reduce((sum, m) =>
+    sum + (Number(m.unit_cost || 0) * Number(m.actual_qty || 0)), 0) || 0;
+
+  const costPerUnit = netQty > 0
+    ? Math.round((totalMaterialCost / netQty) * 100) / 100
+    : 0;
+
+  console.log(`  Cost: $${totalMaterialCost.toFixed(2)} total / $${costPerUnit}/kg`);
+
+  let pool;
   try {
-    console.log(`Processing batch completion for sync_log ID: ${syncLogEntry.id}`);
-    
-    // Get production order details with outputs
-    const { data: productionOrder, error: orderError } = await supabase
-      .from('production_orders')
-      .select(`
-        *,
-        formulations(name, code, sage_code, batch_unit),
-        machines(name),
-        warehouses(name),
-        production_outputs(
-          *,
-          warehouses(name)
-        )
-      `)
-      .eq('id', syncLogEntry.reference_id)
-      .single();
+    pool = await sql.connect(sageConfig);
 
-    if (orderError) {
-      throw new Error(`Failed to fetch production order: ${orderError.message}`);
-    }
+    const stockResult = await pool.request()
+      .input('Code', sql.VarChar, sageCode)
+      .query(`SELECT StockLink, Description_1 FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
 
-    if (!productionOrder) {
-      throw new Error('Production order not found');
-    }
+    if (stockResult.recordset.length === 0) throw new Error(`${sageCode} not found in Sage`);
 
-    // Validate required Sage codes
-    if (!productionOrder.formulations?.sage_code) {
-      throw new Error(`Formulation ${productionOrder.formulations.name} missing sage_code`);
-    }
+    const stockLink   = stockResult.recordset[0].StockLink;
+    const reference   = `WO-${order.batch_number}`.substring(0, 20);
+    const description = `${order.formulations?.name} complete`.substring(0, 40);
 
-    if (!productionOrder.production_outputs || productionOrder.production_outputs.length === 0) {
-      throw new Error(`No production outputs found for batch ${productionOrder.batch_number}`);
-    }
+    await safeWrite(
+      `FG receipt: ${netQty}kg of ${sageCode} into Despatch Warehouse`,
+      async () => {
+        await pool.request()
+          .input('iInvJrBatchID', sql.Int,      1)
+          .input('iStockID',      sql.Int,      stockLink)
+          .input('iWarehouseID',  sql.Int,      20)
+          .input('dTrDate',       sql.DateTime, new Date())
+          .input('iTrCodeID',     sql.Int,      31)
+          .input('iGLContraID',   sql.Int,      0)
+          .input('cReference',    sql.VarChar,  reference)
+          .input('cDescription',  sql.VarChar,  description)
+          .input('fQtyIn',        sql.Float,    netQty)
+          .input('fQtyOut',       sql.Float,    0)
+          .input('fNewCost',      sql.Float,    costPerUnit)
+          .input('bIsLotItem',    sql.Bit,      0)
+          .input('bIsSerialItem', sql.Bit,      0)
+          .query(`
+            INSERT INTO _etblInvJrBatchLines (
+              iInvJrBatchID, iStockID, iWarehouseID,
+              dTrDate, iTrCodeID, iGLContraID,
+              cReference, cDescription,
+              fQtyIn, fQtyOut, fNewCost,
+              bIsLotItem, bIsSerialItem
+            ) VALUES (
+              @iInvJrBatchID, @iStockID, @iWarehouseID,
+              @dTrDate, @iTrCodeID, @iGLContraID,
+              @cReference, @cDescription,
+              @fQtyIn, @fQtyOut, @fNewCost,
+              @bIsLotItem, @bIsSerialItem
+            )
+          `);
 
-    // Prepare Sage transaction data for finished goods receipt
-    const sageTransaction = {
-      transactionType: 'FINISHED_GOODS_RECEIPT',
-      transactionDate: productionOrder.actual_end || new Date().toISOString().split('T')[0],
-      reference: `BATCH-${productionOrder.batch_number}`,
-      formulation: {
-        code: productionOrder.formulations.sage_code,
-        name: productionOrder.formulations.name,
-        batchNumber: productionOrder.batch_number
-      },
-      lines: productionOrder.production_outputs.map(output => ({
-        stockCode: productionOrder.formulations.sage_code,
-        description: `${productionOrder.formulations.name} - Batch ${productionOrder.batch_number}`,
-        quantity: output.quantity_produced,
-        rejectedQuantity: output.rejected_quantity || 0,
-        wastageQuantity: output.wastage_quantity || 0,
-        unit: productionOrder.formulations.batch_unit || 'kg',
-        warehouse: output.warehouses?.name || productionOrder.warehouses?.name || 'Main Warehouse',
-        qualityStatus: output.quality_status || 'pending',
-        batchNumber: output.batch_number || productionOrder.batch_number,
-        productionDate: output.recorded_at || productionOrder.actual_end,
-        recordedBy: output.recorded_by || 'System'
-      })),
-      totalQuantity: productionOrder.actual_qty,
-      totalRejected: productionOrder.rejected_qty || 0,
-      totalWastage: productionOrder.wastage_qty || 0,
-      machine: productionOrder.machines?.name || 'Unknown',
-      notes: `Batch ${productionOrder.batch_number} automatically completed - ${productionOrder.formulations.name}`,
-      costs: {
-        rawMaterialCost: productionOrder.raw_material_cost || 0,
-        labourCost: productionOrder.labour_cost || 0,
-        machineCost: productionOrder.machine_cost || 0,
-        overheadCost: productionOrder.overhead_cost || 0,
-        totalCost: productionOrder.total_cost || 0,
-        costPerUnit: productionOrder.cost_per_unit || 0
+        const existing = await pool.request()
+          .input('StockID', sql.Int, stockLink)
+          .input('WhseID',  sql.Int, 20)
+          .query(`SELECT idStockQtys FROM _etblStockQtys WHERE StockID = @StockID AND WhseID = @WhseID`);
+
+        if (existing.recordset.length > 0) {
+          await pool.request()
+            .input('StockID', sql.Int,   stockLink)
+            .input('WhseID',  sql.Int,   20)
+            .input('QtyIn',   sql.Float, netQty)
+            .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand + @QtyIn WHERE StockID = @StockID AND WhseID = @WhseID`);
+        } else {
+          await pool.request()
+            .input('StockID', sql.Int,   stockLink)
+            .input('WhseID',  sql.Int,   20)
+            .input('QtyIn',   sql.Float, netQty)
+            .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
+        }
       }
-    };
-
-    console.log(`Posting batch completion to Sage: ${JSON.stringify(sageTransaction, null, 2)}`);
-
-    // Post to Sage Pastel as finished goods receipt
-    const sageResponse = await sageClient.postFinishedGoodsReceipt(sageTransaction);
-
-    // Update sync log with success
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'success',
-        message: `Batch ${productionOrder.batch_number} completion posted to Sage successfully`,
-        sage_response: sageResponse,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    console.log(`✅ Batch ${productionOrder.batch_number} completion successfully posted to Sage`);
-    return sageResponse;
-
-  } catch (error) {
-    console.error(`❌ Error processing batch completion:`, error);
-    
-    // Update sync log with error
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'failed',
-        message: `Failed to post batch completion to Sage: ${error.message}`,
-        error_details: {
-          error: error.message,
-          stack: error.stack,
-          timestamp: new Date().toISOString()
-        },
-        retry_count: syncLogEntry.retry_count + 1,
-        next_retry_at: new Date(Date.now() + (5 * 60 * 1000)).toISOString(), // Retry in 5 minutes
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    throw error;
+    );
+  } finally {
+    if (pool) await sql.close();
   }
 }
 
-// Process all pending batch completion events
-async function processPendingBatchCompletionEvents() {
-  try {
-    console.log('🔍 Checking for pending batch completion events...');
-    
-    const { data: pendingEvents, error } = await supabase
-      .from('sync_log')
-      .select('*')
-      .eq('event_type', 'production_completed')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(10); // Process in batches
+module.exports = { handleBatchComplete };
 
-    if (error) {
-      throw new Error(`Failed to fetch pending events: ${error.message}`);
-    }
-
-    if (!pendingEvents || pendingEvents.length === 0) {
-      console.log('✅ No pending batch completion events found');
-      return;
-    }
-
-    console.log(`📦 Found ${pendingEvents.length} pending batch completion events`);
-
-    // Process each event
-    for (const event of pendingEvents) {
-      try {
-        await handleBatchCompleted(event);
-      } catch (error) {
-        console.error(`Failed to process event ${event.id}:`, error.message);
-        // Continue with next event
-      }
-    }
-
-    console.log('✅ Batch completion events processing complete');
-
-  } catch (error) {
-    console.error('❌ Error in processPendingBatchCompletionEvents:', error);
-  }
-}
-
-// Export for use in bridge worker
-module.exports = {
-  handleBatchCompleted,
-  processPendingBatchCompletionEvents
-};
-
-// Run standalone if called directly
 if (require.main === module) {
-  processPendingBatchCompletionEvents()
-    .then(() => {
-      console.log('✅ Batch completion auto handler completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Batch completion auto handler failed:', error);
-      process.exit(1);
-    });
+  handleBatchComplete({ reference_id: process.argv[2] })
+    .then(() => { console.log('✅ Done'); process.exit(0); })
+    .catch((err) => { console.error('❌', err.message); process.exit(1); });
 }

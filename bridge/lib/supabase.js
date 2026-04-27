@@ -2,7 +2,8 @@
 // Handles communication with HYPER MES Supabase database
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 // Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL || 'https://appyuqxetlphuxfybmus.supabase.co';

@@ -1,179 +1,185 @@
 // dispatchAuto.js - Event 4: Dispatch Delivery Handler
 // Reads from dispatch_orders + dispatch_items by reference_id from sync_log
-// Posts to Sage Pastel as customer invoice/delivery note
+// Posts to Sage Pastel via direct MSSQL: two-leg transfer (DSP WhseID=20 → branch whse)
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { sql, sageConfig, supabase, safeWrite } = require('./lib/db');
 
-async function handleDispatchDelivered(syncLogEntry) {
-  try {
-    console.log(`Processing dispatch delivery for sync_log ID: ${syncLogEntry.id}`);
-    
-    // Get dispatch order details with items
-    const { data: dispatchOrder, error: orderError } = await supabase
-      .from('dispatch_orders')
-      .select(`
-        *,
-        branches(name, sage_code, address, contact_person, phone),
-        warehouses(name),
-        dispatch_items(
-          *,
-          formulations(name, code, sage_code, batch_unit)
-        )
-      `)
-      .eq('id', syncLogEntry.reference_id)
-      .single();
-
-    if (orderError) {
-      throw new Error(`Failed to fetch dispatch order: ${orderError.message}`);
-    }
-
-    if (!dispatchOrder) {
-      throw new Error('Dispatch order not found');
-    }
-
-    // Validate required Sage codes
-    if (!dispatchOrder.branches?.sage_code) {
-      throw new Error(`Branch ${dispatchOrder.branches.name} missing sage_code`);
-    }
-
-    const invalidItems = dispatchOrder.dispatch_items.filter(item => !item.formulations?.sage_code);
-    if (invalidItems.length > 0) {
-      throw new Error(`${invalidItems.length} items missing sage_code: ${invalidItems.map(i => i.formulations.name).join(', ')}`);
-    }
-
-    // Prepare Sage transaction data for customer invoice
-    const sageTransaction = {
-      transactionType: 'CUSTOMER_INVOICE',
-      transactionDate: dispatchOrder.delivered_at || new Date().toISOString().split('T')[0],
-      reference: `DISPATCH-${dispatchOrder.dispatch_number}`,
-      customer: {
-        code: dispatchOrder.branches.sage_code,
-        name: dispatchOrder.branches.name,
-        address: dispatchOrder.branches.address,
-        contactPerson: dispatchOrder.branches.contact_person,
-        phone: dispatchOrder.branches.phone
-      },
-      lines: dispatchOrder.dispatch_items.map(item => ({
-        stockCode: item.formulations.sage_code,
-        description: `${item.formulations.name} - ${item.batch_number || 'No Batch'}`,
-        quantity: item.quantity,
-        unit: item.formulations.batch_unit || 'kg',
-        unitPrice: item.unit_price,
-        lineTotal: item.line_total,
-        batchNumber: item.batch_number,
-        formulation: item.formulations.name
-      })),
-      totalAmount: dispatchOrder.total_value,
-      totalWeight: dispatchOrder.total_weight,
-      vehicle: dispatchOrder.vehicle_number,
-      driver: dispatchOrder.driver_name,
-      warehouse: dispatchOrder.warehouses?.name || 'Main Warehouse',
-      notes: `Dispatch ${dispatchOrder.dispatch_number} to ${dispatchOrder.branches.name} - ${dispatchOrder.delivery_notes || 'Auto-posted from MES'}`,
-      deliveryDate: dispatchOrder.delivered_at,
-      preparedBy: dispatchOrder.prepared_by,
-      approvedBy: dispatchOrder.approved_by
-    };
-
-    console.log(`Posting dispatch delivery to Sage: ${JSON.stringify(sageTransaction, null, 2)}`);
-
-    // Post to Sage Pastel as customer invoice/delivery note
-    const sageResponse = await sageClient.postCustomerInvoice(sageTransaction);
-
-    // Update sync log with success
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'success',
-        message: `Dispatch ${dispatchOrder.dispatch_number} to ${dispatchOrder.branches.name} posted to Sage successfully`,
-        sage_response: sageResponse,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    console.log(`✅ Dispatch ${dispatchOrder.dispatch_number} successfully posted to Sage`);
-    return sageResponse;
-
-  } catch (error) {
-    console.error(`❌ Error processing dispatch delivery:`, error);
-    
-    // Update sync log with error
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'failed',
-        message: `Failed to post dispatch to Sage: ${error.message}`,
-        error_details: {
-          error: error.message,
-          stack: error.stack,
-          timestamp: new Date().toISOString()
-        },
-        retry_count: syncLogEntry.retry_count + 1,
-        next_retry_at: new Date(Date.now() + (5 * 60 * 1000)).toISOString(), // Retry in 5 minutes
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    throw error;
-  }
-}
-
-// Process all pending dispatch delivery events
-async function processPendingDispatchEvents() {
-  try {
-    console.log('🔍 Checking for pending dispatch delivery events...');
-    
-    const { data: pendingEvents, error } = await supabase
-      .from('sync_log')
-      .select('*')
-      .eq('event_type', 'dispatch_delivered')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(10); // Process in batches
-
-    if (error) {
-      throw new Error(`Failed to fetch pending events: ${error.message}`);
-    }
-
-    if (!pendingEvents || pendingEvents.length === 0) {
-      console.log('✅ No pending dispatch delivery events found');
-      return;
-    }
-
-    console.log(`📦 Found ${pendingEvents.length} pending dispatch delivery events`);
-
-    // Process each event
-    for (const event of pendingEvents) {
-      try {
-        await handleDispatchDelivered(event);
-      } catch (error) {
-        console.error(`Failed to process event ${event.id}:`, error.message);
-        // Continue with next event
-      }
-    }
-
-    console.log('✅ Dispatch delivery events processing complete');
-
-  } catch (error) {
-    console.error('❌ Error in processPendingDispatchEvents:', error);
-  }
-}
-
-// Export for use in bridge worker
-module.exports = {
-  handleDispatchDelivered,
-  processPendingDispatchEvents
+const BRANCH_WAREHOUSE_MAP = {
+  'GLE0002': 36, 'MAR0001': 8,  'MAS0001': 9,  'BUL0001': 3,
+  'DAN0002': 32, 'SHO0001': 11, 'KAG0001': 5,  'MAK0001': 7,
+  'MBU0001': 23, 'MAZ00001': 28,'EPW0001': 27, 'HAT0001': 35,
+  'CHK0001': 40, 'MAINDOM0002': 38, 'DOM0002': 37, 'NGE0001': 10,
+  'GWE0001': 44, 'MTR0002': 21, 'CHR0002': 43, 'FCS0001': 26,
+  'AMT0002': 2,  'MSA0002': 31, 'SOU0001': 41, 'ZVI0001': 24,
+  'CHI000001': 39,
 };
 
-// Run standalone if called directly
+async function handleDispatch(syncEvent) {
+  console.log('\n  → Event 4: Dispatch (Auto)');
+
+  const dispatchId = syncEvent.reference_id;
+
+  const { data: dispatch, error } = await supabase
+    .from('dispatch_orders')
+    .select(`
+      id, dispatch_number, dispatch_date, status,
+      branches ( id, name, sage_code )
+    `)
+    .eq('id', dispatchId)
+    .single();
+
+  if (error || !dispatch) throw new Error(`Dispatch not found: ${dispatchId}`);
+
+  const branchSageCode = dispatch.branches?.sage_code;
+  const destWhseLink   = BRANCH_WAREHOUSE_MAP[branchSageCode];
+
+  console.log(`  Dispatch: ${dispatch.dispatch_number}`);
+  console.log(`  Branch: ${dispatch.branches?.name} (${branchSageCode})`);
+
+  if (!destWhseLink) throw new Error(`No warehouse mapping for ${branchSageCode}`);
+
+  const { data: items, error: itemsError } = await supabase
+    .from('dispatch_items')
+    .select(`
+      id, quantity, unit_price,
+      formulations ( id, name, sage_code )
+    `)
+    .eq('dispatch_order_id', dispatchId);
+
+  if (itemsError || !items || items.length === 0) {
+    throw new Error(`No items for dispatch ${dispatch.dispatch_number}`);
+  }
+
+  let pool;
+  try {
+    pool = await sql.connect(sageConfig);
+
+    for (const item of items) {
+      const sageCode = item.formulations?.sage_code;
+      const qty      = Number(item.quantity);
+
+      if (!sageCode) {
+        console.log(`  ⚠️  No sage_code for item — skipping`);
+        continue;
+      }
+
+      const stockResult = await pool.request()
+        .input('Code', sql.VarChar, sageCode)
+        .query(`SELECT StockLink FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
+
+      if (stockResult.recordset.length === 0) {
+        console.log(`  ⚠️  ${sageCode} not found in Sage — skipping`);
+        continue;
+      }
+
+      const stockLink   = stockResult.recordset[0].StockLink;
+      const reference   = dispatch.dispatch_number.substring(0, 20);
+      const descOut     = `Dispatch to ${dispatch.branches?.name}`.substring(0, 40);
+      const descIn      = `Receipt fr DSP ${dispatch.dispatch_number}`.substring(0, 40);
+
+      console.log(`  Item: ${sageCode} — ${qty}kg to warehouse ${destWhseLink}`);
+
+      await safeWrite(
+        `Dispatch ${qty}kg of ${sageCode} to ${dispatch.branches?.name}`,
+        async () => {
+          // Issue from DSP (WhseID=20)
+          await pool.request()
+            .input('iInvJrBatchID', sql.Int,      1)
+            .input('iStockID',      sql.Int,      stockLink)
+            .input('iWarehouseID',  sql.Int,      20)
+            .input('dTrDate',       sql.DateTime, new Date(dispatch.dispatch_date))
+            .input('iTrCodeID',     sql.Int,      31)
+            .input('iGLContraID',   sql.Int,      0)
+            .input('cReference',    sql.VarChar,  reference)
+            .input('cDescription',  sql.VarChar,  descOut)
+            .input('fQtyIn',        sql.Float,    0)
+            .input('fQtyOut',       sql.Float,    qty)
+            .input('fNewCost',      sql.Float,    Number(item.unit_price || 0))
+            .input('bIsLotItem',    sql.Bit,      0)
+            .input('bIsSerialItem', sql.Bit,      0)
+            .query(`
+              INSERT INTO _etblInvJrBatchLines (
+                iInvJrBatchID, iStockID, iWarehouseID,
+                dTrDate, iTrCodeID, iGLContraID,
+                cReference, cDescription,
+                fQtyIn, fQtyOut, fNewCost,
+                bIsLotItem, bIsSerialItem
+              ) VALUES (
+                @iInvJrBatchID, @iStockID, @iWarehouseID,
+                @dTrDate, @iTrCodeID, @iGLContraID,
+                @cReference, @cDescription,
+                @fQtyIn, @fQtyOut, @fNewCost,
+                @bIsLotItem, @bIsSerialItem
+              )
+            `);
+
+          await pool.request()
+            .input('StockID', sql.Int,   stockLink)
+            .input('WhseID',  sql.Int,   20)
+            .input('QtyOut',  sql.Float, qty)
+            .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand - @QtyOut WHERE StockID = @StockID AND WhseID = @WhseID`);
+
+          // Receive into branch warehouse
+          await pool.request()
+            .input('iInvJrBatchID', sql.Int,      1)
+            .input('iStockID',      sql.Int,      stockLink)
+            .input('iWarehouseID',  sql.Int,      destWhseLink)
+            .input('dTrDate',       sql.DateTime, new Date(dispatch.dispatch_date))
+            .input('iTrCodeID',     sql.Int,      31)
+            .input('iGLContraID',   sql.Int,      0)
+            .input('cReference',    sql.VarChar,  reference)
+            .input('cDescription',  sql.VarChar,  descIn)
+            .input('fQtyIn',        sql.Float,    qty)
+            .input('fQtyOut',       sql.Float,    0)
+            .input('fNewCost',      sql.Float,    Number(item.unit_price || 0))
+            .input('bIsLotItem',    sql.Bit,      0)
+            .input('bIsSerialItem', sql.Bit,      0)
+            .query(`
+              INSERT INTO _etblInvJrBatchLines (
+                iInvJrBatchID, iStockID, iWarehouseID,
+                dTrDate, iTrCodeID, iGLContraID,
+                cReference, cDescription,
+                fQtyIn, fQtyOut, fNewCost,
+                bIsLotItem, bIsSerialItem
+              ) VALUES (
+                @iInvJrBatchID, @iStockID, @iWarehouseID,
+                @dTrDate, @iTrCodeID, @iGLContraID,
+                @cReference, @cDescription,
+                @fQtyIn, @fQtyOut, @fNewCost,
+                @bIsLotItem, @bIsSerialItem
+              )
+            `);
+
+          const branchQty = await pool.request()
+            .input('StockID', sql.Int, stockLink)
+            .input('WhseID',  sql.Int, destWhseLink)
+            .query(`SELECT idStockQtys FROM _etblStockQtys WHERE StockID = @StockID AND WhseID = @WhseID`);
+
+          if (branchQty.recordset.length > 0) {
+            await pool.request()
+              .input('StockID', sql.Int,   stockLink)
+              .input('WhseID',  sql.Int,   destWhseLink)
+              .input('QtyIn',   sql.Float, qty)
+              .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand + @QtyIn WHERE StockID = @StockID AND WhseID = @WhseID`);
+          } else {
+            await pool.request()
+              .input('StockID', sql.Int,   stockLink)
+              .input('WhseID',  sql.Int,   destWhseLink)
+              .input('QtyIn',   sql.Float, qty)
+              .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
+          }
+        }
+      );
+    }
+  } finally {
+    if (pool) await sql.close();
+  }
+}
+
+module.exports = { handleDispatch };
+
 if (require.main === module) {
-  processPendingDispatchEvents()
-    .then(() => {
-      console.log('✅ Dispatch auto handler completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Dispatch auto handler failed:', error);
-      process.exit(1);
-    });
+  handleDispatch({ reference_id: process.argv[2] })
+    .then(() => { console.log('✅ Done'); process.exit(0); })
+    .catch((err) => { console.error('❌', err.message); process.exit(1); });
 }

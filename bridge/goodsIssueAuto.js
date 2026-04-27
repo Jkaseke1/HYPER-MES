@@ -1,166 +1,111 @@
 // goodsIssueAuto.js - Event 2: Material Issuance Handler
 // Reads from production_order_materials by reference_id from sync_log
-// Posts to Sage Pastel as material consumption/cost of goods sold
+// Posts to Sage Pastel via direct MSSQL: journal line + QtyOnHand decrement
 
-const { supabase } = require('../lib/supabase');
-const sageClient = require('../lib/sageClient');
+const { sql, sageConfig, supabase, DRY_RUN, safeWrite } = require('./lib/db');
 
-async function handleGoodsIssued(syncLogEntry) {
-  try {
-    console.log(`Processing material issuance for sync_log ID: ${syncLogEntry.id}`);
-    
-    // Get production order material details
-    const { data: materialIssue, error: issueError } = await supabase
-      .from('production_order_materials')
-      .select(`
-        *,
-        production_orders(
-          batch_number,
-          formulations(name, sage_code),
-          machines(name)
-        ),
-        raw_materials(name, code, sage_code)
-      `)
-      .eq('id', syncLogEntry.reference_id)
-      .single();
+async function handleGoodsIssue(syncEvent) {
+  console.log('\n  → Event 2: Goods Issue (Auto)');
 
-    if (issueError) {
-      throw new Error(`Failed to fetch material issue: ${issueError.message}`);
-    }
+  const materialId = syncEvent.reference_id;
 
-    if (!materialIssue) {
-      throw new Error('Material issue not found');
-    }
+  const { data: material, error } = await supabase
+    .from('production_order_materials')
+    .select('id, actual_qty, unit_cost, issued_at, production_order_id, raw_material_id')
+    .eq('id', materialId)
+    .single();
 
-    // Validate required Sage codes
-    if (!materialIssue.raw_materials?.sage_code) {
-      throw new Error(`Raw material ${materialIssue.raw_materials.name} missing sage_code`);
-    }
-
-    if (!materialIssue.production_orders?.formulations?.sage_code) {
-      throw new Error(`Formulation ${materialIssue.production_orders.formulations.name} missing sage_code`);
-    }
-
-    // Prepare Sage transaction data for material consumption
-    const sageTransaction = {
-      transactionType: 'MATERIAL_ISSUE',
-      transactionDate: materialIssue.issued_at || new Date().toISOString().split('T')[0],
-      reference: `BATCH-${materialIssue.production_orders.batch_number}`,
-      costCenter: 'PRODUCTION', // Can be configured per machine/department
-      lines: [{
-        stockCode: materialIssue.raw_materials.sage_code,
-        description: `Material issue for ${materialIssue.production_orders.formulations.name}`,
-        quantity: materialIssue.actual_qty,
-        unitCost: materialIssue.unit_cost,
-        totalCost: materialIssue.total_cost,
-        batchNumber: materialIssue.production_orders.batch_number,
-        machine: materialIssue.production_orders.machines?.name || 'Unknown',
-        issuedBy: syncLogEntry.details?.operator_id || 'System'
-      }],
-      notes: `Material automatically issued for batch ${materialIssue.production_orders.batch_number} - ${materialIssue.production_orders.formulations.name}`,
-      productionOrder: materialIssue.production_orders.batch_number,
-      formulation: materialIssue.production_orders.formulations.name
-    };
-
-    console.log(`Posting material issue to Sage: ${JSON.stringify(sageTransaction, null, 2)}`);
-
-    // Post to Sage Pastel as inventory issue/cost of goods sold
-    const sageResponse = await sageClient.postMaterialIssue(sageTransaction);
-
-    // Update sync log with success
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'success',
-        message: `Material issue for batch ${materialIssue.production_orders.batch_number} posted to Sage successfully`,
-        sage_response: sageResponse,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    console.log(`✅ Material issue for batch ${materialIssue.production_orders.batch_number} successfully posted to Sage`);
-    return sageResponse;
-
-  } catch (error) {
-    console.error(`❌ Error processing material issuance:`, error);
-    
-    // Update sync log with error
-    await supabase
-      .from('sync_log')
-      .update({
-        status: 'failed',
-        message: `Failed to post material issue to Sage: ${error.message}`,
-        error_details: {
-          error: error.message,
-          stack: error.stack,
-          timestamp: new Date().toISOString()
-        },
-        retry_count: syncLogEntry.retry_count + 1,
-        next_retry_at: new Date(Date.now() + (5 * 60 * 1000)).toISOString(), // Retry in 5 minutes
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', syncLogEntry.id);
-
-    throw error;
+  if (error || !material) {
+    throw new Error(`Material not found: ${materialId}`);
   }
-}
 
-// Process all pending material issuance events
-async function processPendingGoodsIssueEvents() {
+  const { data: order } = await supabase
+    .from('production_orders')
+    .select('id, batch_number')
+    .eq('id', material.production_order_id)
+    .single();
+
+  const { data: rm } = await supabase
+    .from('raw_materials')
+    .select('id, name, sage_code')
+    .eq('id', material.raw_material_id)
+    .single();
+
+  const sageCode    = rm?.sage_code;
+  const batchNumber = order?.batch_number;
+  const actualQty   = Number(material.actual_qty || 0);
+
+  console.log(`  Batch: ${batchNumber}`);
+  console.log(`  Material: ${sageCode} — ${actualQty}kg`);
+
+  if (!sageCode) throw new Error(`No sage_code for material ${materialId}`);
+  if (actualQty <= 0) throw new Error(`Invalid quantity: ${actualQty}`);
+
+  let pool;
   try {
-    console.log('🔍 Checking for pending material issuance events...');
-    
-    const { data: pendingEvents, error } = await supabase
-      .from('sync_log')
-      .select('*')
-      .eq('event_type', 'materials_issued')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(10); // Process in batches
+    pool = await sql.connect(sageConfig);
 
-    if (error) {
-      throw new Error(`Failed to fetch pending events: ${error.message}`);
+    const stockResult = await pool.request()
+      .input('Code', sql.VarChar, sageCode)
+      .query(`SELECT StockLink FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
+
+    if (stockResult.recordset.length === 0) {
+      throw new Error(`${sageCode} not found in Sage`);
     }
 
-    if (!pendingEvents || pendingEvents.length === 0) {
-      console.log('✅ No pending material issuance events found');
-      return;
-    }
+    const stockLink   = stockResult.recordset[0].StockLink;
+    const reference   = `WO-${batchNumber}`.substring(0, 20);
+    const description = `Issue to ${batchNumber}`.substring(0, 40);
 
-    console.log(`📦 Found ${pendingEvents.length} pending material issuance events`);
+    await safeWrite(
+      `Issue ${actualQty}kg of ${sageCode} for ${batchNumber}`,
+      async () => {
+        await pool.request()
+          .input('iInvJrBatchID', sql.Int,      2)
+          .input('iStockID',      sql.Int,      stockLink)
+          .input('iWarehouseID',  sql.Int,      18)
+          .input('dTrDate',       sql.DateTime, new Date())
+          .input('iTrCodeID',     sql.Int,      31)
+          .input('iGLContraID',   sql.Int,      0)
+          .input('cReference',    sql.VarChar,  reference)
+          .input('cDescription',  sql.VarChar,  description)
+          .input('fQtyIn',        sql.Float,    0)
+          .input('fQtyOut',       sql.Float,    actualQty)
+          .input('fNewCost',      sql.Float,    Number(material.unit_cost || 0))
+          .input('bIsLotItem',    sql.Bit,      0)
+          .input('bIsSerialItem', sql.Bit,      0)
+          .query(`
+            INSERT INTO _etblInvJrBatchLines (
+              iInvJrBatchID, iStockID, iWarehouseID,
+              dTrDate, iTrCodeID, iGLContraID,
+              cReference, cDescription,
+              fQtyIn, fQtyOut, fNewCost,
+              bIsLotItem, bIsSerialItem
+            ) VALUES (
+              @iInvJrBatchID, @iStockID, @iWarehouseID,
+              @dTrDate, @iTrCodeID, @iGLContraID,
+              @cReference, @cDescription,
+              @fQtyIn, @fQtyOut, @fNewCost,
+              @bIsLotItem, @bIsSerialItem
+            )
+          `);
 
-    // Process each event
-    for (const event of pendingEvents) {
-      try {
-        await handleGoodsIssued(event);
-      } catch (error) {
-        console.error(`Failed to process event ${event.id}:`, error.message);
-        // Continue with next event
+        await pool.request()
+          .input('StockID', sql.Int,   stockLink)
+          .input('WhseID',  sql.Int,   18)
+          .input('QtyOut',  sql.Float, actualQty)
+          .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand - @QtyOut WHERE StockID = @StockID AND WhseID = @WhseID`);
       }
-    }
-
-    console.log('✅ Material issuance events processing complete');
-
-  } catch (error) {
-    console.error('❌ Error in processPendingGoodsIssueEvents:', error);
+    );
+  } finally {
+    if (pool) await sql.close();
   }
 }
 
-// Export for use in bridge worker
-module.exports = {
-  handleGoodsIssued,
-  processPendingGoodsIssueEvents
-};
+module.exports = { handleGoodsIssue };
 
-// Run standalone if called directly
 if (require.main === module) {
-  processPendingGoodsIssueEvents()
-    .then(() => {
-      console.log('✅ Material issue auto handler completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Material issue auto handler failed:', error);
-      process.exit(1);
-    });
+  handleGoodsIssue({ reference_id: process.argv[2] })
+    .then(() => { console.log('✅ Done'); process.exit(0); })
+    .catch((err) => { console.error('❌', err.message); process.exit(1); });
 }

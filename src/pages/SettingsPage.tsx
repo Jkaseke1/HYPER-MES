@@ -92,7 +92,7 @@ export default function SettingsPage() {
       branches: { name: '', code: '', address: '', contact_person: '', phone: '', is_active: true },
       warehouses: { name: '', code: '', type: 'raw_material', branch_id: '', location: '', is_active: true },
       machines: { name: '', code: '', type: '', capacity_per_hour: 0, capacity_unit: 'kg', status: 'operational' },
-      suppliers: { name: '', code: '', contact_person: '', email: '', phone: '', address: '', payment_terms: '', is_active: true },
+      suppliers: { name: '', code: '', sage_code: '', contact_person: '', email: '', phone: '', address: '', payment_terms: '', is_active: true },
       cost_rates: {},
       profile: {},
     };
@@ -237,11 +237,15 @@ export default function SettingsPage() {
 
         {tab === 'suppliers' && (
           <table className="w-full">
-            <thead className="bg-slate-50"><tr><th className={thCls}>Code</th><th className={thCls}>Name</th><th className={thCls}>Contact</th><th className={thCls}>Email</th><th className={thCls}>Phone</th><th className={thCls}>Active</th><th className={thCls}>Actions</th></tr></thead>
+            <thead className="bg-slate-50"><tr><th className={thCls}>MES Code</th><th className={thCls}>Sage Code</th><th className={thCls}>Name</th><th className={thCls}>Contact</th><th className={thCls}>Email</th><th className={thCls}>Phone</th><th className={thCls}>Active</th><th className={thCls}>Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSuppliers.map(s => (
-                <tr key={s.id} className="hover:bg-slate-50"><td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{s.code}</span></td><td className={`${tdCls} font-medium`}>{s.name}</td><td className={tdCls}>{s.contact_person}</td><td className={tdCls}>{s.email}</td><td className={tdCls}>{s.phone}</td><td className={tdCls}><ActiveDot active={s.is_active} /></td>
-                  <td className={tdCls}><div className="flex gap-1"><button onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-teal-600"><Edit2 className="w-4 h-4" /></button><button onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></div></td></tr>
+                <tr key={s.id} className="hover:bg-slate-50">
+                  <td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{s.code}</span></td>
+                  <td className={tdCls}>{s.sage_code ? <span className="font-mono text-xs bg-teal-50 text-teal-700 px-2 py-0.5 rounded border border-teal-200">{s.sage_code}</span> : <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Missing</span>}</td>
+                  <td className={`${tdCls} font-medium`}>{s.name}</td><td className={tdCls}>{s.contact_person}</td><td className={tdCls}>{s.email}</td><td className={tdCls}>{s.phone}</td><td className={tdCls}><ActiveDot active={s.is_active} /></td>
+                  <td className={tdCls}><div className="flex gap-1"><button onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-teal-600"><Edit2 className="w-4 h-4" /></button><button onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></div></td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -405,7 +409,11 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Name</label><input value={form.name || ''} onChange={e => set('name', e.target.value)} className={inputCls} /></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Code</label><input value={form.code || ''} onChange={e => set('code', e.target.value)} className={inputCls} /></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">MES Code</label><input value={form.code || ''} onChange={e => set('code', e.target.value)} className={inputCls} /></div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Sage Code <span className="text-xs font-normal text-slate-500">(required for Sage sync)</span></label>
+            <input value={form.sage_code || ''} onChange={e => set('sage_code', e.target.value)} placeholder="e.g. SUP001" className={inputCls} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Contact Person</label><input value={form.contact_person || ''} onChange={e => set('contact_person', e.target.value)} className={inputCls} /></div>

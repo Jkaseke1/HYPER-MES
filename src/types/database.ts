@@ -50,6 +50,7 @@ export interface Supplier {
   id: string;
   name: string;
   code: string;
+  sage_code: string | null;
   contact_person: string;
   email: string;
   phone: string;
