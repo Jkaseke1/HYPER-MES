@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Eye, Play, CheckCircle, AlertTriangle, Package, Clock, Factory } from 'lucide-react';
+import { Plus, Search, Eye, Play, CheckCircle, AlertTriangle, Package, Clock, Factory, Send, ThumbsUp, XCircle, RotateCcw, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,8 @@ import StatCard from '../components/ui/StatCard';
 import { validateStockAvailability, StockError } from '../lib/stockValidation';
 import StockErrorBanner from '../components/stock/StockErrorBanner';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
+import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
+import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
 
 /* ── Types ── */
 interface MacropackBom {
@@ -39,6 +41,13 @@ interface ManufactureOrder {
   manufactured_by: string | null;
   status: string;
   created_at: string;
+  submitted_by?: string | null;
+  submitted_at?: string | null;
+  rm_approved_by?: string | null;
+  rm_approved_at?: string | null;
+  supervisor_approved_by?: string | null;
+  supervisor_approved_at?: string | null;
+  rejection_reason?: string | null;
   macropack_boms?: { macropack_code: string; macropack_name: string };
 }
 
@@ -64,10 +73,15 @@ const TABS = ['Manufacturing Orders', 'Macropack BOMs'] as const;
 type TabType = typeof TABS[number];
 
 const STATUS_STYLES: Record<string, string> = {
-  PLANNED: 'bg-slate-100 text-slate-700 border-slate-200',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700 border-blue-200',
-  COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  DRAFT: 'bg-slate-100 text-slate-600 border-slate-200',
+  PENDING_RM: 'bg-amber-50 text-amber-700 border-amber-200',
+  PENDING_SUPERVISOR: 'bg-amber-50 text-amber-700 border-amber-200',
+  APPROVED: 'bg-blue-50 text-blue-700 border-blue-200',
+  PLANNED: 'bg-blue-50 text-blue-700 border-blue-200',
+  IN_PROGRESS: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  COMPLETED: 'bg-teal-50 text-teal-700 border-teal-200',
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
+  REJECTED: 'bg-red-50 text-red-700 border-red-200',
 };
 
 const emptyBomForm = {
@@ -85,7 +99,7 @@ const emptyOrderForm = {
 };
 
 export default function MacropackManufacturingPage() {
-  useAuth();
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('Manufacturing Orders');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,6 +134,19 @@ export default function MacropackManufacturingPage() {
   const [stockErrors, setStockErrors] = useState<StockError[]>([]);
   const [showStockOverride, setShowStockOverride] = useState(false);
   const [pendingCompleteCallback, setPendingCompleteCallback] = useState<(() => Promise<void>) | null>(null);
+
+  // Approval
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [approvalSaving, setApprovalSaving] = useState(false);
+
+  // Packaging declaration
+  const [showPackagingModal, setShowPackagingModal] = useState(false);
+  const [bomPackagingItems, setBomPackagingItems] = useState<any[]>([]);
+
+  // BOM packaging items edit
+  const [bomPackagingRows, setBomPackagingRows] = useState<{ item_code: string; description: string; unit: string; expected_qty_per_unit: string }[]>([]);
+  const [bomPackagingTab, setBomPackagingTab] = useState<'ingredients' | 'packaging'>('ingredients');
 
   async function fetchData() {
     setLoading(true);
@@ -163,7 +190,7 @@ export default function MacropackManufacturingPage() {
 
   const orderStats = useMemo(() => ({
     total: orders.length,
-    planned: orders.filter(o => o.status === 'PLANNED').length,
+    pendingApproval: orders.filter(o => o.status === 'PENDING_RM' || o.status === 'PENDING_SUPERVISOR').length,
     inProgress: orders.filter(o => o.status === 'IN_PROGRESS').length,
     completed: orders.filter(o => o.status === 'COMPLETED').length,
   }), [orders]);
@@ -201,7 +228,7 @@ export default function MacropackManufacturingPage() {
         planned_units: parseInt(orderForm.planned_units),
         manufacture_date: orderForm.manufacture_date,
         manufactured_by: user?.id || null,
-        status: 'PLANNED',
+        status: 'DRAFT',
       });
       if (error) throw error;
       setNewOrderModalOpen(false);
@@ -213,6 +240,38 @@ export default function MacropackManufacturingPage() {
       alert(`Error: ${error.message}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /* ── Approval handlers ── */
+  async function handleApprovalAction(action: 'submit' | 'approve_rm' | 'approve_supervisor' | 'reject' | 'revise') {
+    if (!selectedOrder) return;
+    setApprovalSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let update: any = {};
+      if (action === 'submit') {
+        update = { status: 'PENDING_RM', submitted_by: user?.id, submitted_at: new Date().toISOString() };
+      } else if (action === 'approve_rm') {
+        update = { status: 'PENDING_SUPERVISOR', rm_approved_by: user?.id, rm_approved_at: new Date().toISOString() };
+      } else if (action === 'approve_supervisor') {
+        update = { status: 'APPROVED', supervisor_approved_by: user?.id, supervisor_approved_at: new Date().toISOString() };
+      } else if (action === 'reject') {
+        if (!rejectionReason.trim()) { alert('Please provide a rejection reason.'); setApprovalSaving(false); return; }
+        update = { status: 'REJECTED', rejection_reason: rejectionReason };
+      } else if (action === 'revise') {
+        update = { status: 'DRAFT', rejection_reason: null, rm_approved_by: null, rm_approved_at: null, supervisor_approved_by: null, supervisor_approved_at: null, submitted_by: null, submitted_at: null };
+      }
+      const { error } = await supabase.from('macropack_manufacture_orders').update(update).eq('id', selectedOrder.id);
+      if (error) throw error;
+      setShowRejectModal(false);
+      setRejectionReason('');
+      setOrderDetailModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setApprovalSaving(false);
     }
   }
 
@@ -322,11 +381,30 @@ export default function MacropackManufacturingPage() {
       return;
     }
 
-    setSaving(true);
-    await completeOrderTransaction();
+    // Load BOM packaging items then show packaging declaration
+    const { data: pkgItems } = await supabase
+      .from('macropack_bom_packaging')
+      .select('item_code, description, unit, expected_qty_per_unit')
+      .eq('bom_id', selectedOrder.macropack_bom_id);
+
+    const planned = selectedOrder.planned_units;
+    const mapped = (pkgItems || []).map((p: any) => ({
+      item_code: p.item_code,
+      description: p.description,
+      unit: p.unit,
+      expected_qty: p.expected_qty_per_unit * planned,
+    }));
+    setBomPackagingItems(mapped);
+    setShowPackagingModal(true);
   }
 
-  async function completeOrderTransaction() {
+  async function handlePackagingConfirm(actuals: PackagingActual[], notes: string) {
+    setShowPackagingModal(false);
+    setSaving(true);
+    await completeOrderTransaction(actuals, notes);
+  }
+
+  async function completeOrderTransaction(packagingActuals: PackagingActual[] = [], packagingNotes: string = '') {
     if (!selectedOrder) return;
     setSaving(true);
     try {
@@ -354,6 +432,23 @@ export default function MacropackManufacturingPage() {
           .from('macropack_manufacture_issues')
           .insert(issueData);
         if (issueError) throw issueError;
+      }
+
+      // Save packaging declaration
+      if (packagingActuals.length > 0 || packagingNotes) {
+        const pkgData = packagingActuals
+          .filter(a => a.actual_qty !== '')
+          .map(a => ({
+            order_id: selectedOrder.id,
+            item_code: a.item_code,
+            description: a.description,
+            expected_qty: a.expected_qty,
+            actual_qty: parseFloat(String(a.actual_qty)) || 0,
+            notes: packagingNotes || null,
+          }));
+        if (pkgData.length > 0) {
+          await supabase.from('macropack_packaging_issues').insert(pkgData);
+        }
       }
 
       // Update order status
@@ -390,12 +485,18 @@ export default function MacropackManufacturingPage() {
 
   async function openViewBom(bom: MacropackBom) {
     setSelectedBom(bom);
-    const { data } = await supabase
-      .from('macropack_bom_ingredients')
-      .select('*, raw_materials(id, code, name)')
-      .eq('macropack_bom_id', bom.id)
-      .order('created_at');
-    setSelectedBomIngredients(data || []);
+    setBomPackagingTab('ingredients');
+    const [ingsRes, pkgRes] = await Promise.all([
+      supabase.from('macropack_bom_ingredients').select('*, raw_materials(id, code, name)').eq('macropack_bom_id', bom.id).order('created_at'),
+      supabase.from('macropack_bom_packaging').select('*').eq('bom_id', bom.id),
+    ]);
+    setSelectedBomIngredients(ingsRes.data || []);
+    setBomPackagingRows((pkgRes.data || []).map((p: any) => ({
+      item_code: p.item_code,
+      description: p.description,
+      unit: p.unit,
+      expected_qty_per_unit: String(p.expected_qty_per_unit),
+    })));
     setViewBomModalOpen(true);
   }
 
@@ -496,7 +597,7 @@ export default function MacropackManufacturingPage() {
       {activeTab === 'Manufacturing Orders' && (
         <div className="grid grid-cols-4 gap-4">
           <StatCard title="Total Orders" value={orderStats.total} icon={Package} />
-          <StatCard title="Planned" value={orderStats.planned} icon={Clock} color="slate" />
+          <StatCard title="Pending Approval" value={orderStats.pendingApproval} icon={Clock} color="amber" />
           <StatCard title="In Progress" value={orderStats.inProgress} icon={Factory} color="blue" />
           <StatCard title="Completed" value={orderStats.completed} icon={CheckCircle} color="emerald" />
         </div>
@@ -748,16 +849,77 @@ export default function MacropackManufacturingPage() {
               </table>
             </div>
 
+            {/* Rejection reason callout */}
+            {selectedOrder.status === 'REJECTED' && selectedOrder.rejection_reason && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-red-700">Rejected</p>
+                  <p className="text-xs text-red-600 mt-0.5">{selectedOrder.rejection_reason}</p>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             {selectedOrder.status !== 'COMPLETED' && selectedOrder.status !== 'CANCELLED' && (
-              <div className="flex justify-end gap-3 pt-2">
-                {selectedOrder.status === 'PLANNED' && (
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                {/* DRAFT: creator submits */}
+                {selectedOrder.status === 'DRAFT' && (
+                  <button onClick={() => handleApprovalAction('submit')} disabled={approvalSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+                    {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Submit for Approval
+                  </button>
+                )}
+
+                {/* REJECTED: creator can revise */}
+                {selectedOrder.status === 'REJECTED' && (
+                  <button onClick={() => handleApprovalAction('revise')} disabled={approvalSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
+                    <RotateCcw className="w-4 h-4" /> Revise &amp; Resubmit
+                  </button>
+                )}
+
+                {/* PENDING_RM: RM Manager approves/rejects */}
+                {selectedOrder.status === 'PENDING_RM' && (profile?.role === 'raw_material_manager' || profile?.role === 'admin') && (
+                  <>
+                    <button onClick={() => handleApprovalAction('approve_rm')} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                      Approve (RM)
+                    </button>
+                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                      <XCircle className="w-4 h-4" /> Reject
+                    </button>
+                  </>
+                )}
+
+                {/* PENDING_SUPERVISOR: Supervisor approves/rejects */}
+                {selectedOrder.status === 'PENDING_SUPERVISOR' && (profile?.role === 'supervisor' || profile?.role === 'production_manager' || profile?.role === 'admin') && (
+                  <>
+                    <button onClick={() => handleApprovalAction('approve_supervisor')} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                      Approve (Supervisor)
+                    </button>
+                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                      <XCircle className="w-4 h-4" /> Reject
+                    </button>
+                  </>
+                )}
+
+                {/* APPROVED: Start Production */}
+                {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
                   <button onClick={handleStartOrder} disabled={saving}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                     <Play className="w-4 h-4" /> {saving ? 'Starting...' : 'Start Production'}
                   </button>
                 )}
-                {(selectedOrder.status === 'IN_PROGRESS' || selectedOrder.status === 'PLANNED') && (
+
+                {/* IN_PROGRESS: Complete */}
+                {selectedOrder.status === 'IN_PROGRESS' && (
                   <button onClick={handleCompleteOrder} disabled={saving}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
                     <CheckCircle className="w-4 h-4" /> {saving ? 'Completing...' : 'Complete Order'}
@@ -859,53 +1021,139 @@ export default function MacropackManufacturingPage() {
         {selectedBom && (
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-xs text-slate-500">Version</span>
-                <p className="font-medium text-slate-800">v{selectedBom.version}</p>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500">Status</span>
-                <p>{selectedBom.is_active
-                  ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
-                  : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
-                }</p>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500">Ingredients</span>
-                <p className="font-medium text-slate-800">{selectedBomIngredients.length}</p>
-              </div>
+              <div><span className="text-xs text-slate-500">Version</span><p className="font-medium text-slate-800">v{selectedBom.version}</p></div>
+              <div><span className="text-xs text-slate-500">Status</span><p>{selectedBom.is_active
+                ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
+                : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>}</p></div>
+              <div><span className="text-xs text-slate-500">Ingredients</span><p className="font-medium text-slate-800">{selectedBomIngredients.length}</p></div>
             </div>
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-slate-600">Code</th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-600">Ingredient</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Grams / Unit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {selectedBomIngredients.length === 0 ? (
-                    <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No ingredients</td></tr>
-                  ) : selectedBomIngredients.map(ing => (
-                    <tr key={ing.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono text-slate-700">{ing.raw_materials?.code}</td>
-                      <td className="px-3 py-2 text-slate-600">{ing.raw_materials?.name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">{Number(ing.grams_per_unit).toFixed(4)}</td>
+
+            {/* BOM tabs: Ingredients | Packaging */}
+            <div className="flex gap-1 border-b border-slate-200">
+              {(['ingredients', 'packaging'] as const).map(t => (
+                <button key={t} onClick={() => setBomPackagingTab(t)}
+                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors capitalize ${bomPackagingTab === t ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                  {t === 'ingredients' ? `Ingredients (${selectedBomIngredients.length})` : `Packaging (${bomPackagingRows.length})`}
+                </button>
+              ))}
+            </div>
+
+            {bomPackagingTab === 'ingredients' && (
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Code</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Ingredient</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-600">Grams / Unit</th>
                     </tr>
-                  ))}
-                  <tr className="bg-slate-50 font-semibold border-t border-slate-200">
-                    <td colSpan={2} className="px-3 py-2 text-right text-slate-700">Total grams / unit</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-800">
-                      {selectedBomIngredients.reduce((s, i) => s + Number(i.grams_per_unit), 0).toFixed(4)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedBomIngredients.length === 0 ? (
+                      <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No ingredients</td></tr>
+                    ) : selectedBomIngredients.map(ing => (
+                      <tr key={ing.id} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-mono text-slate-700">{ing.raw_materials?.code}</td>
+                        <td className="px-3 py-2 text-slate-600">{ing.raw_materials?.name}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">{Number(ing.grams_per_unit).toFixed(4)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 font-semibold border-t border-slate-200">
+                      <td colSpan={2} className="px-3 py-2 text-right text-slate-700">Total grams / unit</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{selectedBomIngredients.reduce((s, i) => s + Number(i.grams_per_unit), 0).toFixed(4)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {bomPackagingTab === 'packaging' && (
+              <div className="space-y-3">
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Item Code</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Description</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-600">Qty / Unit</th>
+                        <th className="px-3 py-2 text-left font-medium text-slate-600">Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {bomPackagingRows.length === 0 ? (
+                        <tr><td colSpan={4} className="px-3 py-4 text-center text-slate-400">No packaging items defined</td></tr>
+                      ) : bomPackagingRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-mono text-slate-700">{row.item_code}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.description}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-800">{row.expected_qty_per_unit}</td>
+                          <td className="px-3 py-2 text-slate-500">{row.unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Add packaging item inline */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-600">Add Packaging Item</p>
+                  {(() => {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <input placeholder="Code" className="w-24 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-code" />
+                        <input placeholder="Description" className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-desc" />
+                        <input placeholder="Qty/unit" type="number" className="w-20 border border-slate-300 rounded px-2 py-1 text-xs text-right" id="pkg-qty" />
+                        <input placeholder="Unit" className="w-16 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-unit" defaultValue="units" />
+                        <button type="button" onClick={async () => {
+                          const code = (document.getElementById('pkg-code') as HTMLInputElement)?.value.trim();
+                          const desc = (document.getElementById('pkg-desc') as HTMLInputElement)?.value.trim();
+                          const qty = parseFloat((document.getElementById('pkg-qty') as HTMLInputElement)?.value || '0');
+                          const unit = (document.getElementById('pkg-unit') as HTMLInputElement)?.value.trim() || 'units';
+                          if (!code || !desc || !qty) { alert('Fill in Code, Description and Qty/unit'); return; }
+                          const { error } = await supabase.from('macropack_bom_packaging').insert({ bom_id: selectedBom.id, item_code: code, description: desc, unit, expected_qty_per_unit: qty });
+                          if (error) { alert(error.message); return; }
+                          const { data } = await supabase.from('macropack_bom_packaging').select('*').eq('bom_id', selectedBom.id);
+                          setBomPackagingRows((data || []).map((p: any) => ({ item_code: p.item_code, description: p.description, unit: p.unit, expected_qty_per_unit: String(p.expected_qty_per_unit) })));
+                        }} className="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">Add</button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
+
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-base font-bold text-slate-800">Reject Manufacturing Order</h3>
+            <textarea rows={4} value={rejectionReason} onChange={e => setRejectionReason(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              placeholder="Provide a reason for rejection..." />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => { setShowRejectModal(false); setRejectionReason(''); }}
+                className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
+              <button onClick={() => handleApprovalAction('reject')} disabled={approvalSaving || !rejectionReason.trim()}
+                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {approvalSaving ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Packaging Declaration Modal */}
+      <PackagingDeclarationModal
+        open={showPackagingModal}
+        onClose={() => setShowPackagingModal(false)}
+        onConfirm={handlePackagingConfirm}
+        bomPackagingItems={bomPackagingItems}
+        plannedQty={selectedOrder?.planned_units || 0}
+        rateLabel={`${selectedOrder?.planned_units || 0} kg planned`}
+        saving={saving}
+      />
 
       {/* Stock Override Modal */}
       <StockOverrideModal

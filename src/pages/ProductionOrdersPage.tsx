@@ -6,6 +6,8 @@ import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, Produ
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
+import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
+import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
 
 interface OrderMaterial {
   id: string; 
@@ -108,6 +110,8 @@ export default function ProductionOrdersPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [bomPreview, setBomPreview] = useState<any[]>([]);
   const [selectedFormulation, setSelectedFormulation] = useState<Formulation | null>(null);
+  const [showPkgModal, setShowPkgModal] = useState(false);
+  const [pkgBomItems, setPkgBomItems] = useState<any[]>([]);
 
   // Delete production order with status protection
   const deleteOrder = async (order: ProductionOrder) => {
@@ -627,8 +631,39 @@ export default function ProductionOrdersPage() {
     }
   };
 
+  /* ── Production completion with packaging ── */
+  async function handleCompletionRequest() {
+    if (!selected) return;
+    if (selected.status !== 'in_progress') {
+      setWorkflowError('Cannot complete — production must be in progress.');
+      return;
+    }
+    if (output.actual_qty <= 0) {
+      setWorkflowError('Cannot complete — enter actual output quantity first.');
+      return;
+    }
+    const tonnesOut = output.actual_qty / 1000;
+    const { data } = await supabase
+      .from('production_bom_packaging')
+      .select('item_code, description, unit, expected_qty_per_tonne')
+      .eq('formulation_id', selected.formulation_id);
+    const items = (data || []).map((p: any) => ({
+      item_code: p.item_code,
+      description: p.description,
+      unit: p.unit,
+      expected_qty: p.expected_qty_per_tonne * tonnesOut,
+    }));
+    setPkgBomItems(items);
+    setShowPkgModal(true);
+  }
+
+  async function handlePkgConfirm(actuals: PackagingActual[], notes: string) {
+    setShowPkgModal(false);
+    await updateStatus('completed', actuals, notes);
+  }
+
   // Enforce workflow sequence (Issue 2)
-  const updateStatus = async (status: string) => {
+  const updateStatus = async (status: string, pkgActuals: PackagingActual[] = [], pkgNotes: string = '') => {
     if (!selected) return;
     setWorkflowError(null);
     setSaving(true);
@@ -688,6 +723,23 @@ export default function ProductionOrdersPage() {
           batch_number: selected.batch_number,
           movement_date: new Date().toISOString()
         }]);
+      }
+
+      // Save packaging declaration for completed orders
+      if (status === 'completed' && pkgActuals.length > 0) {
+        const pkgData = pkgActuals
+          .filter(a => a.actual_qty !== '')
+          .map(a => ({
+            production_order_id: selected.id,
+            item_code: a.item_code,
+            description: a.description,
+            expected_qty: a.expected_qty,
+            actual_qty: parseFloat(String(a.actual_qty)) || 0,
+            notes: pkgNotes || null,
+          }));
+        if (pkgData.length > 0) {
+          await supabase.from('production_packaging_issues').insert(pkgData);
+        }
       }
 
       setSaving(false); 
@@ -1212,7 +1264,7 @@ export default function ProductionOrdersPage() {
                 
                 {selected.status === 'in_progress' && (
                   <button
-                    onClick={() => updateStatus('completed')}
+                    onClick={handleCompletionRequest}
                     disabled={saving || output.actual_qty <= 0}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                   >
@@ -1919,7 +1971,7 @@ export default function ProductionOrdersPage() {
                 )}
                 {selected.status === 'in_progress' && (
                   <button
-                    onClick={() => updateStatus('completed')}
+                    onClick={handleCompletionRequest}
                     disabled={saving || output.actual_qty <= 0}
                     className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
                     title={output.actual_qty <= 0 ? 'Enter actual output quantity first' : 'Complete production order'}
@@ -1938,6 +1990,17 @@ export default function ProductionOrdersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Packaging Declaration Modal */}
+      <PackagingDeclarationModal
+        open={showPkgModal}
+        onClose={() => setShowPkgModal(false)}
+        onConfirm={handlePkgConfirm}
+        bomPackagingItems={pkgBomItems}
+        plannedQty={selected?.actual_qty || 0}
+        rateLabel={selected ? `${(selected.actual_qty / 1000).toFixed(3)} t actual output` : ''}
+        saving={saving}
+      />
     </div>
   );
 }
