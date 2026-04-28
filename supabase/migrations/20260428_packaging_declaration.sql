@@ -52,6 +52,11 @@ ALTER TABLE macropack_packaging_issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE production_bom_packaging ENABLE ROW LEVEL SECURITY;
 ALTER TABLE production_packaging_issues ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "auth_all_macropack_bom_pkg" ON macropack_bom_packaging;
+DROP POLICY IF EXISTS "auth_all_macropack_pkg_issues" ON macropack_packaging_issues;
+DROP POLICY IF EXISTS "auth_all_prod_bom_pkg" ON production_bom_packaging;
+DROP POLICY IF EXISTS "auth_all_prod_pkg_issues" ON production_packaging_issues;
+
 CREATE POLICY "auth_all_macropack_bom_pkg" ON macropack_bom_packaging FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "auth_all_macropack_pkg_issues" ON macropack_packaging_issues FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "auth_all_prod_bom_pkg" ON production_bom_packaging FOR ALL USING (auth.role() = 'authenticated');
