@@ -6,6 +6,22 @@ import { useAuth } from '../../context/AuthContext';
 import { canApprove } from '../../types/approval';
 import StatusBadge from '../ui/StatusBadge';
 
+const CATEGORY_META: Record<string, { label: string; pill: string }> = {
+  grn:                   { label: 'GRN',            pill: 'bg-blue-100 text-blue-700' },
+  quality_inspection:    { label: 'Quality',         pill: 'bg-purple-100 text-purple-700' },
+  production_order:      { label: 'Production',      pill: 'bg-teal-100 text-teal-700' },
+  macropack_order:       { label: 'Macropack',       pill: 'bg-orange-100 text-orange-700' },
+  dispatch_order:        { label: 'Dispatch',        pill: 'bg-indigo-100 text-indigo-700' },
+  work_order:            { label: 'Maintenance',     pill: 'bg-slate-100 text-slate-600' },
+  reconciliation_period: { label: 'Reconciliation',  pill: 'bg-emerald-100 text-emerald-700' },
+  material_transfer:     { label: 'Transfer',        pill: 'bg-amber-100 text-amber-700' },
+};
+
+const STAGE_META: Record<string, string> = {
+  PENDING_RM:         'bg-sky-100 text-sky-700',
+  PENDING_SUPERVISOR: 'bg-violet-100 text-violet-700',
+};
+
 interface PendingApproval {
   entity_type: string;
   entity_id: string;
@@ -73,7 +89,8 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       production_order: '/production-orders',
       dispatch_order: '/dispatch',
       work_order: '/maintenance-work-orders',
-      reconciliation_period: '/reconciliation'
+      reconciliation_period: '/reconciliation',
+      macropack_order: '/macropack-manufacturing',
     };
     const route = routes[approval.entity_type];
     if (route) navigate(route);
@@ -113,47 +130,74 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         </div>
       </div>
 
-      <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
+      <div className="max-h-[360px] overflow-y-auto">
         {approvals.length === 0 ? (
           <div className={`${compact ? 'px-4 py-5' : 'px-6 py-8'} text-center`}>
             <AlertCircle className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} text-slate-300 mx-auto mb-2`} />
             <p className="text-sm text-slate-500">No pending approvals</p>
             <p className="text-xs text-slate-400 mt-1">All caught up!</p>
           </div>
-        ) : (
-          approvals.map((approval) => (
-            <button
-              key={`${approval.entity_type}-${approval.entity_id}`}
-              onClick={() => navigateToEntity(approval)}
-              className={`w-full ${pad} hover:bg-slate-50 transition-colors text-left group`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-semibold text-slate-800 truncate">
-                      {approval.entity_name}
-                    </span>
-                    <span className="text-xs text-slate-500 font-mono">
-                      {approval.entity_number}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge status={approval.status} />
-                    {approval.created_by && creatorNames.get(approval.created_by) && (
-                      <span className="text-xs text-slate-500 truncate">
-                        By <span className="font-medium text-slate-700">{creatorNames.get(approval.created_by)}</span>
-                      </span>
-                    )}
-                    <span className="text-xs text-slate-400">
-                      {new Date(approval.created_at).toLocaleDateString('en-GB')}
-                    </span>
-                  </div>
+        ) : (() => {
+          // Group by entity_type for categorised sections
+          const grouped = approvals.reduce<Record<string, PendingApproval[]>>((acc, a) => {
+            (acc[a.entity_type] = acc[a.entity_type] || []).push(a);
+            return acc;
+          }, {});
+          return Object.entries(grouped).map(([type, items]) => {
+            const meta = CATEGORY_META[type] || { label: type, pill: 'bg-slate-100 text-slate-600' };
+            return (
+              <div key={type}>
+                {/* Category header */}
+                <div className="px-4 py-1.5 bg-slate-50 border-y border-slate-100 flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.pill}`}>{meta.label}</span>
+                  <span className="text-[11px] text-slate-400">{items.length} pending</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 transition-colors flex-shrink-0 ml-2" />
+                {/* Items in this category */}
+                {items.map((approval) => {
+                  const stagePill = STAGE_META[approval.status];
+                  return (
+                    <button
+                      key={`${approval.entity_type}-${approval.entity_id}`}
+                      onClick={() => navigateToEntity(approval)}
+                      className={`w-full ${pad} hover:bg-slate-50 transition-colors text-left group border-b border-slate-100 last:border-b-0`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-sm font-semibold text-slate-800 truncate">
+                              {approval.entity_name}
+                            </span>
+                            <span className="text-xs text-slate-500 font-mono shrink-0">
+                              {approval.entity_number}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {stagePill ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${stagePill}`}>
+                                {approval.status.replace('_', ' ')}
+                              </span>
+                            ) : (
+                              <StatusBadge status={approval.status} />
+                            )}
+                            {approval.created_by && creatorNames.get(approval.created_by) && (
+                              <span className="text-xs text-slate-500 truncate">
+                                By <span className="font-medium text-slate-700">{creatorNames.get(approval.created_by)}</span>
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-400">
+                              {new Date(approval.created_at).toLocaleDateString('en-GB')}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 transition-colors flex-shrink-0 ml-2" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            </button>
-          ))
-        )}
+            );
+          });
+        })()}
       </div>
 
       {approvals.length > 0 && (

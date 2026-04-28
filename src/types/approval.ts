@@ -2,7 +2,7 @@
 
 export interface ApprovalHistory {
   id: string;
-  entity_type: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period' | 'material_transfer';
+  entity_type: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period' | 'material_transfer' | 'macropack_order';
   entity_id: string;
   action: 'submitted' | 'approved' | 'rejected' | 'cancelled' | 'reopened';
   previous_status?: string;
@@ -13,7 +13,7 @@ export interface ApprovalHistory {
 }
 
 export interface PendingApproval {
-  entity_type: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period' | 'material_transfer';
+  entity_type: 'grn' | 'quality_inspection' | 'production_order' | 'dispatch_order' | 'work_order' | 'reconciliation_period' | 'material_transfer' | 'macropack_order';
   entity_id: string;
   entity_number: string;
   entity_name: string;
@@ -38,7 +38,8 @@ export const APPROVAL_PERMISSIONS = {
   dispatch_order: ['warehouse_manager', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
-  material_transfer: ['raw_material_manager', 'admin']
+  material_transfer: ['raw_material_manager', 'admin'],
+  macropack_order: ['raw_material_manager', 'supervisor', 'production_manager', 'admin'],
 } as const;
 
 export function canApprove(entityType: keyof typeof APPROVAL_PERMISSIONS, userRole: string): boolean {
@@ -53,7 +54,8 @@ export function getApprovalActionLabel(entityType: string): { approve: string; r
     dispatch_order: { approve: 'Approve Dispatch', reject: 'Reject Dispatch' },
     work_order: { approve: 'Approve Work', reject: 'Reject Work' },
     reconciliation_period: { approve: 'Approve Period', reject: 'Reject Period' },
-    material_transfer: { approve: 'Approve Transfer', reject: 'Reject Transfer' }
+    material_transfer: { approve: 'Approve Transfer', reject: 'Reject Transfer' },
+  macropack_order: { approve: 'Approve Macropack Order', reject: 'Reject Macropack Order' },
   };
   return labels[entityType] || { approve: 'Approve', reject: 'Reject' };
 }
