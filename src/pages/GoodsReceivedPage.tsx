@@ -10,7 +10,6 @@ import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 import GRNAttachments from '../components/grn/GRNAttachments';
-import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 
 interface GRNItem {
   raw_material_id: string;
@@ -492,7 +491,7 @@ export default function GoodsReceivedPage() {
                 }
               }}
             >
-              <option value="">— Select WB Ticket (or fill manually below) —</option>
+              <option value="">— Select a Weigh Bridge Ticket —</option>
               {wbTickets.map((t: any) => (
                 <option key={t.id} value={t.id}>
                   {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
@@ -503,26 +502,6 @@ export default function GoodsReceivedPage() {
               <p className="text-xs text-slate-400 mt-1">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
             )}
           </div>
-
-          <WeighBridgeTicket
-            data={{
-              wb_transaction_no: form.wb_transaction_no,
-              wb_vehicle_reg: form.wb_vehicle_reg,
-              wb_haulier_code: form.wb_haulier_code,
-              wb_product_code: form.wb_product_code,
-              wb_comment: form.wb_comment,
-              wb_trailer_number: form.wb_trailer_number,
-              wb_driver_name: form.wb_driver_name,
-              wb_driver_id: form.wb_driver_id,
-              wb_time_in: form.wb_time_in,
-              wb_first_mass: form.wb_first_mass,
-              wb_time_out: form.wb_time_out,
-              wb_second_mass: form.wb_second_mass,
-              wb_nett_mass: form.wb_nett_mass,
-              wb_driver_signed: form.wb_driver_signed,
-            }}
-            onChange={(field, value) => setForm(prev => ({ ...prev, [field]: value }))}
-          />
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Notes</label>
