@@ -23,12 +23,12 @@ CREATE TABLE IF NOT EXISTS weigh_bridge_tickets (
 );
 
 -- Allow GRNs to reference a weigh bridge ticket
-ALTER TABLE grns ADD COLUMN IF NOT EXISTS weigh_bridge_ticket_id UUID REFERENCES weigh_bridge_tickets(id);
+ALTER TABLE goods_received_notes ADD COLUMN IF NOT EXISTS weigh_bridge_ticket_id UUID REFERENCES weigh_bridge_tickets(id);
 
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_wb_tickets_status ON weigh_bridge_tickets (status);
 CREATE INDEX IF NOT EXISTS idx_wb_tickets_ticket_no ON weigh_bridge_tickets (ticket_no);
-CREATE INDEX IF NOT EXISTS idx_grns_wb_ticket ON grns (weigh_bridge_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_grns_wb_ticket ON goods_received_notes (weigh_bridge_ticket_id);
 
 -- RLS: all authenticated users can read/insert
 ALTER TABLE weigh_bridge_tickets ENABLE ROW LEVEL SECURITY;

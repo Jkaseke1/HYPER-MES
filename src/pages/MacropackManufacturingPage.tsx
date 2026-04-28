@@ -237,11 +237,13 @@ export default function MacropackManufacturingPage() {
 
     const rows: IssueRow[] = (ings || []).map((i: any) => {
       const expectedGrams = i.grams_per_unit * (order.planned_units || 0);
+      const expectedKg = expectedGrams / 1000;
       const existing = issueMap[i.raw_material_id];
-      const actual = existing?.actual_grams_dispensed ?? '';
+      // Load stored grams → display as kg
+      const actual = existing?.actual_grams_dispensed != null ? existing.actual_grams_dispensed / 1000 : '';
       const actualNum = typeof actual === 'number' ? actual : parseFloat(actual as string);
-      const variance = !isNaN(actualNum) && actual !== '' ? actualNum - expectedGrams : null;
-      const variancePct = variance !== null && expectedGrams > 0 ? (variance / expectedGrams) * 100 : null;
+      const variance = !isNaN(actualNum) && actual !== '' ? actualNum - expectedKg : null;
+      const variancePct = variance !== null && expectedKg > 0 ? (variance / expectedKg) * 100 : null;
 
       return {
         id: existing?.id,
@@ -249,7 +251,7 @@ export default function MacropackManufacturingPage() {
         ingredient_name: i.raw_materials?.name || 'Unknown',
         ingredient_code: i.raw_materials?.code || '',
         expected_grams: expectedGrams,
-        actual_grams_dispensed: existing?.actual_grams_dispensed ?? '',
+        actual_grams_dispensed: actual,
         variance_grams: variance,
         variance_pct: variancePct,
       };
@@ -263,8 +265,10 @@ export default function MacropackManufacturingPage() {
       if (r.raw_material_id !== rmId) return r;
       const actual = value === '' ? '' : value;
       const actualNum = parseFloat(value);
-      const variance = !isNaN(actualNum) && value !== '' ? actualNum - r.expected_grams : null;
-      const variancePct = variance !== null && r.expected_grams > 0 ? (variance / r.expected_grams) * 100 : null;
+      const expectedKg = r.expected_grams / 1000;
+      // User enters kg; compare against expectedKg
+      const variance = !isNaN(actualNum) && value !== '' ? actualNum - expectedKg : null;
+      const variancePct = variance !== null && expectedKg > 0 ? (variance / expectedKg) * 100 : null;
       return { ...r, actual_grams_dispensed: actual, variance_grams: variance, variance_pct: variancePct };
     }));
   }
@@ -335,7 +339,7 @@ export default function MacropackManufacturingPage() {
           manufacture_order_id: selectedOrder.id,
           raw_material_id: r.raw_material_id,
           expected_grams: r.expected_grams,
-          actual_grams_dispensed: parseFloat(String(r.actual_grams_dispensed)),
+          actual_grams_dispensed: parseFloat(String(r.actual_grams_dispensed)) * 1000, // convert kg input back to grams for DB
           dispensed_at: new Date().toISOString(),
         }));
 
@@ -644,7 +648,7 @@ export default function MacropackManufacturingPage() {
                   <tr>
                     <th className="px-3 py-1.5 text-left text-slate-500">Code</th>
                     <th className="px-3 py-1.5 text-left text-slate-500">Ingredient</th>
-                    <th className="px-3 py-1.5 text-right text-slate-500">Expected (g)</th>
+                    <th className="px-3 py-1.5 text-right text-slate-500">Expected (kg)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -652,7 +656,7 @@ export default function MacropackManufacturingPage() {
                     <tr key={i}>
                       <td className="px-3 py-1.5 font-mono text-slate-700">{p.code}</td>
                       <td className="px-3 py-1.5 text-slate-600">{p.name}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{p.expected_grams.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{(p.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -704,9 +708,9 @@ export default function MacropackManufacturingPage() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-slate-600">Code</th>
                     <th className="px-3 py-2 text-left font-medium text-slate-600">Ingredient</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Expected (g)</th>
-                    <th className="px-3 py-2 text-right font-medium text-teal-700 min-w-[110px]">Actual (g)</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Variance (g)</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-600">Expected (kg)</th>
+                    <th className="px-3 py-2 text-right font-medium text-teal-700 min-w-[110px]">Actual (kg)</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-600">Variance (kg)</th>
                     <th className="px-3 py-2 text-right font-medium text-slate-600">Var %</th>
                   </tr>
                 </thead>
@@ -717,21 +721,21 @@ export default function MacropackManufacturingPage() {
                       <tr key={row.raw_material_id} className={hasHighVar ? 'bg-amber-50' : 'hover:bg-slate-50'}>
                         <td className="px-3 py-2 font-mono text-slate-700">{row.ingredient_code}</td>
                         <td className="px-3 py-2 text-slate-600">{row.ingredient_name}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{row.expected_grams.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{(row.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })}</td>
                         <td className="px-3 py-2 text-right">
                           {selectedOrder.status !== 'COMPLETED' ? (
                             <input type="number" step="0.01" value={row.actual_grams_dispensed}
                               onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
                               className="w-full text-right border border-teal-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none bg-teal-50"
-                              placeholder="Enter actual" />
+                              placeholder="Enter kg" />
                           ) : (
-                            <span className="tabular-nums">{row.actual_grams_dispensed !== '' ? Number(row.actual_grams_dispensed).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+                            <span className="tabular-nums">{row.actual_grams_dispensed !== '' ? Number(row.actual_grams_dispensed).toLocaleString('en-US', { maximumFractionDigits: 3 }) : '—'}</span>
                           )}
                         </td>
                         <td className={`px-3 py-2 text-right tabular-nums font-medium ${
                           row.variance_grams !== null ? (row.variance_grams < 0 ? 'text-red-600' : row.variance_grams > 0 ? 'text-amber-600' : 'text-slate-400') : 'text-slate-400'
                         }`}>
-                          {row.variance_grams !== null ? row.variance_grams.toFixed(2) : '—'}
+                          {row.variance_grams !== null ? row.variance_grams.toFixed(3) : '—'}
                         </td>
                         <td className={`px-3 py-2 text-right tabular-nums ${hasHighVar ? 'text-amber-700 font-bold' : 'text-slate-500'}`}>
                           {row.variance_pct !== null ? `${row.variance_pct.toFixed(1)}%` : '—'}
