@@ -31,6 +31,8 @@ import {
   DollarSign,
   BarChart3 as BarChart3Icon2,
   TrendingUp,
+  Scale,
+  Boxes,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -59,10 +61,11 @@ const navGroups: NavGroup[] = [
     label: 'Raw Materials',
     icon: PackageIcon,
     items: [
-      { to: '/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
-      { to: '/goods-received', icon: PackageCheck, label: 'Goods Received' },
-      { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
+      { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
+      { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
+      { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse / Inventory' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
+      { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
     ],
   },
@@ -72,6 +75,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
       { to: '/macropack', icon: Beaker, label: 'Macropack Manufacturing' },
+      { to: '/production-warehouse', icon: Boxes, label: 'Production Warehouse' },
       { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
       { to: '/shift-reports', icon: ClipboardType, label: 'Shift Reports' },
     ],

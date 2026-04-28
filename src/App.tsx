@@ -35,6 +35,8 @@ const SparePartsPage = lazy(() => import('./pages/SparePartsPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
+const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
+const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
 
 function PageLoader() {
   return (
@@ -122,6 +124,8 @@ function AppRoutes() {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/weigh-bridge" element={<WeighBridgePage />} />
+          <Route path="/production-warehouse" element={<ProductionWarehousePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

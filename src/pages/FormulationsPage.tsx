@@ -342,23 +342,24 @@ export default function FormulationsPage() {
     if (!selected) return;
     setSaving(true);
     try {
-      // Update all ingredients
-      for (const ing of bomEditIngs) {
-        const { error } = await supabase
-          .from('formulation_ingredients')
-          .update({
-            quantity: ing.quantity,
-            unit: ing.unit,
-            percentage: ing.percentage,
-            is_critical: ing.is_critical,
-          })
-          .eq('id', ing.id);
-        
-        if (error) throw error;
+      // Delete all existing ingredients then re-insert (handles replace + delete cleanly)
+      const { error: delErr } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', selected.id);
+      if (delErr) throw delErr;
+      const rows = bomEditIngs.filter(i => i.raw_material_id).map((i, idx) => ({
+        formulation_id: selected.id,
+        raw_material_id: i.raw_material_id,
+        quantity: i.quantity,
+        unit: i.unit,
+        percentage: i.percentage,
+        is_critical: i.is_critical,
+        notes: '',
+        sort_order: idx,
+      }));
+      if (rows.length > 0) {
+        const { error: insErr } = await supabase.from('formulation_ingredients').insert(rows);
+        if (insErr) throw insErr;
       }
-      
       setBomEditMode(false);
-      // Refresh detail view
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
       fetchFormulations();
@@ -787,6 +788,7 @@ export default function FormulationsPage() {
                       <th className="px-3 py-2 font-medium text-slate-600 text-right">Total Cost</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-right">Stock</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-center">Critical</th>
+                      {bomEditMode && <th className="px-3 py-2 font-medium text-red-400 text-center">Remove</th>}
                     </tr></thead>
                     <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => {
                       const unitCost = i.raw_materials?.cost_per_unit || 0;
@@ -795,7 +797,24 @@ export default function FormulationsPage() {
                       const stockStatus = currentStock >= i.quantity ? 'text-emerald-600' : currentStock > 0 ? 'text-amber-600' : 'text-red-600';
                       return (
                         <tr key={i.id} className="border-b border-slate-50 hover:bg-slate-50">
-                          <td className="px-3 py-2 text-slate-700 font-medium">{i.raw_materials?.name || 'Unknown'}</td>
+                          <td className="px-3 py-2">
+                            {bomEditMode ? (
+                              <select
+                                value={i.raw_material_id}
+                                onChange={e => {
+                                  const selected_mat = materials.find(m => m.id === e.target.value);
+                                  const u = [...bomEditIngs];
+                                  u[idx] = { ...u[idx], raw_material_id: e.target.value, raw_materials: selected_mat as any };
+                                  setBomEditIngs(u);
+                                }}
+                                className="w-full px-2 py-1 border border-blue-200 rounded text-xs focus:outline-none focus:border-blue-500 bg-blue-50"
+                              >
+                                {materials.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+                              </select>
+                            ) : (
+                              <span className="text-slate-700 font-medium">{i.raw_materials?.name || 'Unknown'}</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right">
                             {bomEditMode ? (
                               <input type="number" step="0.01" value={i.quantity} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
@@ -827,6 +846,13 @@ export default function FormulationsPage() {
                               <span>{i.is_critical ? <span className="text-xs font-medium text-red-600">●</span> : <span className="text-xs text-slate-300">○</span>}</span>
                             )}
                           </td>
+                          {bomEditMode && (
+                            <td className="px-3 py-2 text-center">
+                              <button onClick={() => setBomEditIngs(bomEditIngs.filter((_, i2) => i2 !== idx))} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Remove ingredient">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}</tbody>

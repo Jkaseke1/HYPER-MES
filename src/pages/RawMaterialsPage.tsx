@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, CreditCard as Edit2, Trash2, Package, AlertTriangle, DollarSign, Layers } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit2, Trash2, Package, AlertTriangle, DollarSign, Layers, GitBranch } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { RawMaterial } from '../types/database';
 import Modal from '../components/ui/Modal';
@@ -46,6 +46,25 @@ export default function RawMaterialsPage() {
   const [lotMaterial, setLotMaterial] = useState<RawMaterial | null>(null);
   const [lots, setLots] = useState<any[]>([]);
   const [lotsLoading, setLotsLoading] = useState(false);
+
+  // Where Used state
+  const [whereUsedOpen, setWhereUsedOpen] = useState(false);
+  const [whereUsedMaterial, setWhereUsedMaterial] = useState<RawMaterial | null>(null);
+  const [whereUsedData, setWhereUsedData] = useState<any[]>([]);
+  const [whereUsedLoading, setWhereUsedLoading] = useState(false);
+
+  async function openWhereUsed(m: RawMaterial) {
+    setWhereUsedMaterial(m);
+    setWhereUsedOpen(true);
+    setWhereUsedLoading(true);
+    const { data, error } = await supabase
+      .from('formulation_ingredients')
+      .select('formulation_id, quantity, unit, percentage, formulations(id, name, code, status, batch_size, batch_unit)')
+      .eq('raw_material_id', m.id);
+    if (error) console.error('Failed to load where used:', error);
+    setWhereUsedData(data || []);
+    setWhereUsedLoading(false);
+  }
 
   async function openLots(m: RawMaterial) {
     setLotMaterial(m);
@@ -319,6 +338,9 @@ export default function RawMaterialsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
+                          <button onClick={() => openWhereUsed(m)} className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="Where Used">
+                            <GitBranch className="w-4 h-4" />
+                          </button>
                           <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors">
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -478,6 +500,56 @@ export default function RawMaterialsPage() {
             <button onClick={() => setDeleteModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
             <button onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50">{saving ? 'Deleting...' : 'Delete'}</button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={whereUsedOpen} onClose={() => setWhereUsedOpen(false)} title={`Where Used — ${whereUsedMaterial?.name || ''}`} size="xl">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <GitBranch className="w-4 h-4 text-purple-600 shrink-0" />
+            <p className="text-sm text-purple-800">Formulations that contain <span className="font-semibold">{whereUsedMaterial?.name}</span> as an ingredient.</p>
+          </div>
+          {whereUsedLoading ? (
+            <div className="py-8 text-center text-slate-400 text-sm">Searching formulations...</div>
+          ) : whereUsedData.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-sm">This material is not used in any active formulation.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/50 text-xs">
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Formulation</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Code</th>
+                    <th className="text-right px-3 py-2 font-semibold text-slate-600">Qty / Batch</th>
+                    <th className="text-right px-3 py-2 font-semibold text-slate-600">% of BOM</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Batch Size</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {whereUsedData.map((row: any, idx) => {
+                    const f = row.formulations;
+                    if (!f) return null;
+                    return (
+                      <tr key={idx} className="hover:bg-purple-50/40">
+                        <td className="px-3 py-2 font-medium text-slate-800">{f.name}</td>
+                        <td className="px-3 py-2"><code className="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-700">{f.code}</code></td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700">{Number(row.quantity).toLocaleString()} {row.unit}</td>
+                        <td className="px-3 py-2 text-right"><span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-semibold">{Number(row.percentage).toFixed(1)}%</span></td>
+                        <td className="px-3 py-2 text-slate-600">{f.batch_size?.toLocaleString()} {f.batch_unit}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${f.status === 'active' ? 'bg-emerald-50 text-emerald-700' : f.status === 'draft' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {f.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-[11px] text-slate-400">{whereUsedData.length} formulation{whereUsedData.length !== 1 ? 's' : ''} use this material. Click the <span className="font-semibold">GitBranch</span> icon on any material row to check.</p>
         </div>
       </Modal>
     </div>

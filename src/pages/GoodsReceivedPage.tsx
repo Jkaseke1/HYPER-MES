@@ -42,6 +42,7 @@ const emptyForm = {
   wb_second_mass: '',
   wb_nett_mass: '',
   wb_driver_signed: false,
+  weigh_bridge_ticket_id: '',
 };
 
 const emptyItem: GRNItem = {
@@ -70,21 +71,24 @@ export default function GoodsReceivedPage() {
   const [form, setForm] = useState(emptyForm);
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
   const [saving, setSaving] = useState(false);
+  const [wbTickets, setWbTickets] = useState<any[]>([]);
 
   // Check if user can delete GRNs (admin or warehouse_manager only)
   const canDelete = profile?.role === 'admin' || profile?.role === 'warehouse_manager';
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes, warehousesRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes, warehousesRes, wbRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('warehouses').select('*').eq('is_active', true),
+      supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
+    setWbTickets(wbRes.data || []);
     
     // Find Raw Materials Warehouse UUID by code = 'RM'
     const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.code === 'RM');
@@ -238,7 +242,8 @@ export default function GoodsReceivedPage() {
       const totalValue = items.reduce((sum, item) => sum + (item.received_qty * item.unit_cost), 0);
       
       // Insert GRN
-      const grnData = { ...form, total_value: totalValue };
+      const { weigh_bridge_ticket_id, ...restForm } = form as any;
+      const grnData = { ...restForm, total_value: totalValue, ...(weigh_bridge_ticket_id ? { weigh_bridge_ticket_id } : {}) };
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
         .insert(grnData)
@@ -269,6 +274,12 @@ export default function GoodsReceivedPage() {
         alert(`Error saving items: ${itemsError.message}. GRN was not created.`);
         setSaving(false);
         return;
+      }
+
+      // Mark WB ticket as linked
+      const wbId = (form as any).weigh_bridge_ticket_id;
+      if (wbId) {
+        await supabase.from('weigh_bridge_tickets').update({ status: 'linked' }).eq('id', wbId);
       }
 
       setSaving(false);
@@ -446,6 +457,51 @@ export default function GoodsReceivedPage() {
                 Raw Materials Warehouse
               </div>
             </div>
+          </div>
+
+          {/* WB Ticket Picker */}
+          <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Scale className="w-4 h-4 text-teal-600" />
+              <h3 className="text-sm font-semibold text-slate-700">Link Weigh Bridge Ticket</h3>
+              <span className="text-xs text-slate-400">(optional — pick an existing ticket or fill in manually below)</span>
+            </div>
+            <select
+              className="w-full px-3 py-2 border border-teal-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+              onChange={e => {
+                const ticket = wbTickets.find((t: any) => t.id === e.target.value);
+                if (ticket) {
+                  setForm(prev => ({
+                    ...prev,
+                    weigh_bridge_ticket_id: ticket.id,
+                    wb_transaction_no: ticket.ticket_no || '',
+                    wb_vehicle_reg: ticket.vehicle_reg || '',
+                    wb_haulier_code: ticket.haulier_code || 'HYPER',
+                    wb_product_code: ticket.product_code || '',
+                    wb_comment: ticket.comment || '',
+                    wb_trailer_number: ticket.trailer_number || '',
+                    wb_driver_name: ticket.driver_name || '',
+                    wb_driver_id: ticket.driver_id || '',
+                    wb_time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
+                    wb_first_mass: ticket.first_mass != null ? String(ticket.first_mass) : '',
+                    wb_time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
+                    wb_second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
+                    wb_nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
+                    wb_driver_signed: ticket.driver_signed || false,
+                  }));
+                }
+              }}
+            >
+              <option value="">— Select WB Ticket (or fill manually below) —</option>
+              {wbTickets.map((t: any) => (
+                <option key={t.id} value={t.id}>
+                  {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
+                </option>
+              ))}
+            </select>
+            {wbTickets.length === 0 && (
+              <p className="text-xs text-slate-400 mt-1">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
+            )}
           </div>
 
           <WeighBridgeTicket

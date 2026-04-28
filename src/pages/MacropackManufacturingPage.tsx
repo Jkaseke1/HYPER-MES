@@ -526,7 +526,7 @@ export default function MacropackManufacturingPage() {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-slate-600">Macropack</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Planned Units</th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600">Planned Qty (kg)</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-600">Manufacture Date</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
                   <th className="px-4 py-3 text-center font-medium text-slate-600">Actions</th>
@@ -541,7 +541,7 @@ export default function MacropackManufacturingPage() {
                       <div className="font-medium text-slate-800">{o.macropack_boms?.macropack_name}</div>
                       <div className="text-xs text-slate-500">{o.macropack_boms?.macropack_code}</div>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-700">{o.planned_units?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-700">{o.planned_units?.toLocaleString()} <span className="text-xs text-slate-400">kg</span></td>
                     <td className="px-4 py-3 text-slate-600">{o.manufacture_date ? format(new Date(o.manufacture_date), 'dd MMM yyyy') : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[o.status] || ''}`}>
@@ -622,7 +622,7 @@ export default function MacropackManufacturingPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Planned Units *</label>
+              <label className={labelCls}>Planned Quantity (kg) *</label>
               <input type="number" min="1" value={orderForm.planned_units}
                 onChange={(e) => { setOrderForm({ ...orderForm, planned_units: e.target.value }); updatePreview(orderForm.macropack_bom_id, e.target.value); }}
                 className={inputCls} placeholder="e.g. 500" required />
@@ -682,8 +682,8 @@ export default function MacropackManufacturingPage() {
                 <p className="font-medium text-slate-800">{selectedOrder.macropack_boms?.macropack_code} — {selectedOrder.macropack_boms?.macropack_name}</p>
               </div>
               <div>
-                <span className="text-xs text-slate-500">Planned Units</span>
-                <p className="font-medium text-slate-800">{selectedOrder.planned_units?.toLocaleString()}</p>
+                <span className="text-xs text-slate-500">Planned Qty (kg)</span>
+                <p className="font-medium text-slate-800">{selectedOrder.planned_units?.toLocaleString()} kg</p>
               </div>
               <div>
                 <span className="text-xs text-slate-500">Status</span>
