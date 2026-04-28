@@ -462,6 +462,22 @@ export default function MacropackManufacturingPage() {
         .eq('id', selectedOrder.id);
       if (error) throw error;
 
+      // Write sync_log entry for bridge to pick up
+      const { error: syncError } = await supabase
+        .from('sync_log')
+        .insert({
+          event_type: 'macropack_manufactured',
+          reference_type: 'macropack_manufacture_orders',
+          reference_id: selectedOrder.id,
+          status: 'pending',
+          description: `Macropack order completed — ${selectedOrder.macropack_boms?.macropack_code}`,
+          created_at: new Date().toISOString(),
+        });
+      if (syncError) {
+        console.error('sync_log write failed:', syncError.message);
+        // Don't throw — order is completed, bridge will need manual retry
+      }
+
       setOrderDetailModalOpen(false);
       setSelectedOrder(null);
       fetchData();

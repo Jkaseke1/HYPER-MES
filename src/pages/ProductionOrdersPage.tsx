@@ -742,6 +742,24 @@ export default function ProductionOrdersPage() {
         }
       }
 
+      // Write sync_log entry for bridge to pick up on batch completion
+      if (status === 'completed') {
+        const { error: syncError } = await supabase
+          .from('sync_log')
+          .insert({
+            event_type: 'production_completed',
+            reference_type: 'production_orders',
+            reference_id: selected.id,
+            status: 'pending',
+            description: `Batch completed — ${selected.batch_number}`,
+            created_at: new Date().toISOString(),
+          });
+        if (syncError) {
+          console.error('sync_log write failed:', syncError.message);
+          // Don't throw — order is completed, bridge will need manual retry
+        }
+      }
+
       setSaving(false); 
       setShowDetail(false); 
       fetchOrders();
