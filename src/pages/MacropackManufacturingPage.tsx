@@ -777,7 +777,71 @@ export default function MacropackManufacturingPage() {
 
       {/* ── Order Detail Modal ── */}
       <Modal open={orderDetailModalOpen} onClose={() => { setOrderDetailModalOpen(false); setSelectedOrder(null); }}
-        title={selectedOrder ? `Order: ${selectedOrder.macropack_boms?.macropack_name || ''}` : 'Order Details'}>
+        title={selectedOrder ? `Order: ${selectedOrder.macropack_boms?.macropack_name || ''}` : 'Order Details'}
+        size="lg"
+        footer={selectedOrder ? (
+          <div className="flex items-center justify-between">
+            <button onClick={() => { setOrderDetailModalOpen(false); setSelectedOrder(null); }}
+              className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50">
+              Close
+            </button>
+            {selectedOrder.status !== 'COMPLETED' && selectedOrder.status !== 'CANCELLED' && (
+              <div className="flex flex-wrap gap-2">
+                {selectedOrder.status === 'DRAFT' && (
+                  <button onClick={() => handleApprovalAction('submit')} disabled={approvalSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+                    {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Submit for Approval
+                  </button>
+                )}
+                {selectedOrder.status === 'REJECTED' && (
+                  <button onClick={() => handleApprovalAction('revise')} disabled={approvalSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
+                    <RotateCcw className="w-4 h-4" /> Revise &amp; Resubmit
+                  </button>
+                )}
+                {selectedOrder.status === 'PENDING_RM' && (profile?.role === 'raw_material_manager' || profile?.role === 'admin') && (
+                  <>
+                    <button onClick={() => handleApprovalAction('approve_rm')} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                      Approve (RM)
+                    </button>
+                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                      <XCircle className="w-4 h-4" /> Reject
+                    </button>
+                  </>
+                )}
+                {selectedOrder.status === 'PENDING_SUPERVISOR' && (profile?.role === 'supervisor' || profile?.role === 'production_manager' || profile?.role === 'admin') && (
+                  <>
+                    <button onClick={() => handleApprovalAction('approve_supervisor')} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                      Approve (Supervisor)
+                    </button>
+                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                      <XCircle className="w-4 h-4" /> Reject
+                    </button>
+                  </>
+                )}
+                {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
+                  <button onClick={handleStartOrder} disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                    <Play className="w-4 h-4" /> {saving ? 'Starting...' : 'Start Production'}
+                  </button>
+                )}
+                {selectedOrder.status === 'IN_PROGRESS' && (
+                  <button onClick={handleCompleteOrder} disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                    <CheckCircle className="w-4 h-4" /> {saving ? 'Completing...' : 'Complete Order'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : undefined}>
         {selectedOrder && (
           <div className="space-y-4">
             {/* Order Info */}
@@ -787,8 +851,8 @@ export default function MacropackManufacturingPage() {
                 <p className="font-medium text-slate-800">{selectedOrder.macropack_boms?.macropack_code} — {selectedOrder.macropack_boms?.macropack_name}</p>
               </div>
               <div>
-                <span className="text-xs text-slate-500">Planned Qty (kg)</span>
-                <p className="font-medium text-slate-800">{selectedOrder.planned_units?.toLocaleString()} kg</p>
+                <span className="text-xs text-slate-500">Planned Units</span>
+                <p className="font-medium text-slate-800">{selectedOrder.planned_units?.toLocaleString()}</p>
               </div>
               <div>
                 <span className="text-xs text-slate-500">Status</span>
@@ -796,11 +860,15 @@ export default function MacropackManufacturingPage() {
               </div>
             </div>
 
-            {/* Layers note */}
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-              <AlertTriangle className="w-4 h-4 inline-block mr-1 text-amber-600" />
-              <strong>Layers products:</strong> Limestone flour added directly to plant at 45kg/tonne — record as direct RM issue at batch level.
-            </div>
+            {/* Layers note — only for Layer/LIP products */}
+            {(selectedOrder.macropack_boms?.macropack_code?.includes('LAY') ||
+              selectedOrder.macropack_boms?.macropack_code?.includes('LIP') ||
+              selectedOrder.macropack_boms?.macropack_name?.toLowerCase().includes('layer')) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                <AlertTriangle className="w-4 h-4 inline-block mr-1 text-amber-600" />
+                <strong>Layers products:</strong> Limestone flour added directly to plant at 45kg/tonne — record as direct RM issue at batch level.
+              </div>
+            )}
 
             {/* Ingredients Table */}
             <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -824,7 +892,7 @@ export default function MacropackManufacturingPage() {
                         <td className="px-3 py-2 text-slate-600">{row.ingredient_name}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-700">{(row.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })}</td>
                         <td className="px-3 py-2 text-right">
-                          {selectedOrder.status !== 'COMPLETED' ? (
+                          {selectedOrder.status === 'IN_PROGRESS' ? (
                             <input type="number" step="0.01" value={row.actual_grams_dispensed}
                               onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
                               className="w-full text-right border border-teal-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none bg-teal-50"
@@ -857,74 +925,6 @@ export default function MacropackManufacturingPage() {
                   <p className="text-xs font-semibold text-red-700">Rejected</p>
                   <p className="text-xs text-red-600 mt-0.5">{selectedOrder.rejection_reason}</p>
                 </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            {selectedOrder.status !== 'COMPLETED' && selectedOrder.status !== 'CANCELLED' && (
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                {/* DRAFT: creator submits */}
-                {selectedOrder.status === 'DRAFT' && (
-                  <button onClick={() => handleApprovalAction('submit')} disabled={approvalSaving}
-                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-                    {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    Submit for Approval
-                  </button>
-                )}
-
-                {/* REJECTED: creator can revise */}
-                {selectedOrder.status === 'REJECTED' && (
-                  <button onClick={() => handleApprovalAction('revise')} disabled={approvalSaving}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
-                    <RotateCcw className="w-4 h-4" /> Revise &amp; Resubmit
-                  </button>
-                )}
-
-                {/* PENDING_RM: RM Manager approves/rejects */}
-                {selectedOrder.status === 'PENDING_RM' && (profile?.role === 'raw_material_manager' || profile?.role === 'admin') && (
-                  <>
-                    <button onClick={() => handleApprovalAction('approve_rm')} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                      Approve (RM)
-                    </button>
-                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                      <XCircle className="w-4 h-4" /> Reject
-                    </button>
-                  </>
-                )}
-
-                {/* PENDING_SUPERVISOR: Supervisor approves/rejects */}
-                {selectedOrder.status === 'PENDING_SUPERVISOR' && (profile?.role === 'supervisor' || profile?.role === 'production_manager' || profile?.role === 'admin') && (
-                  <>
-                    <button onClick={() => handleApprovalAction('approve_supervisor')} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                      Approve (Supervisor)
-                    </button>
-                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                      <XCircle className="w-4 h-4" /> Reject
-                    </button>
-                  </>
-                )}
-
-                {/* APPROVED: Start Production */}
-                {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
-                  <button onClick={handleStartOrder} disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    <Play className="w-4 h-4" /> {saving ? 'Starting...' : 'Start Production'}
-                  </button>
-                )}
-
-                {/* IN_PROGRESS: Complete */}
-                {selectedOrder.status === 'IN_PROGRESS' && (
-                  <button onClick={handleCompleteOrder} disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                    <CheckCircle className="w-4 h-4" /> {saving ? 'Completing...' : 'Complete Order'}
-                  </button>
-                )}
               </div>
             )}
           </div>

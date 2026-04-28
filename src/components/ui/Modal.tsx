@@ -6,6 +6,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
@@ -16,7 +17,7 @@ const sizeClasses = {
   xl: 'max-w-4xl',
 };
 
-export default function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -45,7 +46,10 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="overflow-y-auto p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        {footer && (
+          <div className="border-t border-slate-200 px-6 py-4 bg-white rounded-b-xl">{footer}</div>
+        )}
       </div>
     </div>
   );
