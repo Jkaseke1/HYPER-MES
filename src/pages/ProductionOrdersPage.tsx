@@ -589,6 +589,8 @@ export default function ProductionOrdersPage() {
   // Bulk issue all materials at once
   const bulkIssueMaterials = async () => {
     if (!selected) return;
+    const confirmed = confirm(`Issue all ${detailMaterials.length} materials for this production order? This cannot be undone.`);
+    if (!confirmed) return;
     
     setSaving(true);
     try {
@@ -606,7 +608,7 @@ export default function ProductionOrdersPage() {
         supabase.rpc('issue_individual_ingredient', {
           p_material_id: material.id,
           p_actual_qty: material.planned_qty,
-          p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
+          p_issued_by: profile?.id || null
         })
       );
 
@@ -615,7 +617,8 @@ export default function ProductionOrdersPage() {
       // Check for errors
       const errors = results.filter(r => r.error);
       if (errors.length > 0) {
-        throw new Error(`Failed to issue ${errors.length} ingredients: ${errors[0].error?.message}`);
+        const errorMessages = errors.map((r, i) => `Item ${i + 1}: ${r.error?.message}`).join('; ');
+        throw new Error(`Failed to issue ${errors.length} of ${results.length} ingredients: ${errorMessages}`);
       }
 
       // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
@@ -1968,7 +1971,7 @@ export default function ProductionOrdersPage() {
 
             <div className="flex justify-between pt-4 border-t border-slate-200">
               <div className="flex gap-2">
-                {selected.status === 'pending' && detailMaterials.length > 0 && (
+                {(selected.status === 'pending' || selected.status === 'approved') && detailMaterials.length > 0 && (
                   <button
                     onClick={bulkIssueMaterials}
                     disabled={saving || !allMaterialsAvailable()}
