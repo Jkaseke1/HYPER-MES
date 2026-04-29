@@ -71,6 +71,22 @@ export default function StockTakeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+
+  // Guard against missing ID
+  if (!id) {
+    return (
+      <div className="text-center py-12">
+        <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+        <p className="text-gray-500">Invalid stock take ID</p>
+        <button
+          onClick={() => navigate('/stock-take')}
+          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          Back to Stock Takes
+        </button>
+      </div>
+    );
+  }
   
   const [loading, setLoading] = useState(true);
   const [stockTake, setStockTake] = useState<StockTake | null>(null);
@@ -91,15 +107,19 @@ export default function StockTakeDetailPage() {
   useEffect(() => {
     if (id) {
       fetchStockTake();
-      fetchAuditLog();
       // Auto-refresh every 30 seconds
       const interval = setInterval(() => {
         fetchLines();
-        if (showAuditTrail) fetchAuditLog();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [id, showAuditTrail]);
+  }, [id]);
+
+  useEffect(() => {
+    if (showAuditTrail && id) {
+      fetchAuditLog();
+    }
+  }, [showAuditTrail, id]);
 
   const fetchStockTake = async () => {
     if (!id) return;
