@@ -72,7 +72,7 @@ export default function StockTakePage() {
         .in('status', ['OPEN', 'FROZEN'])
         .order('started_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (active) {
         // Get progress stats
