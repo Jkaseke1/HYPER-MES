@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Lock, Unlock, AlertTriangle, CheckCircle, 
   Download, FileSpreadsheet, Loader2, Flag, ThumbsUp,
-  EyeOff, Users
+  EyeOff, Users, Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -82,15 +82,22 @@ export default function StockTakeDetailPage() {
   const [selectedLine, setSelectedLine] = useState<StockTakeLine | null>(null);
   const [recountReason, setRecountReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchStockTake();
+      fetchAuditLog();
       // Auto-refresh every 30 seconds
-      const interval = setInterval(fetchLines, 30000);
+      const interval = setInterval(() => {
+        fetchLines();
+        if (showAuditTrail) fetchAuditLog();
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [id]);
+  }, [id, showAuditTrail]);
 
   const fetchStockTake = async () => {
     if (!id) return;
@@ -145,6 +152,29 @@ export default function StockTakeDetailPage() {
       console.error('Error fetching lines:', linesError);
     } else if (linesData) {
       setLines(linesData);
+    }
+  };
+
+  const fetchAuditLog = async () => {
+    if (!id) return;
+    setAuditLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('stock_take_audit_log')
+        .select(`
+          *,
+          line:line_id(raw_materials:raw_material_id(code, name)),
+          changed_by_profile:changed_by(full_name)
+        `)
+        .eq('stock_take_id', id)
+        .order('changed_at', { ascending: false });
+
+      if (error) throw error;
+      setAuditLog(data || []);
+    } catch (error) {
+      console.error('Error fetching audit log:', error);
+    } finally {
+      setAuditLoading(false);
     }
   };
 
@@ -1116,6 +1146,77 @@ export default function StockTakeDetailPage() {
           </div>
         </Modal>
       )}
+
+      {/* Audit Trail Section */}
+      <div className="bg-white rounded-lg shadow">
+        <button
+          onClick={() => {
+            setShowAuditTrail(!showAuditTrail);
+            if (!showAuditTrail && auditLog.length === 0) fetchAuditLog();
+          }}
+          className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3">
+            <Clock className="h-5 w-5 text-gray-600" />
+            <span className="font-medium text-gray-900">View Audit Trail ({auditLog.length} entries)</span>
+          </div>
+          <span className="text-sm text-gray-500">{showAuditTrail ? 'Hide' : 'Show'}</span>
+        </button>
+        {showAuditTrail && (
+          <div className="px-6 pb-4 border-t border-gray-200">
+            {auditLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+              </div>
+            ) : auditLog.length === 0 ? (
+              <p className="text-sm text-gray-500 py-4 text-center">No audit entries yet</p>
+            ) : (
+              <div className="overflow-x-auto mt-4">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Raw Material</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Old Value</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">New Value</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Changed By</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {auditLog.map((entry) => (
+                      <tr key={entry.id}>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {format(new Date(entry.changed_at), 'PPp')}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {entry.line?.raw_materials?.code || '—'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {entry.action.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-500">
+                          {entry.old_value !== null ? entry.old_value : '—'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-900">
+                          {entry.new_value !== null ? entry.new_value : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {entry.changed_by_profile?.full_name || '—'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {entry.notes || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
