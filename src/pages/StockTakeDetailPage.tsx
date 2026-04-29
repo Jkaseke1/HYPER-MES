@@ -162,7 +162,7 @@ export default function StockTakeDetailPage() {
       .from('stock_take_lines')
       .select(`
         *,
-        raw_materials(code, name, sage_code, location),
+        raw_materials(code, name, sage_code),
         assigned_to_profile:assigned_to(full_name),
         counted_by_profile:counted_by(full_name),
         approved_by_profile:approved_by(full_name)
