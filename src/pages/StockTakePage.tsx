@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ClipboardList, Plus, Settings, Eye, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import StockTakeDetailPage from './StockTakeDetailPage';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -34,8 +35,15 @@ interface RawMaterial {
 }
 
 export default function StockTakePage() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  
+  // If ID is present, show detail page
+  if (id) {
+    return <StockTakeDetailPage />;
+  }
+  
   const [loading, setLoading] = useState(true);
   const [activeStockTake, setActiveStockTake] = useState<StockTake | null>(null);
   const [stockTakeHistory, setStockTakeHistory] = useState<StockTake[]>([]);
