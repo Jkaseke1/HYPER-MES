@@ -37,6 +37,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
+const StockTakePage = lazy(() => import('./pages/StockTakePage'));
 
 function PageLoader() {
   return (
@@ -97,6 +98,8 @@ function AppRoutes() {
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/raw-materials" element={<RawMaterialsPage />} />
+          <Route path="/stock-take" element={<StockTakePage />} />
+          <Route path="/stock-take/:id" element={<StockTakePage />} />
           <Route path="/goods-received" element={<GoodsReceivedPage />} />
           <Route path="/quality-inspection" element={<QualityInspectionPage />} />
           <Route path="/formulations" element={<FormulationsPage />} />

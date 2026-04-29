@@ -64,6 +64,7 @@ const navGroups: NavGroup[] = [
       { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
       { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse / Inventory' },
+      { to: '/stock-take', icon: ClipboardList, label: 'Stock Take' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
       { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
