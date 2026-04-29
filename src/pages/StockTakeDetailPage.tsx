@@ -73,7 +73,7 @@ export default function StockTakeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [stockTake, setStockTake] = useState<StockTake | null>(null);
   const [lines, setLines] = useState<StockTakeLine[]>([]);
-  // const [users, setUsers] = useState<User[]>([]); // For assignment panel - to be implemented
+  const [users, setUsers] = useState<User[]>([]);
   const [filter, setFilter] = useState<'all' | 'zero' | 'low' | 'high' | 'pending'>('all');
   const [showAssignPanel, setShowAssignPanel] = useState(false);
   const [showFreezeModal, setShowFreezeModal] = useState(false);
@@ -112,12 +112,12 @@ export default function StockTakeDetailPage() {
 
       await fetchLines();
 
-      // Fetch all users for assignment - to be implemented
-      // const { data: usersData } = await supabase
-      //   .from('profiles')
-      //   .select('id, full_name, email')
-      //   .order('full_name');
-      // if (usersData) setUsers(usersData);
+      // Fetch all users for assignment
+      const { data: usersData } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name');
+      if (usersData) setUsers(usersData);
 
     } catch (error: any) {
       console.error('Error fetching stock take:', error);
@@ -295,6 +295,73 @@ export default function StockTakeDetailPage() {
     } catch (error: any) {
       console.error('Error locking line:', error);
       toast.error(`Failed to ${lock ? 'lock' : 'unlock'} line: ${error.message}`);
+    }
+  };
+
+  const handleAssignUser = async (lineId: string, userId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('stock_take_lines')
+        .update({ assigned_to: userId })
+        .eq('id', lineId);
+
+      if (error) throw error;
+
+      await supabase.from('stock_take_audit_log').insert({
+        stock_take_id: id,
+        line_id: lineId,
+        action: userId ? 'user_assigned' : 'assignment_cleared',
+        changed_by: profile?.id,
+        notes: userId ? `Assigned to user ${userId}` : 'Assignment cleared'
+      });
+
+      await fetchLines();
+      toast.success(userId ? 'User assigned' : 'Assignment cleared');
+    } catch (error: any) {
+      console.error('Error assigning user:', error);
+      toast.error(`Failed to assign user: ${error.message}`);
+    }
+  };
+
+  const handleAutoAssign = async () => {
+    if (users.length === 0) {
+      toast.error('No users available for assignment');
+      return;
+    }
+
+    try {
+      const unassignedLines = lines.filter(l => !l.assigned_to);
+      if (unassignedLines.length === 0) {
+        toast.error('All lines are already assigned');
+        return;
+      }
+
+      // Round-robin assignment
+      const updates = unassignedLines.map((line, index) => ({
+        id: line.id,
+        assigned_to: users[index % users.length].id
+      }));
+
+      for (const update of updates) {
+        await supabase
+          .from('stock_take_lines')
+          .update({ assigned_to: update.assigned_to })
+          .eq('id', update.id);
+
+        await supabase.from('stock_take_audit_log').insert({
+          stock_take_id: id,
+          line_id: update.id,
+          action: 'auto_assigned',
+          changed_by: profile?.id,
+          notes: `Auto-assigned to user ${update.assigned_to}`
+        });
+      }
+
+      await fetchLines();
+      toast.success(`Auto-assigned ${unassignedLines.length} lines to ${users.length} users`);
+    } catch (error: any) {
+      console.error('Error auto-assigning:', error);
+      toast.error(`Failed to auto-assign: ${error.message}`);
     }
   };
 
@@ -622,9 +689,59 @@ export default function StockTakeDetailPage() {
           </button>
           {showAssignPanel && (
             <div className="px-6 pb-4 border-t border-gray-200">
-              <p className="text-sm text-gray-500 mb-3 mt-4">Assign users to count specific materials</p>
-              {/* Assignment UI would go here - simplified for now */}
-              <p className="text-sm text-gray-400 italic">Assignment panel - to be implemented</p>
+              <div className="flex items-center justify-between mb-4 mt-4">
+                <p className="text-sm text-gray-500">Assign users to count specific materials</p>
+                <button
+                  onClick={handleAutoAssign}
+                  className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Auto-assign evenly
+                </button>
+              </div>
+              <div className="overflow-x-auto max-h-96">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Raw Material</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {lines.map((line) => (
+                      <tr key={line.id}>
+                        <td className="px-4 py-2 text-sm text-gray-900">
+                          {line.raw_materials?.code} - {line.raw_materials?.name}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <select
+                            value={line.assigned_to || ''}
+                            onChange={(e) => handleAssignUser(line.id, e.target.value || null)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="">Unassigned</option>
+                            {users.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.full_name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {line.assigned_to && (
+                            <button
+                              onClick={() => handleAssignUser(line.id, null)}
+                              className="text-red-600 hover:text-red-900 text-xs"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
