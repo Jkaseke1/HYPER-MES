@@ -12,6 +12,7 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 
 interface StockTake {
   id: string;
@@ -516,6 +517,97 @@ export default function StockTakeDetailPage() {
     toast.success('PDF exported successfully');
   };
 
+  const handleExportExcel = async () => {
+    if (!stockTake) return;
+
+    // Fetch fresh audit log if not already loaded
+    if (auditLog.length === 0) {
+      await fetchAuditLog();
+    }
+
+    // Sheet 1: Count Lines
+    const linesData = lines.map(line => ({
+      'Code': line.raw_materials?.code || '',
+      'Description': line.raw_materials?.name || '',
+      'Unit': line.unit,
+      'System Qty': line.system_qty,
+      'Counted Qty': line.counted_qty ?? '',
+      'Recount Qty': line.recount_qty ?? '',
+      'Variance': line.variance,
+      'Var %': line.system_qty > 0 ? ((line.variance / line.system_qty) * 100).toFixed(2) : '',
+      'Status': getLineStatus(line),
+      'Assigned To': line.assigned_to_profile?.full_name || '',
+      'Counted By': line.counted_by_profile?.full_name || '',
+      'Counted At': line.counted_at ? format(new Date(line.counted_at), 'PPp') : '',
+      'Notes': line.notes || ''
+    }));
+
+    const ws1 = XLSX.utils.json_to_sheet(linesData);
+    
+    // Apply styling to variance column (red if negative, amber if positive)
+    const range = XLSX.utils.decode_range(ws1['!ref'] || 'A1');
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+      const varianceCell = XLSX.utils.encode_cell({ r: R, c: 6 }); // Variance column
+      if (ws1[varianceCell]) {
+        const val = parseFloat(ws1[varianceCell].v);
+        if (val < 0) {
+          ws1[varianceCell].s = { fill: { fgColor: { rgb: 'FFCCCC' } } };
+        } else if (val > 0) {
+          ws1[varianceCell].s = { fill: { fgColor: { rgb: 'FFFFCC' } } };
+        }
+      }
+    }
+
+    // Sheet 2: Audit Log
+    const auditData = auditLog.map(entry => ({
+      'Time': format(new Date(entry.changed_at), 'PPp'),
+      'Raw Material Code': entry.line?.raw_materials?.code || '',
+      'Raw Material Name': entry.line?.raw_materials?.name || '',
+      'Action': entry.action.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      'Old Value': entry.old_value ?? '',
+      'New Value': entry.new_value ?? '',
+      'Changed By': entry.changed_by_profile?.full_name || '',
+      'Notes': entry.notes || ''
+    }));
+
+    const ws2 = XLSX.utils.json_to_sheet(auditData);
+
+    // Sheet 3: Summary
+    const summaryData = [{
+      'Take Number': stockTake.take_number,
+      'Status': stockTake.status,
+      'Started By': stockTake.started_by_profile?.full_name || '',
+      'Started At': format(new Date(stockTake.started_at), 'PPp'),
+      'Closed By': stockTake.closed_by_profile?.full_name || '',
+      'Closed At': stockTake.closed_at ? format(new Date(stockTake.closed_at), 'PPp') : '',
+      'Total Lines': lines.length,
+      'Counted': countedLines,
+      'Pending': pendingLines,
+      'Total Variance (kg)': totalVariance.toFixed(2)
+    }];
+
+    const ws3 = XLSX.utils.json_to_sheet(summaryData);
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'Count Lines');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Audit Log');
+    XLSX.utils.book_append_sheet(wb, ws3, 'Summary');
+
+    // Auto-size columns
+    const wscols = [
+      { wch: 12 }, { wch: 35 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, 
+      { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 15 }, { wch: 20 }, 
+      { wch: 20 }, { wch: 20 }, { wch: 30 }
+    ];
+    ws1['!cols'] = wscols;
+    ws2['!cols'] = wscols;
+    ws3['!cols'] = wscols;
+
+    XLSX.writeFile(wb, `StockTake-${stockTake.take_number}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast.success('Excel exported successfully');
+  };
+
   const handleFreezeStock = async () => {
     if (!stockTake) return;
     setSaving(true);
@@ -774,7 +866,10 @@ export default function StockTakeDetailPage() {
             <Download className="h-4 w-4" />
             <span>Export PDF</span>
           </button>
-          <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2">
+          <button 
+            onClick={handleExportExcel}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+          >
             <FileSpreadsheet className="h-4 w-4" />
             <span>Export Excel</span>
           </button>
