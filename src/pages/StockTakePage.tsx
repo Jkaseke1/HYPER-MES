@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface StockTake {
   id: string;
@@ -403,6 +404,57 @@ export default function StockTakePage() {
           </div>
         )}
       </div>
+
+      {/* Variance Trend Chart */}
+      {stockTakeHistory.length >= 2 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Variance Trend — Last 6 Stock Takes</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={stockTakeHistory.slice(0, 6).reverse()}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="take_number" 
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis 
+                label={{ value: 'Total Variance (kg)', angle: -90, position: 'insideLeft' }}
+                tick={{ fontSize: 12 }}
+              />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
+                        <p className="font-medium">{data.take_number}</p>
+                        <p className="text-sm text-gray-600">
+                          {data.closed_at ? format(new Date(data.closed_at), 'PPP') : 'N/A'}
+                        </p>
+                        <p className="text-sm">
+                          Total Variance: <span className="font-semibold">{Math.abs(data.total_variance || 0).toFixed(2)} kg</span>
+                        </p>
+                        <p className="text-sm">
+                          Lines Counted: <span className="font-semibold">{data.counted_lines || 0}</span>
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Bar dataKey={(entry) => Math.abs(entry.total_variance || 0)} radius={[8, 8, 0, 0]}>
+                {stockTakeHistory.slice(0, 6).reverse().map((entry, index) => {
+                  const absVariance = Math.abs(entry.total_variance || 0);
+                  let color = '#10b981'; // green
+                  if (absVariance > 500) color = '#ef4444'; // red
+                  else if (absVariance > 100) color = '#f59e0b'; // amber
+                  return <Cell key={`cell-${index}`} fill={color} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* New Stock Take Modal */}
       {showNewModal && (
