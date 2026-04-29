@@ -26,10 +26,9 @@ export default function StockTakeFrozenBanner() {
         .eq('status', 'FROZEN')
         .order('frozen_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        // No frozen stock take found
+      if (error || !data) {
         setFrozenTake(null);
         return;
       }
