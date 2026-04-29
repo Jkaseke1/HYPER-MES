@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import toast from 'react-hot-toast';
+import jsPDF from 'jspdf';
 
 interface StockTake {
   id: string;
@@ -395,6 +396,126 @@ export default function StockTakeDetailPage() {
     }
   };
 
+  const handleExportPDF = () => {
+    if (!stockTake) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 20;
+    let pageNum = 1;
+
+    // Helper to add new page
+    const addNewPage = () => {
+      doc.addPage();
+      pageNum++;
+      yPos = 20;
+      addHeader();
+      addFooter();
+    };
+
+    // Header
+    const addHeader = () => {
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Hyperfeeds Animal Nutrition', pageWidth / 2, yPos, { align: 'center' });
+      yPos += 7;
+      doc.setFontSize(12);
+      doc.text(`Stock Take ${stockTake.take_number}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(format(new Date(), 'PPP'), pageWidth / 2, yPos, { align: 'center' });
+      yPos += 10;
+    };
+
+    // Footer
+    const addFooter = () => {
+      doc.setFontSize(8);
+      doc.text(`Page ${pageNum}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+      doc.text(`Prepared by ${profile?.full_name || 'Unknown'} | ${format(new Date(), 'PPp')}`, 14, pageHeight - 10);
+    };
+
+    addHeader();
+    addFooter();
+
+    // Group lines by assigned user
+    const grouped: Record<string, StockTakeLine[]> = {};
+    lines.forEach(line => {
+      const key = line.assigned_to_profile?.full_name || 'Unassigned';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(line);
+    });
+
+    // Table header
+    const drawTableHeader = () => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const headers = ['#', 'Code', 'Description', 'Unit', stockTake.blind_mode ? '' : 'System Qty', 'Counted Qty', 'Variance', 'Signature'];
+      const colWidths = [10, 25, 60, 15, stockTake.blind_mode ? 0 : 20, 20, 20, 25];
+      let xPos = 14;
+      headers.forEach((header, i) => {
+        if (colWidths[i] > 0) {
+          doc.text(header, xPos, yPos);
+          xPos += colWidths[i];
+        }
+      });
+      yPos += 5;
+      doc.setFont('helvetica', 'normal');
+    };
+
+    Object.entries(grouped).forEach(([counter, counterLines]) => {
+      // Counter section header
+      if (yPos > pageHeight - 40) addNewPage();
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${counter} (${counterLines.length} items)`, 14, yPos);
+      yPos += 7;
+      doc.setFont('helvetica', 'normal');
+
+      drawTableHeader();
+
+      counterLines.forEach((line, idx) => {
+        if (yPos > pageHeight - 20) {
+          addNewPage();
+          drawTableHeader();
+        }
+
+        doc.setFontSize(7);
+        const rowData = [
+          `${idx + 1}`,
+          line.raw_materials?.code || '',
+          (line.raw_materials?.name || '').substring(0, 35),
+          line.unit,
+          stockTake.blind_mode ? '' : line.system_qty.toFixed(2),
+          '', // Blank for paper entry
+          '',
+          ''
+        ];
+        const colWidths = [10, 25, 60, 15, stockTake.blind_mode ? 0 : 20, 20, 20, 25];
+        let xPos = 14;
+        rowData.forEach((data, i) => {
+          if (colWidths[i] > 0) {
+            doc.text(data, xPos, yPos);
+            xPos += colWidths[i];
+          }
+        });
+        yPos += 5;
+      });
+
+      yPos += 5;
+    });
+
+    // Total items on last page
+    if (yPos > pageHeight - 30) addNewPage();
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Items: ${lines.length}`, 14, yPos);
+
+    doc.save(`StockTake-${stockTake.take_number}-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    toast.success('PDF exported successfully');
+  };
+
   const handleFreezeStock = async () => {
     if (!stockTake) return;
     setSaving(true);
@@ -646,7 +767,10 @@ export default function StockTakeDetailPage() {
               </button>
             </>
           )}
-          <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2">
+          <button 
+            onClick={handleExportPDF}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+          >
             <Download className="h-4 w-4" />
             <span>Export PDF</span>
           </button>
