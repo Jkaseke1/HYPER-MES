@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
+import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 
 interface MaterialTransfer {
   id: string;
@@ -181,6 +182,7 @@ export default function MaterialTransferPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <StockTakeFrozenBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Material Transfer</h1>

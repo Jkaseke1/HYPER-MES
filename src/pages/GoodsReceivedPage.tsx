@@ -10,6 +10,7 @@ import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StatCard from '../components/ui/StatCard';
 import GRNAttachments from '../components/grn/GRNAttachments';
+import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 
 interface GRNItem {
   raw_material_id: string;
@@ -340,6 +341,7 @@ export default function GoodsReceivedPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <StockTakeFrozenBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Goods Received Notes</h1>

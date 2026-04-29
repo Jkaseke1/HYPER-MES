@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { RawMaterial } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatCard from '../components/ui/StatCard';
+import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 
 const CATEGORIES = ['grain', 'protein', 'mineral', 'vitamin', 'additive', 'other'] as const;
 const UNITS = ['kg', 'ton', 'litre', 'bag'] as const;
@@ -211,6 +212,7 @@ export default function RawMaterialsPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <StockTakeFrozenBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Raw Materials</h1>
