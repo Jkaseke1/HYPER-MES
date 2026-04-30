@@ -5,6 +5,7 @@ import Layout from './components/layout/Layout';
 import LoginPage from './pages/LoginPage';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const RawMaterialsPage = lazy(() => import('./pages/RawMaterialsPage'));
@@ -38,6 +39,7 @@ const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
 const StockTakePage = lazy(() => import('./pages/StockTakePage'));
+const StockTakeDetailPage = lazy(() => import('./pages/StockTakeDetailPage'));
 
 function PageLoader() {
   return (
@@ -99,7 +101,7 @@ function AppRoutes() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/raw-materials" element={<RawMaterialsPage />} />
           <Route path="/stock-take" element={<StockTakePage />} />
-          <Route path="/stock-take/:id" element={<StockTakePage />} />
+          <Route path="/stock-take/:id" element={<ErrorBoundary><StockTakeDetailPage /></ErrorBoundary>} />
           <Route path="/goods-received" element={<GoodsReceivedPage />} />
           <Route path="/quality-inspection" element={<QualityInspectionPage />} />
           <Route path="/formulations" element={<FormulationsPage />} />
