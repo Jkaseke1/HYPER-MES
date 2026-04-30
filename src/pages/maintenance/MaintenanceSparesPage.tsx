@@ -42,7 +42,7 @@ export default function MaintenanceSparesPage() {
   });
 
   const categories = ['all', 'Bearings', 'V-Belts', 'Oil Seals', 'Die Parts', 'Cylinders', 'Drives', 'Chains', 'Electrical', 'Lubricants', 'Filters', 'Rolls & Rods', 'Elevator Belts', 'Misc'];
-  const subGroups = ['all', 'Pelletiser', 'Dog Extruder', 'Full Fat Extruder', 'Hammer Mill', 'Elevator', 'Compressor', 'Boiler', 'Red Plant', 'Conveyor', 'Mixer', 'Crumpler', 'Rotary Feeder', 'Pneumatic Cylinders', 'Drives', 'Forklift', 'General', 'Extruder', 'Powder Cleaners', 'Cooler', 'Augers', 'Pneumatics & Valves'];
+  const subGroups = ['all', 'Pelletiser', 'Dog Extruder', 'Full Fat Extruder', 'Hammer Mill', 'Elevator', 'Compressor', 'Boiler', 'Red Plant', 'Conveyor', 'Mixer', 'Crumpler', 'Rotary Feeder', 'Pneumatic Cylinders', 'Drives', 'Forklift', 'General', 'Extruder', 'Powder Cleaners', 'Cooler', 'Augers', 'Pneumatics & Valves', 'Blocks Plant'];
 
   useEffect(() => {
     fetchSpares();
