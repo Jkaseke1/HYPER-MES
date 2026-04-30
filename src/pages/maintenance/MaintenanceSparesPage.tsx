@@ -28,6 +28,18 @@ export default function MaintenanceSparesPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortField, setSortField] = useState<'description' | 'qty_on_hand' | 'min_stock'>('description');
   const [sortAsc, setSortAsc] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newSpare, setNewSpare] = useState({
+    description: '',
+    machine: '',
+    category: 'Bearings',
+    sub_group: 'Pelletiser',
+    qty_on_hand: 0,
+    min_stock: 0,
+    unit: 'pcs',
+    notes: '',
+    dimensions_notes: ''
+  });
 
   const categories = ['all', 'Bearings', 'V-Belts', 'Oil Seals', 'Die Parts', 'Cylinders', 'Drives', 'Chains', 'Electrical', 'Lubricants', 'Filters', 'Rolls & Rods', 'Elevator Belts', 'Misc'];
   const subGroups = ['all', 'Pelletiser', 'Dog Extruder', 'Full Fat Extruder', 'Hammer Mill', 'Elevator', 'Compressor', 'Boiler', 'Red Plant', 'Conveyor', 'Mixer', 'Crumpler', 'Rotary Feeder', 'Pneumatic Cylinders', 'Drives', 'Forklift', 'General', 'Extruder', 'Powder Cleaners', 'Cooler', 'Augers', 'Pneumatics & Valves'];
@@ -44,6 +56,53 @@ export default function MaintenanceSparesPage() {
       .order('item_no');
     if (data) setSpares(data);
     setLoading(false);
+  };
+
+  const handleAddSpare = async () => {
+    if (!newSpare.description.trim()) return;
+    
+    setAdding(true);
+    try {
+      // Get next item_no
+      const maxItemNo = spares.length > 0 ? Math.max(...spares.map(s => s.item_no || 0)) : 0;
+      
+      const { error } = await supabase
+        .from('maintenance_spares')
+        .insert({
+          item_no: maxItemNo + 1,
+          description: newSpare.description,
+          machine: newSpare.machine || null,
+          category: newSpare.category,
+          sub_group: newSpare.sub_group,
+          qty_on_hand: Number(newSpare.qty_on_hand),
+          min_stock: Number(newSpare.min_stock),
+          unit: newSpare.unit,
+          notes: newSpare.notes || null,
+          dimensions_notes: newSpare.dimensions_notes || null
+        });
+      
+      if (error) throw error;
+      
+      // Reset form and refresh
+      setNewSpare({
+        description: '',
+        machine: '',
+        category: 'Bearings',
+        sub_group: 'Pelletiser',
+        qty_on_hand: 0,
+        min_stock: 0,
+        unit: 'pcs',
+        notes: '',
+        dimensions_notes: ''
+      });
+      setShowAddModal(false);
+      fetchSpares();
+    } catch (error) {
+      console.error('Error adding spare:', error);
+      alert('Failed to add spare. Please try again.');
+    } finally {
+      setAdding(false);
+    }
   };
 
   const getStatus = (spare: MaintenanceSpare) => {
@@ -210,15 +269,143 @@ export default function MaintenanceSparesPage() {
         )}
       </div>
 
-      {/* Add Spare Modal - Placeholder for now */}
+      {/* Add Spare Modal */}
       {showAddModal && (
         <Modal
           open={showAddModal}
           onClose={() => setShowAddModal(false)}
           title="Add New Spare"
         >
-          <div className="p-4 text-center text-gray-500">
-            Add Spare form coming soon...
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+              <input
+                type="text"
+                value={newSpare.description}
+                onChange={(e) => setNewSpare({ ...newSpare, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g., 32217 bearings"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Machine</label>
+              <input
+                type="text"
+                value={newSpare.machine}
+                onChange={(e) => setNewSpare({ ...newSpare, machine: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g., Palletiser"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={newSpare.category}
+                  onChange={(e) => setNewSpare({ ...newSpare, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {categories.filter(c => c !== 'all').map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sub-Group</label>
+                <select
+                  value={newSpare.sub_group}
+                  onChange={(e) => setNewSpare({ ...newSpare, sub_group: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {subGroups.filter(sg => sg !== 'all').map(sg => (
+                    <option key={sg} value={sg}>{sg}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Qty On Hand</label>
+                <input
+                  type="number"
+                  value={newSpare.qty_on_hand}
+                  onChange={(e) => setNewSpare({ ...newSpare, qty_on_hand: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  min="0"
+                  step="0.1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Stock</label>
+                <input
+                  type="number"
+                  value={newSpare.min_stock}
+                  onChange={(e) => setNewSpare({ ...newSpare, min_stock: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  min="0"
+                  step="0.1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                <select
+                  value={newSpare.unit}
+                  onChange={(e) => setNewSpare({ ...newSpare, unit: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="pcs">pcs</option>
+                  <option value="m">m</option>
+                  <option value="L">L</option>
+                  <option value="kg">kg</option>
+                  <option value="sets">sets</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dimensions Notes</label>
+              <input
+                type="text"
+                value={newSpare.dimensions_notes}
+                onChange={(e) => setNewSpare({ ...newSpare, dimensions_notes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g., 160mm shaft, 32mm bore"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                value={newSpare.notes}
+                onChange={(e) => setNewSpare({ ...newSpare, notes: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Additional notes (grease fill %, life expectancy, etc.)"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                disabled={adding}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSpare}
+                disabled={adding}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {adding ? 'Adding...' : 'Add Spare'}
+              </button>
+            </div>
           </div>
         </Modal>
       )}
