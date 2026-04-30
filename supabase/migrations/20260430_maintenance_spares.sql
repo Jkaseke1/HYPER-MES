@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS maintenance_spares (
   description text NOT NULL,
   machine text,
   category text CHECK (category IN ('Bearings', 'V-Belts', 'Oil Seals', 'Die Parts', 'Cylinders', 'Drives', 'Chains', 'Electrical', 'Lubricants', 'Filters', 'Rolls & Rods', 'Elevator Belts', 'Misc')),
-  sub_group text CHECK (sub_group IN ('Pelletiser', 'Dog Extruder', 'Full Fat Extruder', 'Hammer Mill', 'Elevator', 'Compressor', 'Boiler', 'Red Plant', 'Conveyor', 'Mixer', 'Crumpler', 'Rotary Feeder', 'Pneumatic Cylinders', 'Drives', 'Forklift', 'General')),
+  sub_group text CHECK (sub_group IN ('Pelletiser', 'Dog Extruder', 'Full Fat Extruder', 'Hammer Mill', 'Elevator', 'Compressor', 'Boiler', 'Red Plant', 'Conveyor', 'Mixer', 'Crumpler', 'Rotary Feeder', 'Pneumatic Cylinders', 'Drives', 'Forklift', 'General', 'Extruder', 'Powder Cleaners', 'Cooler', 'Augers', 'Pneumatics & Valves')),
   qty_on_hand numeric NOT NULL DEFAULT 0,
   min_stock numeric NOT NULL DEFAULT 0,
   unit text DEFAULT 'pcs' CHECK (unit IN ('pcs', 'm', 'L', 'kg', 'sets')),
