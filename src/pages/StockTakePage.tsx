@@ -528,6 +528,30 @@ export default function StockTakePage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Mandatory Items ({mandatoryItems.length} selected)
               </label>
+              
+              {/* Show selected items */}
+              {mandatoryItems.length > 0 && (
+                <div className="mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <div className="text-xs font-medium text-indigo-700 mb-2">Selected Items:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {mandatoryItems.map(id => {
+                      const rm = allRawMaterials.find(r => r.id === id);
+                      return rm ? (
+                        <span key={id} className="inline-flex items-center px-2 py-1 bg-white border border-indigo-300 rounded text-xs text-indigo-900">
+                          {rm.code}
+                          <button
+                            onClick={() => setMandatoryItems(mandatoryItems.filter(i => i !== id))}
+                            className="ml-1 text-indigo-500 hover:text-indigo-700"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+
               <input
                 type="text"
                 placeholder="Search items..."
