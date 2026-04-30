@@ -17,6 +17,8 @@ interface StockTake {
   started_at: string;
   frozen_at?: string;
   closed_at?: string;
+  title?: string;
+  person_name?: string;
   notes?: string;
   blind_mode: boolean;
   started_by_profile?: {
@@ -49,11 +51,14 @@ export default function StockTakePage() {
   const [activeStockTake, setActiveStockTake] = useState<StockTake | null>(null);
   const [stockTakeHistory, setStockTakeHistory] = useState<StockTake[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [newTakeTitle, setNewTakeTitle] = useState('');
+  const [newTakePersonName, setNewTakePersonName] = useState('');
   const [newTakeNotes, setNewTakeNotes] = useState('');
   const [blindMode, setBlindMode] = useState(false);
   const [mandatoryItems, setMandatoryItems] = useState<string[]>([]);
   const [allRawMaterials, setAllRawMaterials] = useState<RawMaterial[]>([]);
   const [creating, setCreating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -187,6 +192,8 @@ export default function StockTakePage() {
           take_number: takeNumber,
           status: 'OPEN',
           started_by: profile.id,
+          title: newTakeTitle || null,
+          person_name: newTakePersonName || null,
           notes: newTakeNotes || null,
           blind_mode: blindMode
         })
@@ -466,6 +473,32 @@ export default function StockTakePage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Stock Take Title
+              </label>
+              <input
+                type="text"
+                value={newTakeTitle}
+                onChange={(e) => setNewTakeTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g., Month-end Stock Take, Annual Physical Count"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Person Name
+              </label>
+              <input
+                type="text"
+                value={newTakePersonName}
+                onChange={(e) => setNewTakePersonName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Your name or person responsible"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Notes (optional)
               </label>
               <textarea
@@ -473,7 +506,7 @@ export default function StockTakePage() {
                 onChange={(e) => setNewTakeNotes(e.target.value)}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="e.g., Month-end stock take, Annual audit count"
+                placeholder="Additional notes or observations"
               />
             </div>
 
@@ -495,8 +528,21 @@ export default function StockTakePage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Mandatory Items ({mandatoryItems.length} selected)
               </label>
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+              />
               <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
-                {allRawMaterials.map((rm) => (
+                {allRawMaterials
+                  .filter(rm => 
+                    searchTerm === '' || 
+                    rm.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    rm.name.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((rm) => (
                   <label
                     key={rm.id}
                     className="flex items-center space-x-3 p-2 hover:bg-gray-50 cursor-pointer"
