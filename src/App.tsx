@@ -30,9 +30,6 @@ const MonthlyRMReconciliationPage = lazy(() => import('./pages/MonthlyRMReconcil
 const GrossMarginReportPage = lazy(() => import('./pages/GrossMarginReportPage'));
 const MacropackManufacturingPage = lazy(() => import('./pages/MacropackManufacturingPage'));
 const ShiftReportsPage = lazy(() => import('./pages/ShiftReportsPage'));
-const MaintenanceWorkOrdersPage = lazy(() => import('./pages/MaintenanceWorkOrdersPage'));
-const MaintenanceSchedulePage = lazy(() => import('./pages/MaintenanceSchedulePage'));
-const SparePartsPage = lazy(() => import('./pages/SparePartsPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
@@ -40,6 +37,10 @@ const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
 const StockTakePage = lazy(() => import('./pages/StockTakePage'));
 const StockTakeDetailPage = lazy(() => import('./pages/StockTakeDetailPage'));
+const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/MaintenanceSparesPage'));
+const MaintenanceTransactionsPage = lazy(() => import('./pages/maintenance/MaintenanceTransactionsPage'));
+const MaintenanceLowStockPage = lazy(() => import('./pages/maintenance/MaintenanceLowStockPage'));
+const MaintenanceWorkOrdersPage = lazy(() => import('./pages/maintenance/MaintenanceWorkOrdersPage'));
 
 function PageLoader() {
   return (
@@ -123,9 +124,10 @@ function AppRoutes() {
           <Route path="/reports/labour" element={<LabourCostReportPage />} />
           <Route path="/reports/gross-margin" element={<GrossMarginReportPage />} />
           <Route path="/simple-test" element={<SimpleTestPage />} />
-          <Route path="/maintenance-work-orders" element={<MaintenanceWorkOrdersPage />} />
-          <Route path="/maintenance-schedules" element={<MaintenanceSchedulePage />} />
-          <Route path="/spare-parts" element={<SparePartsPage />} />
+          <Route path="/maintenance/spares" element={<MaintenanceSparesPage />} />
+          <Route path="/maintenance/transactions" element={<MaintenanceTransactionsPage />} />
+          <Route path="/maintenance/low-stock" element={<MaintenanceLowStockPage />} />
+          <Route path="/maintenance/work-orders" element={<MaintenanceWorkOrdersPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />

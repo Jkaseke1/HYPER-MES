@@ -19,7 +19,7 @@ import {
   ChevronRight,
   ChevronDown,
   Wrench,
-  Calendar,
+  AlertTriangle,
   PackagePlus,
   ClipboardType,
   ArrowRightLeft,
@@ -107,9 +107,10 @@ const navGroups: NavGroup[] = [
     label: 'Plant Maintenance',
     icon: Wrench,
     items: [
-      { to: '/maintenance-work-orders', icon: Wrench, label: 'Work Orders' },
-      { to: '/maintenance-schedules', icon: Calendar, label: 'PM Schedules' },
-      { to: '/spare-parts', icon: PackagePlus, label: 'Spare Parts' },
+      { to: '/maintenance/spares', icon: PackagePlus, label: 'Spares Inventory' },
+      { to: '/maintenance/transactions', icon: ArrowRightLeft, label: 'Issue/Receive Stock' },
+      { to: '/maintenance/low-stock', icon: AlertTriangle, label: 'Low Stock Report' },
+      { to: '/maintenance/work-orders', icon: Wrench, label: 'Work Orders' },
     ],
   },
   {
