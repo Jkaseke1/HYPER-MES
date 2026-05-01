@@ -98,6 +98,7 @@ export default function StockTakeDetailPage() {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showRecountModal, setShowRecountModal] = useState(false);
   const [selectedLine, setSelectedLine] = useState<StockTakeLine | null>(null);
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [recountReason, setRecountReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
@@ -226,7 +227,7 @@ export default function StockTakeDetailPage() {
       });
 
       await fetchLines();
-      toast.success('Count saved');
+      // Removed toast notification to avoid annoying popups during typing
     } catch (error: any) {
       console.error('Error updating count:', error);
       toast.error(`Failed to save count: ${error.message}`);
@@ -253,7 +254,7 @@ export default function StockTakeDetailPage() {
       });
 
       await fetchLines();
-      toast.success('Recount saved');
+      // Removed toast notification to avoid annoying popups during typing
     } catch (error: any) {
       console.error('Error updating recount:', error);
       toast.error(`Failed to save recount: ${error.message}`);
@@ -1109,9 +1110,12 @@ export default function StockTakeDetailPage() {
                         <input
                           type="number"
                           step="0.01"
-                          value={line.counted_qty ?? ''}
-                          onChange={(e) => handleUpdateCountedQty(line.id, e.target.value)}
-                          onBlur={(e) => handleUpdateCountedQty(line.id, e.target.value)}
+                          value={inputValues[line.id] ?? (line.counted_qty?.toString() ?? '')}
+                          onChange={(e) => setInputValues({ ...inputValues, [line.id]: e.target.value })}
+                          onBlur={(e) => {
+                            handleUpdateCountedQty(line.id, e.target.value);
+                            setInputValues({ ...inputValues, [line.id]: '' });
+                          }}
                           className="w-24 px-2 py-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           placeholder="0.00"
                         />
@@ -1125,9 +1129,12 @@ export default function StockTakeDetailPage() {
                           <input
                             type="number"
                             step="0.01"
-                            value={line.recount_qty ?? ''}
-                            onChange={(e) => handleUpdateRecountQty(line.id, e.target.value)}
-                            onBlur={(e) => handleUpdateRecountQty(line.id, e.target.value)}
+                            value={inputValues[`recount_${line.id}`] ?? (line.recount_qty?.toString() ?? '')}
+                            onChange={(e) => setInputValues({ ...inputValues, [`recount_${line.id}`]: e.target.value })}
+                            onBlur={(e) => {
+                              handleUpdateRecountQty(line.id, e.target.value);
+                              setInputValues({ ...inputValues, [`recount_${line.id}`]: '' });
+                            }}
                             className="w-24 px-2 py-1 border border-amber-300 rounded text-right focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                             placeholder="0.00"
                           />
