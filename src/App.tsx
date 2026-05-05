@@ -41,6 +41,10 @@ const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/Maintenance
 const MaintenanceTransactionsPage = lazy(() => import('./pages/maintenance/MaintenanceTransactionsPage'));
 const MaintenanceLowStockPage = lazy(() => import('./pages/maintenance/MaintenanceLowStockPage'));
 const MaintenanceWorkOrdersPage = lazy(() => import('./pages/maintenance/MaintenanceWorkOrdersPage'));
+const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
+const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
+const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
+const PaymentHistoryPage = lazy(() => import('./pages/payroll/PaymentHistoryPage'));
 
 function PageLoader() {
   return (
@@ -124,6 +128,10 @@ function AppRoutes() {
           <Route path="/reports/labour" element={<LabourCostReportPage />} />
           <Route path="/reports/gross-margin" element={<GrossMarginReportPage />} />
           <Route path="/simple-test" element={<SimpleTestPage />} />
+          <Route path="/payroll/workers" element={<TempWorkersPage />} />
+          <Route path="/payroll/attendance" element={<WorkerAttendancePage />} />
+          <Route path="/payroll/processing" element={<PayrollProcessingPage />} />
+          <Route path="/payroll/history" element={<PaymentHistoryPage />} />
           <Route path="/maintenance/spares" element={<MaintenanceSparesPage />} />
           <Route path="/maintenance/transactions" element={<MaintenanceTransactionsPage />} />
           <Route path="/maintenance/low-stock" element={<MaintenanceLowStockPage />} />

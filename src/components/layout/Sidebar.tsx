@@ -33,6 +33,8 @@ import {
   TrendingUp,
   Scale,
   Boxes,
+  Clock,
+  History,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -101,6 +103,16 @@ const navGroups: NavGroup[] = [
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
       { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
       { to: '/reports', icon: FileText, label: 'Reports' },
+    ],
+  },
+  {
+    label: 'Payroll',
+    icon: DollarSign,
+    items: [
+      { to: '/payroll/workers', icon: Users, label: 'Temporary Workers' },
+      { to: '/payroll/attendance', icon: Clock, label: 'Attendance' },
+      { to: '/payroll/processing', icon: DollarSign, label: 'Payroll Processing' },
+      { to: '/payroll/history', icon: History, label: 'Payment History' },
     ],
   },
   {
