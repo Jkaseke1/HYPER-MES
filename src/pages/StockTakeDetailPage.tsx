@@ -697,7 +697,8 @@ export default function StockTakeDetailPage() {
       !l.approved_by
     );
     if (highVarianceUnapproved.length > 0) {
-      toast.error(`Cannot close — ${highVarianceUnapproved.length} high-variance lines require approval`);
+      const itemNames = highVarianceUnapproved.map(l => l.raw_materials?.code || l.raw_materials?.name || 'Unknown').join(', ');
+      toast.error(`Cannot close — ${highVarianceUnapproved.length} high-variance line(s) require approval: ${itemNames}. Click the 👍 icon in Actions to approve.`);
       return;
     }
 
