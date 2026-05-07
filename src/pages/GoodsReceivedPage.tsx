@@ -243,7 +243,7 @@ export default function GoodsReceivedPage() {
       
       // Insert GRN
       const { weigh_bridge_ticket_id, ...restForm } = form as any;
-      const grnData = { ...restForm, total_value: totalValue, ...(weigh_bridge_ticket_id ? { weigh_bridge_ticket_id } : {}) };
+      const grnData = { ...restForm, total_value: totalValue, received_by: profile?.id, ...(weigh_bridge_ticket_id ? { weigh_bridge_ticket_id } : {}) };
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
         .insert(grnData)
