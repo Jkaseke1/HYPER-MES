@@ -3,8 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Lock, Unlock, AlertTriangle, CheckCircle, 
   Download, FileSpreadsheet, Loader2, Flag, ThumbsUp,
-  EyeOff, Users, Clock
+  EyeOff, Users, Clock,
+  BarChart3, PieChart, TrendingUp, TrendingDown, Minus,
+  CheckCircle2, XCircle, Activity, Package
 } from 'lucide-react';
+import {
+  ResponsiveContainer, PieChart as RePieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from 'recharts';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -791,6 +797,48 @@ export default function StockTakeDetailPage() {
   const totalVariance = lines.reduce((sum, l) => sum + (l.variance || 0), 0);
   const progressPercent = lines.length > 0 ? Math.round((countedLines / lines.length) * 100) : 0;
 
+  // ---- Reporting & Analytics computed stats ----
+  const countedLinesData = lines.filter(l => l.counted_qty !== null);
+  const zeroVariance = countedLinesData.filter(l => l.variance === 0).length;
+  const positiveVariance = countedLinesData.filter(l => l.variance > 0).length;
+  const negativeVariance = countedLinesData.filter(l => l.variance < 0).length;
+  const criticalVariance = countedLinesData.filter(l => l.system_qty > 0 && Math.abs(l.variance / l.system_qty) > 0.10).length;
+  const highVarianceCount = countedLinesData.filter(l => l.system_qty > 0 && Math.abs(l.variance / l.system_qty) > 0.05 && Math.abs(l.variance / l.system_qty) <= 0.10).length;
+  const lowVarianceCount = countedLinesData.filter(l => l.system_qty > 0 && Math.abs(l.variance / l.system_qty) > 0 && Math.abs(l.variance / l.system_qty) <= 0.05).length;
+  const absTotalVariance = countedLinesData.reduce((sum, l) => sum + Math.abs(l.variance || 0), 0);
+  const avgVariance = countedLinesData.length > 0 ? absTotalVariance / countedLinesData.length : 0;
+
+  // Top 10 variances for bar chart
+  const topVariances = [...countedLinesData]
+    .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+    .slice(0, 10)
+    .map(l => ({
+      code: l.raw_materials?.code || 'Unknown',
+      name: l.raw_materials?.name || 'Unknown',
+      variance: l.variance,
+      absVariance: Math.abs(l.variance),
+      systemQty: l.system_qty,
+    }));
+
+  // Variance distribution for pie chart
+  const varianceDistribution = [
+    { name: 'Zero Variance', value: zeroVariance, color: '#10b981' },
+    { name: 'Low (0-5%)', value: lowVarianceCount, color: '#3b82f6' },
+    { name: 'High (5-10%)', value: highVarianceCount, color: '#f59e0b' },
+    { name: 'Critical (>10%)', value: criticalVariance, color: '#ef4444' },
+    { name: 'Not Counted', value: pendingLines, color: '#9ca3af' },
+  ].filter(d => d.value > 0);
+
+  // Counting by user
+  const countingByUser = countedLinesData.reduce<Record<string, { name: string; count: number; lines: number }>>((acc, l) => {
+    const name = l.counted_by_profile?.full_name || 'Unknown';
+    if (!acc[name]) acc[name] = { name, count: 0, lines: 0 };
+    acc[name].count += Math.abs(l.variance || 0);
+    acc[name].lines += 1;
+    return acc;
+  }, {});
+  const userStats = Object.values(countingByUser).sort((a, b) => b.lines - a.lines).slice(0, 8);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -913,36 +961,335 @@ export default function StockTakeDetailPage() {
         </div>
       </div>
 
-      {/* Summary Bar */}
-      <div className="grid grid-cols-6 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Total Lines</div>
-          <div className="text-2xl font-bold text-gray-900">{lines.length}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Counted</div>
-          <div className="text-2xl font-bold text-blue-600">{countedLines}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Pending</div>
-          <div className="text-2xl font-bold text-gray-600">{pendingLines}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Needs Recount</div>
-          <div className="text-2xl font-bold text-amber-600">{recountLines}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Approved</div>
-          <div className="text-2xl font-bold text-green-600">{approvedLines}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Total Variance</div>
-          <div className={`text-2xl font-bold ${
-            totalVariance === 0 ? 'text-green-600' :
-            totalVariance > 0 ? 'text-amber-600' : 'text-red-600'
-          }`}>
-            {totalVariance > 0 ? '+' : ''}{totalVariance.toFixed(2)} kg
+      {/* Professional Summary Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Lines</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{lines.length}</p>
+              <p className="text-xs text-slate-400 mt-1">raw materials</p>
+            </div>
+            <div className="p-2 bg-slate-100 rounded-lg"><Package className="w-5 h-5 text-slate-600" /></div>
           </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Counted</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">{countedLines}</p>
+              <p className="text-xs text-slate-400 mt-1">{progressPercent}% complete</p>
+            </div>
+            <div className="p-2 bg-blue-50 rounded-lg"><CheckCircle2 className="w-5 h-5 text-blue-600" /></div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Pending</p>
+              <p className="text-2xl font-bold text-slate-600 mt-1">{pendingLines}</p>
+              <p className="text-xs text-slate-400 mt-1">not yet counted</p>
+            </div>
+            <div className="p-2 bg-slate-100 rounded-lg"><Clock className="w-5 h-5 text-slate-500" /></div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Needs Recount</p>
+              <p className="text-2xl font-bold text-amber-600 mt-1">{recountLines}</p>
+              <p className="text-xs text-slate-400 mt-1">flagged items</p>
+            </div>
+            <div className="p-2 bg-amber-50 rounded-lg"><Flag className="w-5 h-5 text-amber-600" /></div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Approved</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{approvedLines}</p>
+              <p className="text-xs text-slate-400 mt-1">high variance ok</p>
+            </div>
+            <div className="p-2 bg-emerald-50 rounded-lg"><ThumbsUp className="w-5 h-5 text-emerald-600" /></div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Variance</p>
+              <p className={`text-2xl font-bold mt-1 ${
+                totalVariance === 0 ? 'text-emerald-600' :
+                totalVariance > 0 ? 'text-amber-600' : 'text-red-600'
+              }`}>
+                {totalVariance > 0 ? '+' : ''}{totalVariance.toFixed(2)} <span className="text-sm">kg</span>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {positiveVariance > 0 && `${positiveVariance} up`}
+                {positiveVariance > 0 && negativeVariance > 0 && ' / '}
+                {negativeVariance > 0 && `${negativeVariance} down`}
+                {positiveVariance === 0 && negativeVariance === 0 && 'all matching'}
+              </p>
+            </div>
+            <div className={`p-2 rounded-lg ${
+              totalVariance === 0 ? 'bg-emerald-50' :
+              totalVariance > 0 ? 'bg-amber-50' : 'bg-red-50'
+            }`}>
+              <Activity className={`w-5 h-5 ${
+                totalVariance === 0 ? 'text-emerald-600' :
+                totalVariance > 0 ? 'text-amber-600' : 'text-red-600'
+              }`} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Reports & Analytics Section ---- */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-2.5">
+          <BarChart3 className="w-5 h-5 text-slate-600" />
+          <h2 className="text-lg font-bold text-slate-800">Stock Take Analytics</h2>
+          <span className="text-xs text-slate-400 ml-auto">{stockTake.take_number}</span>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Variance Magnitude Breakdown Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="rounded-lg border border-red-200 bg-red-50/40 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <XCircle className="w-4 h-4 text-red-600" />
+                <span className="text-xs font-semibold text-red-700 uppercase tracking-wide">Critical Variance</span>
+              </div>
+              <p className="text-2xl font-bold text-red-700">{criticalVariance}</p>
+              <p className="text-xs text-red-600 mt-1">items &gt;10% deviation</p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">High Variance</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-700">{highVarianceCount}</p>
+              <p className="text-xs text-amber-600 mt-1">items 5-10% deviation</p>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Low Variance</span>
+              </div>
+              <p className="text-2xl font-bold text-blue-700">{lowVarianceCount}</p>
+              <p className="text-xs text-blue-600 mt-1">items 0-5% deviation</p>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Zero Variance</span>
+              </div>
+              <p className="text-2xl font-bold text-emerald-700">{zeroVariance}</p>
+              <p className="text-xs text-emerald-600 mt-1">perfectly matching</p>
+            </div>
+          </div>
+
+          {/* Summary Metrics Row */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <p className="text-xs font-medium text-slate-500 uppercase">Absolute Total Variance</p>
+              <p className="text-xl font-bold text-slate-800 mt-1">{absTotalVariance.toFixed(2)} kg</p>
+              <p className="text-xs text-slate-400">sum of all absolute variances</p>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <p className="text-xs font-medium text-slate-500 uppercase">Average Variance per Line</p>
+              <p className="text-xl font-bold text-slate-800 mt-1">{avgVariance.toFixed(2)} kg</p>
+              <p className="text-xs text-slate-400">across {countedLinesData.length} counted items</p>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <p className="text-xs font-medium text-slate-500 uppercase">Net Variance Direction</p>
+              <div className="flex items-center gap-2 mt-1">
+                {totalVariance > 0 ? (
+                  <>
+                    <TrendingUp className="w-5 h-5 text-amber-600" />
+                    <span className="text-xl font-bold text-amber-600">Over-counted</span>
+                  </>
+                ) : totalVariance < 0 ? (
+                  <>
+                    <TrendingDown className="w-5 h-5 text-red-600" />
+                    <span className="text-xl font-bold text-red-600">Under-counted</span>
+                  </>
+                ) : (
+                  <>
+                    <Minus className="w-5 h-5 text-emerald-600" />
+                    <span className="text-xl font-bold text-emerald-600">Balanced</span>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">
+                {positiveVariance} up / {negativeVariance} down
+              </p>
+            </div>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* Variance Distribution Pie Chart */}
+            <div className="bg-white rounded-lg border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <PieChart className="w-4 h-4 text-slate-500" />
+                Variance Distribution
+              </h3>
+              {varianceDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <RePieChart>
+                    <Pie
+                      data={varianceDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ name, value }) => `${value}`}
+                      labelLine={false}
+                    >
+                      {varianceDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string) => [`${value} items`, name]}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                    />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                  </RePieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[260px] flex items-center justify-center text-sm text-slate-400">No data yet</div>
+              )}
+            </div>
+
+            {/* Top 10 Variances Bar Chart */}
+            <div className="bg-white rounded-lg border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-slate-500" />
+                Top 10 Largest Variances (kg)
+              </h3>
+              {topVariances.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={topVariances} layout="vertical" margin={{ left: 40, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis dataKey="code" type="category" width={70} tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      formatter={(value: number) => [`${value.toFixed(2)} kg`, 'Variance']}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                    />
+                    <Bar dataKey="variance" radius={[0, 4, 4, 0]}>
+                      {topVariances.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.variance > 0 ? '#f59e0b' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[260px] flex items-center justify-center text-sm text-slate-400">No variances recorded yet</div>
+              )}
+            </div>
+          </div>
+
+          {/* Counting Activity by User */}
+          {userStats.length > 0 && (
+            <div className="rounded-lg border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-slate-500" />
+                Counting Activity by User
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase">Counter</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Lines Counted</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Total Absolute Variance</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Avg Variance / Line</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userStats.map((u) => (
+                      <tr key={u.name} className="border-b border-slate-50 last:border-0">
+                        <td className="py-2 px-3 font-medium text-slate-700">{u.name}</td>
+                        <td className="py-2 px-3 text-right text-slate-600">{u.lines}</td>
+                        <td className="py-2 px-3 text-right text-slate-600">{u.count.toFixed(2)} kg</td>
+                        <td className="py-2 px-3 text-right text-slate-600">{u.lines > 0 ? (u.count / u.lines).toFixed(2) : '0.00'} kg</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Top Variances Detail Table */}
+          {topVariances.length > 0 && (
+            <div className="rounded-lg border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-slate-500" />
+                Top 10 Variance Details
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase">Code</th>
+                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase">Material</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">System Qty</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Counted Qty</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Variance</th>
+                      <th className="text-right py-2 px-3 text-xs font-medium text-slate-500 uppercase">Var %</th>
+                      <th className="text-center py-2 px-3 text-xs font-medium text-slate-500 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topVariances.map((item) => {
+                      const matchedLine = lines.find(l => l.raw_materials?.code === item.code);
+                      const countedQty = matchedLine?.counted_qty ?? 0;
+                      const varPct = item.systemQty > 0 ? ((item.variance / item.systemQty) * 100).toFixed(1) : '0.0';
+                      const isApproved = matchedLine?.approved_by;
+                      return (
+                        <tr key={item.code} className="border-b border-slate-50 last:border-0">
+                          <td className="py-2 px-3 font-medium text-slate-700">{item.code}</td>
+                          <td className="py-2 px-3 text-slate-600">{item.name}</td>
+                          <td className="py-2 px-3 text-right text-slate-600">{item.systemQty.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right text-slate-600">{countedQty.toFixed(2)}</td>
+                          <td className={`py-2 px-3 text-right font-medium ${
+                            item.variance > 0 ? 'text-amber-600' : 'text-red-600'
+                          }`}>
+                            {item.variance > 0 ? '+' : ''}{item.variance.toFixed(2)} kg
+                          </td>
+                          <td className={`py-2 px-3 text-right ${
+                            Math.abs(parseFloat(varPct)) > 5 ? 'text-red-600 font-medium' : 'text-slate-600'
+                          }`}>
+                            {varPct}%
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {isApproved ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                <CheckCircle className="w-3 h-3" /> Approved
+                              </span>
+                            ) : Math.abs(parseFloat(varPct)) > 5 ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                                <AlertTriangle className="w-3 h-3" /> Needs Approval
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full">
+                                <Minus className="w-3 h-3" /> OK
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
