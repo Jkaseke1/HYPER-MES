@@ -686,7 +686,8 @@ export default function StockTakeDetailPage() {
     // Validation checks
     const mandatoryUncounted = lines.filter(l => l.is_mandatory && l.counted_qty === null);
     if (mandatoryUncounted.length > 0) {
-      toast.error(`Cannot close — ${mandatoryUncounted.length} mandatory items not yet counted`);
+      const itemNames = mandatoryUncounted.map(l => l.raw_materials?.code || l.raw_materials?.name || 'Unknown').join(', ');
+      toast.error(`Cannot close — ${mandatoryUncounted.length} mandatory item(s) not yet counted: ${itemNames}`);
       return;
     }
 
