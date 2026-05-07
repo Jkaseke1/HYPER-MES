@@ -1114,7 +1114,11 @@ export default function StockTakeDetailPage() {
                           onChange={(e) => setInputValues({ ...inputValues, [line.id]: e.target.value })}
                           onBlur={(e) => {
                             handleUpdateCountedQty(line.id, e.target.value);
-                            setInputValues({ ...inputValues, [line.id]: '' });
+                            setInputValues(prev => {
+                              const next = { ...prev };
+                              delete next[line.id];
+                              return next;
+                            });
                           }}
                           className="w-24 px-2 py-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           placeholder="0.00"
@@ -1133,7 +1137,11 @@ export default function StockTakeDetailPage() {
                             onChange={(e) => setInputValues({ ...inputValues, [`recount_${line.id}`]: e.target.value })}
                             onBlur={(e) => {
                               handleUpdateRecountQty(line.id, e.target.value);
-                              setInputValues({ ...inputValues, [`recount_${line.id}`]: '' });
+                              setInputValues(prev => {
+                                const next = { ...prev };
+                                delete next[`recount_${line.id}`];
+                                return next;
+                              });
                             }}
                             className="w-24 px-2 py-1 border border-amber-300 rounded text-right focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                             placeholder="0.00"
