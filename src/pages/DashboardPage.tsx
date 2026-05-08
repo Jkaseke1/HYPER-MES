@@ -4,7 +4,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
-  Factory, ClipboardList, Truck, TrendingUp, AlertTriangle, Radio, RefreshCw,
+  Factory, ClipboardList, Truck, TrendingUp, AlertTriangle, Radio, RefreshCw, Package, FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -186,9 +186,24 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
+          <Package className="w-3.5 h-3.5 text-slate-500" />
+          Materials: {stats.rawMaterialCount}
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
+          <FlaskConical className="w-3.5 h-3.5 text-slate-500" />
+          Active Formulations: {stats.formulationCount}
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
+          <AlertTriangle className={`w-3.5 h-3.5 ${filteredLowStock.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`} />
+          Alerts: {filteredLowStock.length}
+        </span>
+      </div>
+
       {/* Hero row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 rounded-2xl border border-teal-200/70 bg-gradient-to-br from-white to-teal-50/30 shadow-md p-4">
+        <div className="xl:col-span-2 rounded-2xl border border-sky-200/80 bg-gradient-to-br from-white to-sky-50/45 shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="relative flex items-center justify-center">

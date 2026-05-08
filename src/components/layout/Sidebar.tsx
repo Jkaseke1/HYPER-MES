@@ -1,5 +1,5 @@
-import { NavLink } from 'react-router-dom';
-import { useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import {
   LayoutDashboard,
   Package as PackageIcon,
@@ -35,6 +35,7 @@ import {
   Boxes,
   Clock,
   History,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -142,6 +143,8 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut } = useAuth();
+  const location = useLocation();
+  const [query, setQuery] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<string[]>(
     navGroups.map((g) => g.label)
   );
@@ -154,35 +157,67 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     );
   };
 
+  const quickAccess = [
+    { to: '/production-orders', icon: Factory, label: 'Production Orders' },
+    { to: '/raw-materials', icon: PackageIcon2, label: 'RM Inventory' },
+    { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
+    { to: '/reports', icon: FileText, label: 'Reports' },
+  ];
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleGroups = useMemo(() => {
+    if (!normalizedQuery) return navGroups;
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.label.toLowerCase().includes(normalizedQuery)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [normalizedQuery]);
+
   return (
     <aside
-      className={`fixed left-0 top-0 h-full bg-slate-900 text-white z-40 transition-all duration-300 flex flex-col ${
+      className={`fixed left-0 top-0 h-full bg-slate-950 text-white z-40 transition-all duration-300 flex flex-col ${
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-700/50">
+      <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-800">
         <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
           <Wheat className="w-5 h-5 text-white" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-sm font-bold tracking-tight text-white leading-tight">Hyperfeeds<br/>Nutrition</h1>
+            <h1 className="text-[11px] font-bold tracking-wide text-white leading-tight uppercase">HYPERFEEDS MANUFACTURING SYSTEM</h1>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest">MES</p>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 py-4 overflow-y-auto">
-        <div className="px-2 space-y-1">
+      {!collapsed && (
+        <div className="px-3 pt-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find module..."
+              className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-800 bg-slate-900 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500/40"
+            />
+          </div>
+        </div>
+      )}
+
+      <nav className="flex-1 py-3 overflow-y-auto scrollbar-thin">
+        <div className="px-2 space-y-1.5">
           {/* Dashboard - Always visible */}
           <NavLink
             to="/"
             end
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                 isActive
-                  ? 'bg-teal-500/15 text-teal-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                  : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-900/80'
               }`
             }
           >
@@ -190,18 +225,46 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {!collapsed && <span>Dashboard</span>}
           </NavLink>
 
+          {!collapsed && (
+            <div className="mt-3 mb-1">
+              <p className="px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Quick Access</p>
+              <ul className="mt-1 space-y-0.5">
+                {quickAccess.map((item) => (
+                  <li key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                          isActive
+                            ? 'bg-sky-500/20 text-sky-300'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900/80'
+                        }`
+                      }
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Grouped Navigation */}
-          {navGroups.map((group) => {
-            const isExpanded = expandedGroups.includes(group.label);
+          {visibleGroups.map((group) => {
+            const containsActive = group.items.some((item) => item.to === location.pathname);
+            const isExpanded = normalizedQuery ? true : expandedGroups.includes(group.label) || containsActive;
             return (
               <div key={group.label} className="mt-4">
                 {!collapsed && (
                   <button
                     onClick={() => toggleGroup(group.label)}
-                    className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-300 uppercase tracking-wider transition-colors"
+                    className={`flex items-center justify-between w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors rounded-md ${
+                      containsActive ? 'text-slate-200 bg-slate-900/80' : 'text-slate-500 hover:text-slate-300'
+                    }`}
                   >
                     <div className="flex items-center gap-2">
-                      <group.icon className="w-4 h-4" />
+                      <group.icon className={`w-4 h-4 ${containsActive ? 'text-teal-400' : ''}`} />
                       <span>{group.label}</span>
                     </div>
                     <ChevronDown
@@ -221,10 +284,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         <NavLink
                           to={item.to}
                           className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                               isActive
-                                ? 'bg-teal-500/15 text-teal-400'
-                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                ? 'bg-teal-500/20 text-teal-300 border-teal-500/35'
+                                : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-900/80'
                             } ${!collapsed ? 'ml-2' : ''}`
                           }
                         >
@@ -241,17 +304,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="p-2 border-t border-slate-700/50">
+      <div className="p-2 border-t border-slate-800 bg-slate-950">
         <button
           onClick={signOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-all duration-150 w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-slate-900 transition-all duration-150 w-full"
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />
           {!collapsed && <span>Sign Out</span>}
         </button>
         <button
           onClick={onToggle}
-          className="flex items-center justify-center w-full mt-1 py-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-all"
+          className="flex items-center justify-center w-full mt-1 py-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-900 transition-all"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
