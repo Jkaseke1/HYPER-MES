@@ -145,24 +145,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut } = useAuth();
   const location = useLocation();
   const [query, setQuery] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(
-    navGroups.map((g) => g.label)
-  );
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) =>
-      prev.includes(label)
-        ? prev.filter((l) => l !== label)
-        : [...prev, label]
-    );
+    setExpandedGroup((prev) => (prev === label ? null : label));
   };
-
-  const quickAccess = [
-    { to: '/production-orders', icon: Factory, label: 'Production Orders' },
-    { to: '/raw-materials', icon: PackageIcon2, label: 'RM Inventory' },
-    { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
-    { to: '/reports', icon: FileText, label: 'Reports' },
-  ];
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = useMemo(() => {
@@ -225,35 +212,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {!collapsed && <span>Dashboard</span>}
           </NavLink>
 
-          {!collapsed && (
-            <div className="mt-3 mb-1">
-              <p className="px-2 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Quick Access</p>
-              <ul className="mt-1 space-y-0.5">
-                {quickAccess.map((item) => (
-                  <li key={item.to}>
-                    <NavLink
-                      to={item.to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
-                          isActive
-                            ? 'bg-sky-500/20 text-sky-300'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-900/80'
-                        }`
-                      }
-                    >
-                      <item.icon className="w-4 h-4 flex-shrink-0" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {/* Grouped Navigation */}
           {visibleGroups.map((group) => {
             const containsActive = group.items.some((item) => item.to === location.pathname);
-            const isExpanded = normalizedQuery ? true : expandedGroups.includes(group.label) || containsActive;
+            const isExpanded = normalizedQuery ? true : expandedGroup === group.label || containsActive;
             return (
               <div key={group.label} className="mt-4">
                 {!collapsed && (
@@ -277,7 +239,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {collapsed && (
                   <div className="h-px bg-slate-700/50 my-2" />
                 )}
-                {(isExpanded || collapsed) && (
+                {isExpanded && !collapsed && (
                   <ul className="space-y-0.5 mt-1">
                     {group.items.map((item) => (
                       <li key={item.to}>
