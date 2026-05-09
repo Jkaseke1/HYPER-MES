@@ -36,6 +36,7 @@ import {
   Clock,
   History,
   Search,
+  Calendar,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -120,10 +121,11 @@ const navGroups: NavGroup[] = [
     label: 'Plant Maintenance',
     icon: Wrench,
     items: [
+      { to: '/maintenance/pm-schedules', icon: Calendar, label: 'PM Schedules' },
+      { to: '/maintenance/work-orders', icon: Wrench, label: 'Work Orders' },
       { to: '/maintenance/spares', icon: PackagePlus, label: 'Spares Inventory' },
       { to: '/maintenance/transactions', icon: ArrowRightLeft, label: 'Issue/Receive Stock' },
       { to: '/maintenance/low-stock', icon: AlertTriangle, label: 'Low Stock Report' },
-      { to: '/maintenance/work-orders', icon: Wrench, label: 'Work Orders' },
     ],
   },
   {

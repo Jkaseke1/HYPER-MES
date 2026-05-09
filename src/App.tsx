@@ -41,6 +41,7 @@ const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/Maintenance
 const MaintenanceTransactionsPage = lazy(() => import('./pages/maintenance/MaintenanceTransactionsPage'));
 const MaintenanceLowStockPage = lazy(() => import('./pages/maintenance/MaintenanceLowStockPage'));
 const MaintenanceWorkOrdersPage = lazy(() => import('./pages/maintenance/MaintenanceWorkOrdersPage'));
+const MaintenancePMSchedulesPage = lazy(() => import('./pages/maintenance/MaintenancePMSchedulesPage'));
 const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
 const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
 const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
@@ -136,6 +137,7 @@ function AppRoutes() {
           <Route path="/maintenance/transactions" element={<MaintenanceTransactionsPage />} />
           <Route path="/maintenance/low-stock" element={<MaintenanceLowStockPage />} />
           <Route path="/maintenance/work-orders" element={<MaintenanceWorkOrdersPage />} />
+          <Route path="/maintenance/pm-schedules" element={<MaintenancePMSchedulesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
