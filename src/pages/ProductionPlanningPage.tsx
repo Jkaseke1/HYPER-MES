@@ -270,33 +270,33 @@ export default function ProductionPlanningPage() {
             </div>
             <div className="space-y-2">
               {items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="col-span-5">
-                    <label className="block text-[10px] text-slate-400 uppercase mb-1">Formulation</label>
+                <div key={idx} className="grid grid-cols-12 gap-3 items-start p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="col-span-4">
+                    <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Formulation</label>
                     <select value={item.formulation_id} onChange={e => { const n = [...items]; n[idx].formulation_id = e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
                       <option value="">Select formulation...</option>
                       {formulations.map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[10px] text-slate-400 uppercase mb-1">Qty</label>
+                    <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Qty</label>
                     <input type="number" min={0} value={item.planned_qty} onChange={e => { const n = [...items]; n[idx].planned_qty = +e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white" />
                   </div>
                   <div className="col-span-1">
-                    <label className="block text-[10px] text-slate-400 uppercase mb-1">Unit</label>
+                    <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Unit</label>
                     <input value={item.unit} onChange={e => { const n = [...items]; n[idx].unit = e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white" />
                   </div>
-                  <div className="col-span-1">
-                    <label className="block text-[10px] text-slate-400 uppercase mb-1">Priority</label>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Priority</label>
                     <input type="number" min={1} value={item.priority} onChange={e => { const n = [...items]; n[idx].priority = +e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white" />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-[10px] text-slate-400 uppercase mb-1">Notes</label>
+                    <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Notes</label>
                     <input value={item.notes} placeholder="Optional" onChange={e => { const n = [...items]; n[idx].notes = e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white" />
                   </div>
-                  <div className="col-span-1 flex justify-center pt-4">
+                  <div className="col-span-1 flex justify-center pt-[26px]">
                     {items.length > 1 && (
-                      <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 text-xs font-medium">✕</button>
+                      <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-red-500 hover:border-red-200 text-xs font-medium transition-colors">✕</button>
                     )}
                   </div>
                 </div>

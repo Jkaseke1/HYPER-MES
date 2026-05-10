@@ -14,7 +14,6 @@ import {
   BarChart3 as BarChart3Icon,
   Settings,
   LogOut,
-  Wheat,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -39,7 +38,6 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Wheat as LogoIcon } from 'lucide-react';
 
 interface NavItem {
   to: string;
@@ -174,142 +172,153 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-white/5">
-        <div className="w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center flex-shrink-0">
-          <LogoIcon className="w-5 h-5 text-[#0c1f2e]" />
+      <div className="flex items-center gap-2.5 px-5 pt-5 pb-4 flex-shrink-0">
+        <div className="w-8 h-8 bg-[#00d4aa] rounded flex items-center justify-center flex-shrink-0">
+          <div className="w-4 h-4 border-2 border-white rounded-sm" />
         </div>
         {!collapsed && (
-          <div className="overflow-hidden">
-            <h1 className="text-[11px] font-bold tracking-wide text-white leading-tight uppercase">HYPERFEEDS</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">Manufacturing System</p>
+          <div className="leading-tight overflow-hidden">
+            <h1 className="text-[13px] tracking-wide text-white/90 uppercase">Hyperfeeds</h1>
+            <p className="text-[11px] text-white/50 uppercase tracking-wider">Manufacturing System</p>
           </div>
         )}
       </div>
 
       {!collapsed && (
-        <div className="px-3 pt-3">
+        <div className="px-3 pb-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Find module..."
-              className="w-full pl-8 pr-3 py-2 rounded-lg border border-white/5 bg-white/5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/30 focus:border-[#00d4aa]/40"
+              className="w-full pl-8 pr-3 py-1.5 rounded border border-white/5 bg-white/5 text-[12px] text-white/80 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/40 focus:border-[#00d4aa]/40"
             />
           </div>
         </div>
       )}
 
-      <nav className="flex-1 py-3 overflow-y-auto scrollbar-thin">
-        <div className="px-2 space-y-1.5">
-          {/* Dashboard - Always visible */}
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-white/5 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-[#00d4aa] rounded-r-full" />}
-                <LayoutDashboard className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-[#00d4aa]' : ''}`} />
-                {!collapsed && <span>Dashboard</span>}
-              </>
-            )}
-          </NavLink>
+      <nav className="flex-1 px-3 py-2 overflow-y-auto scrollbar-thin">
+        {/* Dashboard - Always visible */}
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[13px] transition-colors ${
+              isActive
+                ? 'bg-white/5 text-white/90'
+                : 'text-white/50 hover:text-white/70'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div className={`w-1 h-1 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
+              {!collapsed ? (
+                <span>Dashboard</span>
+              ) : (
+                <LayoutDashboard className={`w-4 h-4 ${isActive ? 'text-[#00d4aa]' : ''}`} />
+              )}
+            </>
+          )}
+        </NavLink>
 
-          {/* Grouped Navigation */}
-          {visibleGroups.map((group) => {
-            const containsActive = group.items.some((item) => item.to === location.pathname);
-            const isExpanded = normalizedQuery ? true : expandedGroup === group.label || containsActive;
-            return (
-              <div key={group.label} className="mt-4">
-                {!collapsed && (
+        {/* Grouped Navigation */}
+        {visibleGroups.map((group) => {
+          const containsActive = group.items.some((item) => item.to === location.pathname);
+          const isExpanded = normalizedQuery ? true : expandedGroup === group.label || containsActive;
+          return (
+            <div key={group.label}>
+              {!collapsed && (
+                <>
+                  <div className="my-3 border-t border-white/5" />
                   <button
                     onClick={() => toggleGroup(group.label)}
-                    className={`flex items-center justify-between w-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors rounded-md ${
-                      containsActive ? 'text-slate-300' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex items-center justify-between w-full px-3 mb-2 text-[10px] uppercase tracking-wider transition-colors ${
+                      containsActive ? 'text-white/50' : 'text-white/30 hover:text-white/50'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <group.icon className={`w-3.5 h-3.5 ${containsActive ? 'text-[#00d4aa]' : ''}`} />
-                      <span>{group.label}</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform ${
-                        isExpanded ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <span>{group.label}</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
-                )}
-                {collapsed && (
-                  <div className="h-px bg-white/5 my-2" />
-                )}
-                {isExpanded && !collapsed && (
-                  <ul className="space-y-0.5 mt-1">
-                    {group.items.map((item) => (
-                      <li key={item.to}>
-                        <NavLink
-                          to={item.to}
-                          className={({ isActive }) =>
-                            `relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                              isActive
-                                ? 'bg-white/5 text-white'
-                                : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
-                            } ${!collapsed ? 'ml-2' : ''}`
-                          }
-                        >
-                          {({ isActive }) => (
-                            <>
-                              {isActive && <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-5 bg-[#00d4aa] rounded-r-full" />}
-                              <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-[#00d4aa]' : ''}`} />
-                              {!collapsed && <span>{item.label}</span>}
-                            </>
-                          )}
-                        </NavLink>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                </>
+              )}
+              {collapsed && <div className="h-px bg-white/5 my-2" />}
+              {isExpanded && !collapsed && (
+                <div>
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[13px] transition-colors ${
+                          isActive
+                            ? 'bg-white/5 text-white/90'
+                            : 'text-white/50 hover:text-white/70'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <div className={`w-1 h-1 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
+                          <span>{item.label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+              {isExpanded && collapsed && (
+                <div>
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      title={item.label}
+                      className={({ isActive }) =>
+                        `flex items-center justify-center px-2 py-2 mb-0.5 rounded transition-colors ${
+                          isActive ? 'bg-white/5 text-[#00d4aa]' : 'text-white/50 hover:text-white/70'
+                        }`
+                      }
+                    >
+                      <item.icon className="w-4 h-4" />
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* User profile + sign out */}
-      <div className="border-t border-white/5">
+      <div className="p-3 border-t border-white/5 flex-shrink-0">
         {!collapsed ? (
-          <div className="flex items-center gap-2.5 p-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00d4aa] to-[#00a387] flex items-center justify-center text-[12px] font-semibold text-[#0c1f2e] flex-shrink-0">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <div className="w-7 h-7 bg-[#00d4aa]/20 rounded-full flex items-center justify-center text-[11px] text-[#00d4aa] flex-shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-white truncate">{profile?.full_name || profile?.email || 'User'}</p>
-              <p className="text-[10px] text-slate-400 truncate">{profile?.role || 'Operator'}</p>
+              <p className="text-[12px] text-white/80 truncate">{profile?.full_name || profile?.email || 'User'}</p>
+              <p className="text-[10px] text-white/40 truncate">{profile?.role || 'Operator'}</p>
             </div>
             <button
               onClick={doSignOut || signOut}
               title="Sign out"
-              className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors flex-shrink-0"
+              className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
             >
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2 p-2">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00d4aa] to-[#00a387] flex items-center justify-center text-[12px] font-semibold text-[#0c1f2e]">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-7 h-7 bg-[#00d4aa]/20 rounded-full flex items-center justify-center text-[11px] text-[#00d4aa]">
               {initials}
             </div>
             <button
               onClick={doSignOut || signOut}
               title="Sign out"
-              className="w-9 h-9 rounded-md flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors"
+              className="text-white/30 hover:text-red-400 transition-colors"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -317,9 +326,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
         <button
           onClick={onToggle}
-          className="flex items-center justify-center w-full py-2 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all border-t border-white/5"
+          className="flex items-center justify-center w-full py-1.5 mt-1 rounded text-white/30 hover:text-white/70 transition-all"
         >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
       </div>
     </aside>
