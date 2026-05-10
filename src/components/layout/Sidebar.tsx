@@ -39,6 +39,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { Wheat as LogoIcon } from 'lucide-react';
 
 interface NavItem {
   to: string;
@@ -164,20 +165,23 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       .filter((group) => group.items.length > 0);
   }, [normalizedQuery]);
 
+  const { profile, signOut: doSignOut } = useAuth() as any;
+  const initials = (profile?.full_name || profile?.email || 'U').split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase();
+
   return (
     <aside
-      className={`fixed left-0 top-0 h-full bg-slate-950 text-white z-40 transition-all duration-300 flex flex-col ${
+      className={`fixed left-0 top-0 h-full bg-[#0c1f2e] text-white z-40 transition-all duration-300 flex flex-col ${
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-800">
-        <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Wheat className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-3 px-4 h-16 border-b border-white/5">
+        <div className="w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center flex-shrink-0">
+          <LogoIcon className="w-5 h-5 text-[#0c1f2e]" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-[11px] font-bold tracking-wide text-white leading-tight uppercase">HYPERFEEDS MANUFACTURING SYSTEM</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">MES</p>
+            <h1 className="text-[11px] font-bold tracking-wide text-white leading-tight uppercase">HYPERFEEDS</h1>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest">Manufacturing System</p>
           </div>
         )}
       </div>
@@ -190,7 +194,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Find module..."
-              className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-800 bg-slate-900 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500/40"
+              className="w-full pl-8 pr-3 py-2 rounded-lg border border-white/5 bg-white/5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/30 focus:border-[#00d4aa]/40"
             />
           </div>
         </div>
@@ -203,15 +207,20 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             to="/"
             end
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
+              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                  : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-900/80'
+                  ? 'bg-white/5 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
               }`
             }
           >
-            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>Dashboard</span>}
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-[#00d4aa] rounded-r-full" />}
+                <LayoutDashboard className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-[#00d4aa]' : ''}`} />
+                {!collapsed && <span>Dashboard</span>}
+              </>
+            )}
           </NavLink>
 
           {/* Grouped Navigation */}
@@ -223,23 +232,23 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {!collapsed && (
                   <button
                     onClick={() => toggleGroup(group.label)}
-                    className={`flex items-center justify-between w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors rounded-md ${
-                      containsActive ? 'text-slate-200 bg-slate-900/80' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex items-center justify-between w-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors rounded-md ${
+                      containsActive ? 'text-slate-300' : 'text-slate-500 hover:text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <group.icon className={`w-4 h-4 ${containsActive ? 'text-teal-400' : ''}`} />
+                      <group.icon className={`w-3.5 h-3.5 ${containsActive ? 'text-[#00d4aa]' : ''}`} />
                       <span>{group.label}</span>
                     </div>
                     <ChevronDown
-                      className={`w-4 h-4 transition-transform ${
+                      className={`w-3.5 h-3.5 transition-transform ${
                         isExpanded ? 'rotate-180' : ''
                       }`}
                     />
                   </button>
                 )}
                 {collapsed && (
-                  <div className="h-px bg-slate-700/50 my-2" />
+                  <div className="h-px bg-white/5 my-2" />
                 )}
                 {isExpanded && !collapsed && (
                   <ul className="space-y-0.5 mt-1">
@@ -248,15 +257,20 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         <NavLink
                           to={item.to}
                           className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
+                            `relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
                               isActive
-                                ? 'bg-teal-500/20 text-teal-300 border-teal-500/35'
-                                : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-900/80'
+                                ? 'bg-white/5 text-white'
+                                : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
                             } ${!collapsed ? 'ml-2' : ''}`
                           }
                         >
-                          <item.icon className="w-5 h-5 flex-shrink-0" />
-                          {!collapsed && <span>{item.label}</span>}
+                          {({ isActive }) => (
+                            <>
+                              {isActive && <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-5 bg-[#00d4aa] rounded-r-full" />}
+                              <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-[#00d4aa]' : ''}`} />
+                              {!collapsed && <span>{item.label}</span>}
+                            </>
+                          )}
                         </NavLink>
                       </li>
                     ))}
@@ -268,17 +282,42 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="p-2 border-t border-slate-800 bg-slate-950">
-        <button
-          onClick={signOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-slate-900 transition-all duration-150 w-full"
-        >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span>Sign Out</span>}
-        </button>
+      {/* User profile + sign out */}
+      <div className="border-t border-white/5">
+        {!collapsed ? (
+          <div className="flex items-center gap-2.5 p-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00d4aa] to-[#00a387] flex items-center justify-center text-[12px] font-semibold text-[#0c1f2e] flex-shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-white truncate">{profile?.full_name || profile?.email || 'User'}</p>
+              <p className="text-[10px] text-slate-400 truncate">{profile?.role || 'Operator'}</p>
+            </div>
+            <button
+              onClick={doSignOut || signOut}
+              title="Sign out"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors flex-shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 p-2">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00d4aa] to-[#00a387] flex items-center justify-center text-[12px] font-semibold text-[#0c1f2e]">
+              {initials}
+            </div>
+            <button
+              onClick={doSignOut || signOut}
+              title="Sign out"
+              className="w-9 h-9 rounded-md flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <button
           onClick={onToggle}
-          className="flex items-center justify-center w-full mt-1 py-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-900 transition-all"
+          className="flex items-center justify-center w-full py-2 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all border-t border-white/5"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
