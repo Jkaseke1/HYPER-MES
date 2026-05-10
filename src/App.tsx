@@ -10,7 +10,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const RawMaterialsPage = lazy(() => import('./pages/RawMaterialsPage'));
 const GoodsReceivedPage = lazy(() => import('./pages/GoodsReceivedPage'));
-const GoodsReceivedPageV2 = lazy(() => import('./pages/GoodsReceivedPageV2'));
 const QualityInspectionPage = lazy(() => import('./pages/QualityInspectionPage'));
 const FormulationsPage = lazy(() => import('./pages/FormulationsPage'));
 const ProductionPlanningPage = lazy(() => import('./pages/ProductionPlanningPage'));
@@ -110,7 +109,6 @@ function AppRoutes() {
           <Route path="/stock-take" element={<StockTakePage />} />
           <Route path="/stock-take/:id" element={<ErrorBoundary><StockTakeDetailPage /></ErrorBoundary>} />
           <Route path="/goods-received" element={<GoodsReceivedPage />} />
-          <Route path="/goods-received-v2" element={<GoodsReceivedPageV2 />} />
           <Route path="/quality-inspection" element={<QualityInspectionPage />} />
           <Route path="/formulations" element={<FormulationsPage />} />
           <Route path="/sales-orders" element={<DispatchPlanningPage />} />

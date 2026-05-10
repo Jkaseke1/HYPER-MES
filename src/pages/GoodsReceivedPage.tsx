@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, Package, Eye, Clock, CheckCircle2, DollarSign, Scale } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { GoodsReceivedNote, Supplier, RawMaterial } from '../types/database';
-import Modal from '../components/ui/Modal';
-import StatusBadge from '../components/ui/StatusBadge';
-import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
-import ApprovalHistory from '../components/approval/ApprovalHistory';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Textarea } from '../components/ui/textarea';
 import StatCard from '../components/ui/StatCard';
-import GRNAttachments from '../components/grn/GRNAttachments';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
+import toast from 'react-hot-toast';
 
 interface GRNItem {
   raw_material_id: string;
@@ -20,30 +25,6 @@ interface GRNItem {
   batch_number: string;
   expiry_date: string;
 }
-
-const emptyForm = {
-  grn_number: '',
-  supplier_id: '',
-  warehouse_id: 'raw_materials_warehouse',
-  received_date: new Date().toISOString().split('T')[0],
-  status: 'pending' as const,
-  notes: '',
-  wb_transaction_no: '',
-  wb_vehicle_reg: '',
-  wb_haulier_code: 'HYPER',
-  wb_product_code: '',
-  wb_comment: '',
-  wb_trailer_number: '',
-  wb_driver_name: '',
-  wb_driver_id: '',
-  wb_time_in: '',
-  wb_first_mass: '',
-  wb_time_out: '',
-  wb_second_mass: '',
-  wb_nett_mass: '',
-  wb_driver_signed: false,
-  weigh_bridge_ticket_id: '',
-};
 
 const emptyItem: GRNItem = {
   raw_material_id: '',
@@ -59,714 +40,480 @@ export default function GoodsReceivedPage() {
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
-  const [rawMaterialsWarehouseId, setRawMaterialsWarehouseId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
-  const [deleting, setDeleting] = useState<GoodsReceivedNote | null>(null);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
-  const [form, setForm] = useState(emptyForm);
-  const [items, setItems] = useState<GRNItem[]>([emptyItem]);
   const [saving, setSaving] = useState(false);
-  const [wbTickets, setWbTickets] = useState<any[]>([]);
-
-  // Check if user can delete GRNs (admin or warehouse_manager only)
-  const canDelete = profile?.role === 'admin' || profile?.role === 'warehouse_manager';
+  
+  // Form state
+  const [supplierId, setSupplierId] = useState('');
+  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes, warehousesRes, wbRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
-      supabase.from('warehouses').select('*').eq('is_active', true),
-      supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
-    setWbTickets(wbRes.data || []);
-    
-    // Find Raw Materials Warehouse UUID by code = 'RM'
-    const rawMatWarehouse = warehousesRes.data?.find((w: any) => w.code === 'RM');
-    if (rawMatWarehouse) {
-      setRawMaterialsWarehouseId(rawMatWarehouse.id);
-    }
     setLoading(false);
   }
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  function openAdd() {
-    setForm({ ...emptyForm, warehouse_id: rawMaterialsWarehouseId });
-    setItems([emptyItem]);
-    generateGRNNumber();
-    setModalOpen(true);
-  }
+  const generateGRNNumber = async () => {
+    const year = new Date().getFullYear();
+    const { data: existing } = await supabase
+      .from('goods_received_notes')
+      .select('grn_number')
+      .like('grn_number', `GRN-${year}-%`)
+      .order('grn_number', { ascending: false })
+      .limit(1);
 
-  // Auto-generate GRN number
-  async function generateGRNNumber() {
-    try {
-      const { data, error } = await supabase
-        .from('goods_received_notes')
-        .select('grn_number')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      let nextNumber = 1;
-      if (data && data.length > 0) {
-        const lastGRN = data[0].grn_number;
-        const match = lastGRN.match(/GRN-(\d{4})-(\d{3})$/);
-        if (match) {
-          const year = parseInt(match[1]);
-          const sequence = parseInt(match[2]);
-          const currentYear = new Date().getFullYear();
-          
-          if (year === currentYear) {
-            nextNumber = sequence + 1;
-          } else {
-            // New year, reset sequence to 1
-            nextNumber = 1;
-          }
-        }
-      }
-
-      const currentYear = new Date().getFullYear();
-      const paddedNumber = nextNumber.toString().padStart(3, '0');
-      const newGRNNumber = `GRN-${currentYear}-${paddedNumber}`;
-      
-      setForm(prev => ({ ...prev, grn_number: newGRNNumber }));
-    } catch (error) {
-      console.error('Error generating GRN number:', error);
-      // Fallback to current year + 001
-      const currentYear = new Date().getFullYear();
-      setForm(prev => ({ ...prev, grn_number: `GRN-${currentYear}-001` }));
+    let nextNum = 1;
+    if (existing && existing.length > 0) {
+      const lastNum = parseInt(existing[0].grn_number.split('-')[2]);
+      nextNum = lastNum + 1;
     }
-  }
 
-  async function openView(grn: GoodsReceivedNote) {
-    setViewing(grn);
-    const { data } = await supabase
-      .from('grn_items')
-      .select('*, raw_materials(name, unit)')
-      .eq('grn_id', grn.id);
-    setViewItems(data || []);
-    setViewModalOpen(true);
-  }
+    return `GRN-${year}-${String(nextNum).padStart(3, '0')}`;
+  };
 
-  function addItem() {
-    setItems([...items, { ...emptyItem }]);
-  }
-
-  function removeItem(index: number) {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== index));
+  const handleSaveGRN = async () => {
+    if (!supplierId || items.length === 0 || !items[0].raw_material_id) {
+      toast.error('Please fill in all required fields');
+      return;
     }
-  }
 
-  function updateItem(index: number, field: keyof GRNItem, value: any) {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
     setSaving(true);
     try {
-      // Check for duplicate GRN number first
-      const { data: existing } = await supabase
-        .from('goods_received_notes')
-        .select('id')
-        .eq('grn_number', form.grn_number)
-        .maybeSingle();
-
-      if (existing) {
-        alert(`GRN number "${form.grn_number}" already exists. Please use a different number.`);
-        setSaving(false);
-        return;
-      }
-
-      // Validate all line items are either completely empty or completely filled
-      const validatedItems = items.map((item, index) => {
-        const hasAnyData = item.raw_material_id || 
-                          item.ordered_qty > 0 || 
-                          item.received_qty > 0 || 
-                          item.unit_cost > 0 || 
-                          item.batch_number;
-
-        if (hasAnyData) {
-          // If any field has data, all required fields must be filled
-          if (!item.raw_material_id) {
-            return { valid: false, index: index + 1, field: 'Material' };
-          }
-          if (item.ordered_qty <= 0) {
-            return { valid: false, index: index + 1, field: 'Ordered Quantity' };
-          }
-          if (item.received_qty <= 0) {
-            return { valid: false, index: index + 1, field: 'Received Quantity' };
-          }
-          if (item.unit_cost <= 0) {
-            return { valid: false, index: index + 1, field: 'Unit Cost' };
-          }
-          if (!item.batch_number) {
-            return { valid: false, index: index + 1, field: 'Batch Number' };
-          }
-        }
-        
-        return { valid: true, hasData: hasAnyData };
-      });
-
-      const invalidItem = validatedItems.find(v => !v.valid);
-      if (invalidItem) {
-        alert(`Line Item ${invalidItem.index}: Please fill in ${invalidItem.field}`);
-        setSaving(false);
-        return;
-      }
-
-      // Filter out completely empty line items
-      const completeItems = items.filter((_, index) => validatedItems[index].hasData);
-
-      if (completeItems.length === 0) {
-        alert('Please add at least one line item with all required fields filled in.');
-        setSaving(false);
-        return;
-      }
-
-      // Calculate total value
-      const totalValue = items.reduce((sum, item) => sum + (item.received_qty * item.unit_cost), 0);
+      const grnNumber = await generateGRNNumber();
       
-      // Insert GRN
-      const { weigh_bridge_ticket_id, ...restForm } = form as any;
-      const grnData = { ...restForm, total_value: totalValue, received_by: profile?.id, ...(weigh_bridge_ticket_id ? { weigh_bridge_ticket_id } : {}) };
+      // Get warehouse ID
+      const { data: warehouse } = await supabase
+        .from('warehouses')
+        .select('id')
+        .eq('code', 'RM')
+        .single();
+
+      // Create GRN header
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
-        .insert(grnData)
+        .insert({
+          grn_number: grnNumber,
+          supplier_id: supplierId,
+          warehouse_id: warehouse?.id,
+          received_date: receivedDate,
+          status: 'pending',
+          notes: notes || null,
+          created_by: profile?.id,
+        })
         .select()
         .single();
 
-      if (grnError) {
-        console.error('Error saving GRN:', grnError);
-        alert(`Error: ${grnError.message}`);
-        setSaving(false);
-        return;
-      }
+      if (grnError) throw grnError;
 
-      // Insert GRN items (only complete ones)
-      const itemsData = completeItems.map(item => ({
+      // Create GRN items
+      const grnItems = items.map(item => ({
         grn_id: grn.id,
-        ...item,
-        expiry_date: item.expiry_date || null, // Convert empty string to null
-        line_total: item.received_qty * item.unit_cost,
+        raw_material_id: item.raw_material_id,
+        ordered_qty: item.ordered_qty,
+        received_qty: item.received_qty,
+        unit_cost: item.unit_cost,
+        batch_number: item.batch_number || null,
+        expiry_date: item.expiry_date || null,
       }));
 
-      const { error: itemsError } = await supabase.from('grn_items').insert(itemsData);
+      const { error: itemsError } = await supabase
+        .from('grn_items')
+        .insert(grnItems);
 
-      if (itemsError) {
-        console.error('Error saving GRN items:', itemsError);
-        // If items fail, delete the GRN to prevent partial save
-        await supabase.from('goods_received_notes').delete().eq('id', grn.id);
-        alert(`Error saving items: ${itemsError.message}. GRN was not created.`);
-        setSaving(false);
-        return;
-      }
+      if (itemsError) throw itemsError;
 
-      // Mark WB ticket as linked
-      const wbId = (form as any).weigh_bridge_ticket_id;
-      if (wbId) {
-        await supabase.from('weigh_bridge_tickets').update({ status: 'linked' }).eq('id', wbId);
-      }
-
-      setSaving(false);
+      toast.success('GRN created successfully');
       setModalOpen(false);
+      resetForm();
       fetchData();
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      alert('An unexpected error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('Error creating GRN:', error);
+      toast.error(`Failed to create GRN: ${error.message}`);
+    } finally {
       setSaving(false);
     }
+  };
+
+  const resetForm = () => {
+    setSupplierId('');
+    setReceivedDate(new Date().toISOString().split('T')[0]);
+    setNotes('');
+    setItems([emptyItem]);
+  };
+
+  const handleViewGRN = async (grn: GoodsReceivedNote) => {
+    setViewing(grn);
+    const { data } = await supabase
+      .from('grn_items')
+      .select('*, raw_materials(code, name)')
+      .eq('grn_id', grn.id);
+    setViewItems(data || []);
+    setViewModalOpen(true);
+  };
+
+  const addItem = () => {
+    setItems([...items, { ...emptyItem }]);
+  };
+
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const updateItem = (index: number, field: keyof GRNItem, value: any) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setItems(newItems);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+      pending: 'secondary',
+      approved: 'default',
+      rejected: 'destructive',
+    };
+    return <Badge variant={variants[status] || 'outline'}>{status}</Badge>;
+  };
+
+  const filteredGRNs = grns.filter(grn =>
+    grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
+    grn.suppliers?.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const stats = {
+    total: grns.length,
+    pending: grns.filter(g => g.status === 'pending').length,
+    approved: grns.filter(g => g.status === 'approved').length,
+    thisMonth: grns.filter(g => {
+      const grnDate = new Date(g.created_at);
+      const now = new Date();
+      return grnDate.getMonth() === now.getMonth() && grnDate.getFullYear() === now.getFullYear();
+    }).length,
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
   }
-
-  async function handleDelete() {
-    if (!deleting) return;
-    
-    // Check deletion protection - only Pending GRNs can be deleted
-    if (deleting.status !== 'pending') {
-      alert('Cannot delete — this GRN has been processed. Only pending GRNs can be deleted.');
-      setDeleteModalOpen(false);
-      setDeleting(null);
-      return;
-    }
-    
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('goods_received_notes').delete().eq('id', deleting.id);
-      
-      if (error) {
-        console.error('Error deleting GRN:', error);
-        alert(`Error deleting GRN: ${error.message}`);
-        setSaving(false);
-        return;
-      }
-      
-      setSaving(false);
-      setDeleteModalOpen(false);
-      setDeleting(null);
-      fetchData();
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      alert('An unexpected error occurred while deleting the GRN.');
-      setSaving(false);
-    }
-  }
-
-  const filtered = grns.filter((g) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return g.grn_number.toLowerCase().includes(q) || 
-           g.suppliers?.name.toLowerCase().includes(q);
-  });
-
-  const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
-
-  const totalGRNs = grns.length;
-  const pendingCount = grns.filter(g => g.status === 'pending').length;
-  const approvedCount = grns.filter(g => g.status === 'approved').length;
-  const totalValue = grns.reduce((sum, g) => sum + (g.total_value || 0), 0);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       <StockTakeFrozenBanner />
+      
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Goods Received Notes</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage incoming raw material receipts</p>
+          <h1 className="text-3xl font-bold tracking-tight">Goods Received Notes</h1>
+          <p className="text-muted-foreground mt-1">Manage incoming raw material deliveries</p>
         </div>
-        <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> Create GRN
-        </button>
+        <Button onClick={() => setModalOpen(true)} size="lg">
+          <Plus className="mr-2 h-4 w-4" />
+          New GRN
+        </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total GRNs" value={totalGRNs} icon={Package} color="teal" />
-        <StatCard title="Pending Approval" value={pendingCount} icon={Clock} color="amber" />
-        <StatCard title="Approved" value={approvedCount} icon={CheckCircle2} color="emerald" />
-        <StatCard title="Total Value" value={`$${totalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`} icon={DollarSign} color="slate" />
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard icon={Package} title="Total GRNs" value={stats.total} subtitle="All time" color="blue" />
+        <StatCard icon={Clock} title="Pending" value={stats.pending} subtitle="Awaiting approval" color="amber" />
+        <StatCard icon={FileText} title="Approved" value={stats.approved} subtitle="Ready to receive" color="emerald" />
+        <StatCard icon={Calendar} title="This Month" value={stats.thisMonth} subtitle="Current period" color="teal" />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="p-4 border-b border-slate-200">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search by GRN number or supplier..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors" />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Package className="w-12 h-12 mb-3" />
-            <p className="text-sm font-medium">No GRNs found</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50">
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">GRN Number</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Supplier</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Weigh Bridge Ref</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Received Date</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Total Value</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((grn) => (
-                  <tr key={grn.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {(grn as any).wb_transaction_no && (
-                          <span title="Weigh Bridge data captured"><Scale className="w-3.5 h-3.5 text-teal-500 shrink-0" /></span>
-                        )}
-                        <span className="font-mono text-xs text-slate-500">{grn.grn_number}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{grn.suppliers?.name || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">{format(new Date(grn.received_date), 'dd MMM yyyy')}</td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">{grn.total_value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
-                    <td className="px-4 py-3"><StatusBadge status={grn.status} /></td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => openView(grn)} className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="View Details">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {canDelete && (
-                          <button onClick={() => { setDeleting(grn); setDeleteModalOpen(true); }} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/50">
-          <p className="text-xs text-slate-500">{filtered.length} GRN{filtered.length !== 1 ? 's' : ''} shown</p>
+      {/* Search */}
+      <div className="flex items-center space-x-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by GRN number or supplier..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
         </div>
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Create Goods Received Note" size="xl">
-        <form onSubmit={handleSave} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">GRN Number</label>
-              <input type="text" required value={form.grn_number} onChange={(e) => setForm({ ...form, grn_number: e.target.value })} className={inputClass} placeholder="e.g. GRN-2026-001" />
-              <p className="text-xs text-slate-500 mt-1">Auto-generated from last GRN • Editable if needed</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Received Date</label>
-              <input type="date" required value={form.received_date} onChange={(e) => setForm({ ...form, received_date: e.target.value })} className={inputClass} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Supplier</label>
-              <select required value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })} className={inputClass}>
-                <option value="">Select Supplier</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Warehouse</label>
-              <div className="px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm text-slate-700 font-medium">
-                Raw Materials Warehouse
-              </div>
-            </div>
-          </div>
-
-          {/* WB Ticket Picker */}
-          <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Scale className="w-4 h-4 text-teal-600" />
-              <h3 className="text-sm font-semibold text-slate-700">Link Weigh Bridge Ticket</h3>
-              <span className="text-xs text-slate-400">(optional — pick an existing ticket or fill in manually below)</span>
-            </div>
-            <select
-              className="w-full px-3 py-2 border border-teal-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              onChange={e => {
-                const ticket = wbTickets.find((t: any) => t.id === e.target.value);
-                if (ticket) {
-                  setForm(prev => ({
-                    ...prev,
-                    weigh_bridge_ticket_id: ticket.id,
-                    wb_transaction_no: ticket.ticket_no || '',
-                    wb_vehicle_reg: ticket.vehicle_reg || '',
-                    wb_haulier_code: ticket.haulier_code || 'HYPER',
-                    wb_product_code: ticket.product_code || '',
-                    wb_comment: ticket.comment || '',
-                    wb_trailer_number: ticket.trailer_number || '',
-                    wb_driver_name: ticket.driver_name || '',
-                    wb_driver_id: ticket.driver_id || '',
-                    wb_time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
-                    wb_first_mass: ticket.first_mass != null ? String(ticket.first_mass) : '',
-                    wb_time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
-                    wb_second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
-                    wb_nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
-                    wb_driver_signed: ticket.driver_signed || false,
-                  }));
-                }
-              }}
-            >
-              <option value="">— Select a Weigh Bridge Ticket —</option>
-              {wbTickets.map((t: any) => (
-                <option key={t.id} value={t.id}>
-                  {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
-                </option>
-              ))}
-            </select>
-            {wbTickets.length === 0 && (
-              <p className="text-xs text-slate-400 mt-1">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Notes</label>
-            <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputClass} placeholder="Optional notes..." />
-          </div>
-
-          <div className="border-t border-slate-200 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-slate-700">Line Items</h3>
-              <button type="button" onClick={addItem} className="text-sm text-teal-600 hover:text-teal-700 font-medium">+ Add Item</button>
-            </div>
-
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Material</label>
-                    <select required value={item.raw_material_id} onChange={(e) => updateItem(index, 'raw_material_id', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
-                      <option value="">Select</option>
-                      {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Ordered Qty</label>
-                    <input type="number" required min="0" step="0.01" value={item.ordered_qty || ''} onChange={(e) => updateItem(index, 'ordered_qty', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Received Qty</label>
-                    <input type="number" required min="0" step="0.01" value={item.received_qty || ''} onChange={(e) => updateItem(index, 'received_qty', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Unit Cost</label>
-                    <input type="number" required min="0" step="0.01" value={item.unit_cost || ''} onChange={(e) => updateItem(index, 'unit_cost', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
-                  <div className="flex items-end">
-                    <button type="button" onClick={() => removeItem(index)} disabled={items.length === 1} className="w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed">Remove</button>
-                  </div>
-                  <div className="col-span-3">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Batch Number</label>
-                    <input type="text" required value={item.batch_number} onChange={(e) => updateItem(index, 'batch_number', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="e.g. BATCH-001" />
-                  </div>
-                  <div className="col-span-3">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Expiry Date (Optional)</label>
-                    <input type="date" value={item.expiry_date} onChange={(e) => updateItem(index, 'expiry_date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Create GRN'}</button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal open={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Delete GRN" size="sm">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <Package className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">Are you sure you want to delete GRN <span className="font-semibold">{deleting?.grn_number}</span>? This action cannot be undone.</p>
-          </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setDeleteModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-            <button onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50">{saving ? 'Deleting...' : 'Delete'}</button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={viewModalOpen} onClose={() => setViewModalOpen(false)} title="GRN Details" size="lg">
-        {viewing && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">GRN Number</p>
-                <p className="text-sm font-semibold text-slate-800">{viewing.grn_number}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Received Date</p>
-                <p className="text-sm text-slate-700">{format(new Date(viewing.received_date), 'dd MMM yyyy')}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Supplier</p>
-                <p className="text-sm text-slate-700">{viewing.suppliers?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Warehouse</p>
-                <p className="text-sm text-slate-700">{viewing.warehouses?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Weigh Bridge Ticket No</p>
-                <p className="text-sm font-mono text-slate-700">{(viewing as any).wb_transaction_no || (viewing as any).weigh_bridge_ticket_no || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Status</p>
-                <StatusBadge status={viewing.status} />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Approval Progress</p>
-                <div className="flex items-center gap-2 text-xs">
-                  <div className={`px-2 py-1 rounded ${viewing.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                    ✓ Receipt
-                  </div>
-                  <span className="text-slate-400">→</span>
-                  <div className={`px-2 py-1 rounded ${viewing.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : viewing.status === 'rm_approved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {viewing.status === 'approved' ? '✓ Finance' : 'Finance'}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Total Value</p>
-                <p className="text-sm font-semibold text-slate-800">{viewing.total_value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>
-              </div>
-              {viewing.notes && (
-                <div className="col-span-2">
-                  <p className="text-xs text-slate-500 mb-1">Notes</p>
-                  <p className="text-sm text-slate-700">{viewing.notes}</p>
-                </div>
+      {/* GRNs Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent GRNs</CardTitle>
+          <CardDescription>View and manage all goods received notes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>GRN Number</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Received Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created By</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredGRNs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No GRNs found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredGRNs.map((grn) => (
+                  <TableRow key={grn.id}>
+                    <TableCell className="font-medium">{grn.grn_number}</TableCell>
+                    <TableCell>{grn.suppliers?.name}</TableCell>
+                    <TableCell>{format(new Date(grn.received_date), 'PPP')}</TableCell>
+                    <TableCell>{getStatusBadge(grn.status)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {format(new Date(grn.created_at), 'PPp')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewGRN(grn)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-            </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-            <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Line Items</h3>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600">Material</th>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Ordered</th>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Received</th>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Unit Cost</th>
-                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Line Total</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600">Batch</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {viewItems.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 text-slate-700">{item.raw_materials?.name || '-'}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">{item.ordered_qty} {item.raw_materials?.unit}</td>
-                        <td className="px-3 py-2 text-right text-slate-700 font-medium">{item.received_qty} {item.raw_materials?.unit}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">{item.unit_cost.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
-                        <td className="px-3 py-2 text-right text-slate-700 font-medium">{item.line_total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
-                        <td className="px-3 py-2 text-slate-600 font-mono text-xs">{item.batch_number}</td>
-                      </tr>
+      {/* Create GRN Modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New GRN</DialogTitle>
+            <DialogDescription>Add a new goods received note for incoming materials</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Header Section */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="supplier">Supplier *</Label>
+                <Select value={supplierId} onValueChange={setSupplierId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </SelectItem>
                     ))}
-                  </tbody>
-                </table>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
 
-            {/* Weigh Bridge Ticket Card */}
-            {(viewing as any).wb_transaction_no && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Scale className="w-4 h-4 text-teal-600" />
-                  <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
-                </div>
-                <div className="border border-teal-200 rounded-xl bg-teal-50/30 p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Transaction No</p>
-                      <p className="text-sm font-semibold font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Vehicle Reg</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_vehicle_reg || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Haulier Code</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_haulier_code || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Driver Name</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_driver_name || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Driver ID</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_driver_id || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Trailer Number</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_trailer_number || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Time In</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_time_in ? format(new Date((viewing as any).wb_time_in), 'dd MMM yyyy HH:mm') : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">1st Mass</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_first_mass != null ? `${Number((viewing as any).wb_first_mass).toLocaleString()} kg` : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">Time Out</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_time_out ? format(new Date((viewing as any).wb_time_out), 'dd MMM yyyy HH:mm') : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 mb-0.5">2nd Mass</p>
-                      <p className="text-sm text-slate-700">{(viewing as any).wb_second_mass != null ? `${Number((viewing as any).wb_second_mass).toLocaleString()} kg` : '—'}</p>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-teal-100 border border-teal-300 rounded-lg flex items-center justify-between">
-                    <p className="text-xs font-bold text-teal-700 uppercase tracking-wide">Nett Mass</p>
-                    <p className="text-xl font-bold text-teal-800">
-                      {(viewing as any).wb_nett_mass != null ? `${Number((viewing as any).wb_nett_mass).toLocaleString()} kg` : '—'}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">Driver Signed</p>
-                    {(viewing as any).wb_driver_signed ? (
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Signed ✓
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">Not signed</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {(viewing.status === 'pending' || viewing.status === 'rm_approved') && (
-              <div className="border-t border-slate-200 pt-4">
-                <GRNApprovalButtons
-                  grnId={viewing.id}
-                  currentStatus={viewing.status}
-                  rm_approved_at={(viewing as any).rm_approved_at}
-                  accountant_approved_at={(viewing as any).accountant_approved_at}
-                  onApproved={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
-                  onRejected={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
+              <div className="space-y-2">
+                <Label htmlFor="received_date">Received Date *</Label>
+                <Input
+                  id="received_date"
+                  type="date"
+                  value={receivedDate}
+                  onChange={(e) => setReceivedDate(e.target.value)}
                 />
               </div>
-            )}
+            </div>
 
-            {viewing.rejection_reason && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
-                <p className="text-sm text-red-700">{viewing.rejection_reason}</p>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes or comments..."
+                rows={3}
+              />
+            </div>
+
+            {/* Items Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base">Line Items</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Item
+                </Button>
+              </div>
+
+              {items.map((item, index) => (
+                <Card key={index}>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-3 space-y-2">
+                        <Label>Raw Material *</Label>
+                        <Select
+                          value={item.raw_material_id}
+                          onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select material" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {materials.map((material) => (
+                              <SelectItem key={material.id} value={material.id}>
+                                {material.code} - {material.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Ordered Qty</Label>
+                        <Input
+                          type="number"
+                          value={item.ordered_qty}
+                          onChange={(e) => updateItem(index, 'ordered_qty', Number(e.target.value))}
+                          step="0.01"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Received Qty *</Label>
+                        <Input
+                          type="number"
+                          value={item.received_qty}
+                          onChange={(e) => updateItem(index, 'received_qty', Number(e.target.value))}
+                          step="0.01"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Unit Cost</Label>
+                        <Input
+                          type="number"
+                          value={item.unit_cost}
+                          onChange={(e) => updateItem(index, 'unit_cost', Number(e.target.value))}
+                          step="0.01"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Batch Number</Label>
+                        <Input
+                          value={item.batch_number}
+                          onChange={(e) => updateItem(index, 'batch_number', e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Expiry Date</Label>
+                        <Input
+                          type="date"
+                          value={item.expiry_date}
+                          onChange={(e) => updateItem(index, 'expiry_date', e.target.value)}
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        {items.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => removeItem(index)}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveGRN} disabled={saving}>
+                {saving ? 'Creating...' : 'Create GRN'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View GRN Modal */}
+      <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{viewing?.grn_number}</DialogTitle>
+            <DialogDescription>
+              Supplier: {viewing?.suppliers?.name} | Date: {viewing && format(new Date(viewing.received_date), 'PPP')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {viewing?.notes && (
+              <div>
+                <Label>Notes</Label>
+                <p className="text-sm text-muted-foreground mt-1">{viewing.notes}</p>
               </div>
             )}
 
-            <div className="border-t border-slate-200 pt-4">
-              <ApprovalHistory entityType="grn" entityId={viewing.id} />
-            </div>
-
-            <div className="border-t border-slate-200 pt-4">
-              <GRNAttachments grnId={viewing.id} />
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-200">
-              <button onClick={() => setViewModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Close</button>
+            <div>
+              <Label className="text-base mb-3 block">Line Items</Label>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead>Ordered</TableHead>
+                    <TableHead>Received</TableHead>
+                    <TableHead>Unit Cost</TableHead>
+                    <TableHead>Batch</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {viewItems.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        {item.raw_materials?.code} - {item.raw_materials?.name}
+                      </TableCell>
+                      <TableCell>{item.ordered_qty} kg</TableCell>
+                      <TableCell>{item.received_qty} kg</TableCell>
+                      <TableCell>${item.unit_cost.toFixed(2)}</TableCell>
+                      <TableCell>{item.batch_number || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </div>
-        )}
-      </Modal>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
