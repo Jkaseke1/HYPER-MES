@@ -1,44 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, ComposedChart,
 } from 'recharts';
 import {
-  Factory, ClipboardList, Truck, TrendingUp, AlertTriangle, Radio, RefreshCw, Package, FlaskConical,
-  type LucideIcon,
+  TrendingUp, TrendingDown, AlertTriangle, Radio, RefreshCw, Circle,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
-
-// Compact stat tile for the dashboard — denser than the shared StatCard
-function StatTile({ icon: Icon, label, value, subtitle, tone = 'teal' }: {
-  icon: LucideIcon; label: string; value: string | number; subtitle?: string;
-  tone?: 'teal' | 'amber' | 'blue' | 'emerald' | 'slate';
-}) {
-  const tones: Record<string, string> = {
-    teal: 'bg-teal-50 text-teal-600',
-    amber: 'bg-amber-50 text-amber-600',
-    blue: 'bg-blue-50 text-blue-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    slate: 'bg-slate-100 text-slate-600',
-  };
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200/70 px-4 py-3.5 shadow-sm hover:shadow-md transition-all">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">{label}</p>
-          <p className="text-2xl font-extrabold text-slate-900 mt-0.5 leading-tight">{value}</p>
-          {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{subtitle}</p>}
-        </div>
-        <div className={`p-2.5 rounded-xl ${tones[tone]} shrink-0`}>
-          <Icon className="w-4 h-4" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface DashboardStats {
   totalProduction: number;
@@ -168,80 +139,89 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-5">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Operations Command Center</h1>
-          <p className="text-sm text-slate-500 mt-1">Real-time manufacturing overview and critical workflows</p>
+          <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Operations Command Center</h1>
+          <div className="flex items-center gap-4 mt-2">
+            <div className="flex items-center gap-1.5 text-[12px]">
+              <Circle className="w-2.5 h-2.5 fill-[#00d4aa] text-[#00d4aa]" />
+              <span className="text-gray-500">Materials:</span>
+              <span className="font-medium text-gray-800">{stats.rawMaterialCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[12px]">
+              <Circle className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+              <span className="text-gray-500">Active Formulations:</span>
+              <span className="font-medium text-gray-800">{stats.formulationCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[12px]">
+              <Circle className={`w-2.5 h-2.5 ${filteredLowStock.length > 0 ? 'fill-amber-500 text-amber-500' : 'fill-emerald-500 text-emerald-500'}`} />
+              <span className="text-gray-500">Alerts:</span>
+              <span className={`font-medium ${filteredLowStock.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{filteredLowStock.length}</span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>Updated {format(lastUpdated, 'HH:mm:ss')}</span>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide">Updated {format(lastUpdated, 'HH:mm:ss')}</p>
+            <p className="text-[12px] text-gray-600">{format(lastUpdated, 'EEEE, MMM d')}</p>
+          </div>
           <button
             onClick={fetchLiveOrders}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+            className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
             title="Refresh live floor"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
+            <RefreshCw className="w-4 h-4 text-gray-500" />
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
-          <Package className="w-3.5 h-3.5 text-slate-500" />
-          Materials: {stats.rawMaterialCount}
-        </span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
-          <FlaskConical className="w-3.5 h-3.5 text-slate-500" />
-          Active Formulations: {stats.formulationCount}
-        </span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700">
-          <AlertTriangle className={`w-3.5 h-3.5 ${filteredLowStock.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`} />
-          Alerts: {filteredLowStock.length}
-        </span>
-      </div>
-
-      {/* Hero row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 rounded-2xl border border-sky-200/80 bg-gradient-to-br from-white to-sky-50/45 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex items-center justify-center">
-                <Radio className="w-4 h-4 text-teal-600" />
-                <span className="absolute w-2 h-2 bg-teal-500 rounded-full top-0 right-0 animate-ping opacity-75" />
-              </div>
-              <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">Live Production Floor</h2>
-              <span className="text-xs text-slate-500 ml-1">Real-time · {liveOrders.length} running</span>
+      {/* Live Production Floor */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Radio className="w-4 h-4 text-[#00d4aa]" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#00d4aa] rounded-full animate-ping opacity-75" />
             </div>
-            <span className="text-xs text-slate-500">{format(lastUpdated, 'HH:mm:ss')}</span>
+            <h2 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Live Production Floor</h2>
+            <span className="text-[11px] text-gray-500">Real-time · {liveOrders.length} running</span>
           </div>
-          {liveOrders.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">No active production orders on the floor</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+          <span className={`text-[12px] font-medium ${liveOrders.length > 0 ? 'text-[#00d4aa]' : 'text-gray-400'}`}>
+            {liveOrders.length > 0 ? 'Running' : 'Idle'}
+          </span>
+        </div>
+
+        {liveOrders.length === 0 ? (
+          <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg p-8 border border-gray-100 text-center">
+            <p className="text-sm text-gray-500">No active production orders on the floor</p>
+          </div>
+        ) : (
+          <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg p-4 border border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {liveOrders.map(order => {
                 const yieldPct = order.planned_qty > 0 ? Math.min(100, Math.round(((order.actual_qty || 0) / order.planned_qty) * 100)) : 0;
-                const statusColor = order.status === 'in_progress' ? 'bg-teal-500' : order.status === 'materials_issued' ? 'bg-amber-500' : 'bg-slate-400';
-                const statusBg = order.status === 'in_progress' ? 'border-teal-200 bg-teal-50/60' : order.status === 'materials_issued' ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white/80';
-                const label = order.status === 'in_progress' ? 'Running' : order.status === 'materials_issued' ? 'Issued' : 'Pending';
+                const isRunning = order.status === 'in_progress';
+                const isIssued = order.status === 'materials_issued';
                 return (
-                  <div key={order.id} className={`rounded-xl border p-2.5 ${statusBg}`}>
-                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                  <div key={order.id} className="bg-white rounded-lg border border-gray-200 p-3.5">
+                    <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-mono text-slate-500 truncate">{order.batch_number}</p>
-                        <p className="text-xs font-semibold text-slate-800 mt-0.5 leading-tight line-clamp-1">{order.formulations?.name || '—'}</p>
+                        <p className="text-[10px] font-mono text-gray-400 truncate">{order.batch_number}</p>
+                        <p className="text-[13px] font-medium text-gray-900 mt-0.5 leading-tight line-clamp-1">{order.formulations?.name || '—'}</p>
                       </div>
-                      <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded text-white ${statusColor} shrink-0`}>
-                        {label}
+                      <span className={`px-2 py-0.5 text-[10px] font-medium rounded text-white shrink-0 ${isRunning ? 'bg-[#00d4aa]' : isIssued ? 'bg-amber-500' : 'bg-slate-400'}`}>
+                        {isRunning ? 'Running' : isIssued ? 'Issued' : 'Pending'}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                      <span className="font-medium text-slate-700">{(order.actual_qty || 0).toLocaleString()} / {order.planned_qty.toLocaleString()} {order.unit}</span>
-                      <span className="font-semibold text-slate-700">{yieldPct}%</span>
+                    <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1.5">
+                      <span className="font-medium text-gray-700">{(order.actual_qty || 0).toLocaleString()} / {order.planned_qty.toLocaleString()} {order.unit}</span>
+                      <span className="font-semibold text-gray-800">{yieldPct}%</span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${order.status === 'in_progress' ? 'bg-teal-500' : 'bg-amber-400'}`}
+                        className={`h-full rounded-full transition-all duration-500 ${isRunning ? 'bg-[#00d4aa]' : 'bg-amber-400'}`}
                         style={{ width: `${yieldPct}%` }}
                       />
                     </div>
@@ -249,165 +229,134 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-200/70 bg-white shadow-sm p-1">
-          <PendingApprovalsWidget limit={5} compact />
-        </div>
-      </div>
-
-      {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile icon={Factory} label="Total Production" value={`${stats.totalProduction} t`} subtitle="Completed output" tone="teal" />
-        <StatTile icon={ClipboardList} label="Active Orders" value={stats.activeOrders} subtitle="In pipeline" tone="blue" />
-        <StatTile icon={Truck} label="Pending Dispatches" value={stats.pendingDispatches} subtitle="Awaiting shipment" tone="amber" />
-        <StatTile icon={TrendingUp} label="Efficiency" value={`${stats.efficiency}%`} subtitle="Actual vs planned" tone="teal" />
-      </div>
-
-      {/* Insights row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">Operations Trends</h2>
-            <span className="text-xs text-slate-500">Last 12 months</span>
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={trendChartData}>
-              <defs>
-                <linearGradient id="prodGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0d9488" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="consumptionGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="dispatchGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} />
-              <YAxis tick={{ fontSize: 12, fill: '#64748b' }} />
-              <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
-              <Area type="monotone" dataKey="production" stroke="#0d9488" strokeWidth={2} fill="url(#prodGradient)" name="Production (t)" />
-              <Area type="monotone" dataKey="consumption" stroke="#f97316" strokeWidth={2} fill="url(#consumptionGradient)" name="Consumption (t)" />
-              <Area type="monotone" dataKey="dispatch" stroke="#6366f1" strokeWidth={2} fill="url(#dispatchGradient)" name="Dispatch (t)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/70">
-            <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">Stock Alerts</h2>
-            </div>
-            <span className="text-xs text-slate-500">{filteredLowStock.length} items</span>
-          </div>
-          {filteredLowStock.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">All stock levels are healthy</p>
-          ) : (
-            <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
-              {filteredLowStock.map(({ item, severity }) => (
-                <div key={item.id} className={`flex items-center justify-between px-4 py-2.5 ${severity === 'critical' ? 'bg-red-50/40' : 'bg-amber-50/30'}`}>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-700 truncate">{item.name}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">{item.code}</p>
-                  </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <p className={`text-sm font-bold ${severity === 'critical' ? 'text-red-700' : 'text-amber-700'}`}>{item.current_stock.toLocaleString()} {item.unit}</p>
-                    <p className="text-[11px] text-slate-400">Min: {item.reorder_level} {item.unit}</p>
-                    {typeof forecastMap[item.id]?.days_to_depletion === 'number' && (
-                      <p className="text-[11px] text-slate-500">~{Math.round(forecastMap[item.id]!.days_to_depletion!)}d cover</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">Inventory Depletion Forecast</h2>
-          <span className="text-xs text-slate-500">Avg daily usage (30d)</span>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">
-          Computed from <span className="font-mono text-slate-500">stock_movements</span> (production_input/issue) over the last 30 days · Days to depletion = current stock ÷ avg daily usage. &ldquo;Stable&rdquo; means no consumption recorded in the window.
-        </p>
-        {inventoryForecasts.length === 0 ? (
-          <p className="text-sm text-slate-400">No usage history yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs uppercase tracking-wider text-slate-500 bg-slate-50">
-                  <th className="px-3 py-2 text-left">Material</th>
-                  <th className="px-3 py-2 text-right">Stock</th>
-                  <th className="px-3 py-2 text-right">Avg/day</th>
-                  <th className="px-3 py-2 text-right">Days to Depletion</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {inventoryForecasts.slice(0, 8).map((row) => (
-                  <tr key={row.raw_material_id}>
-                    <td className="px-3 py-2">
-                      <p className="font-medium text-slate-700">{row.name}</p>
-                      <p className="text-xs text-slate-400">{row.code}</p>
-                    </td>
-                    <td className="px-3 py-2 text-right text-slate-700">{row.current_stock.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-slate-600">{row.avg_daily_usage.toFixed(1)}</td>
-                    <td className="px-3 py-2 text-right">
-                      {row.days_to_depletion ? (
-                        <span className={`text-sm font-semibold ${row.days_to_depletion <= 5 ? 'text-red-600' : row.days_to_depletion <= 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {Math.round(row.days_to_depletion)} days
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-400">Stable</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-semibold tracking-wide text-slate-800 uppercase">Recent Production Orders</h2>
+      {/* KPI Stat Tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Production', value: `${stats.totalProduction} t`, sub: 'Completed output', trend: null },
+          { label: 'Active Orders', value: stats.activeOrders, sub: 'In pipeline', trend: stats.activeOrders > 0 ? 'up' : null },
+          { label: 'Pending Dispatches', value: stats.pendingDispatches, sub: 'Awaiting shipment', trend: null },
+          { label: 'Efficiency', value: `${stats.efficiency}%`, sub: 'Actual vs planned', trend: stats.efficiency >= 90 ? 'up' : stats.efficiency < 70 ? 'down' : null },
+        ].map(({ label, value, sub, trend }) => (
+          <div key={label} className="bg-white border border-gray-200 rounded-lg p-5">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-none">{value}</h3>
+              {trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-500 mb-0.5" />}
+              {trend === 'down' && <TrendingDown className="w-4 h-4 text-red-500 mb-0.5" />}
+            </div>
+            <p className="text-[12px] text-gray-500 mt-1">{sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts + Side Panels */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        {/* Operations Trends */}
+        <div className="xl:col-span-2 bg-white border border-gray-200 rounded-lg p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Operations Trends</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Last 12 months</p>
+            </div>
+            <div className="flex items-center gap-5 text-[11px]">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#00d4aa] rounded-sm" /><span className="text-gray-500">Production</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-sm" /><span className="text-gray-500">Consumption</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 bg-gray-300" /><span className="text-gray-500">Dispatch</span></div>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={trendChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <XAxis dataKey="month" stroke="#9ca3af" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+              <YAxis stroke="#9ca3af" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+              <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+              <Bar dataKey="production" fill="#00d4aa" radius={[4, 4, 0, 0]} name="Production (t)" />
+              <Bar dataKey="consumption" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Consumption (t)" />
+              <Line type="monotone" dataKey="dispatch" stroke="#d1d5db" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-5">
+          {/* Stock Alerts */}
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <h3 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Stock Alerts</h3>
+              </div>
+              <span className="text-[11px] text-gray-400">{filteredLowStock.length} items</span>
+            </div>
+            {filteredLowStock.length === 0 ? (
+              <p className="text-[12px] text-gray-400 text-center py-6">All stock levels healthy</p>
+            ) : (
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {filteredLowStock.map(({ item, severity }) => (
+                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium text-gray-900 truncate">{item.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{item.code}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-2">
+                      <p className={`text-[12px] font-bold ${severity === 'critical' ? 'text-red-600' : 'text-amber-600'}`}>{item.current_stock.toLocaleString()} {item.unit}</p>
+                      <div className={`flex items-center gap-1 justify-end mt-0.5 ${severity === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                        <TrendingDown className="w-3 h-3" />
+                        <span className="text-[10px] capitalize">{severity}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pending Approvals */}
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <PendingApprovalsWidget limit={5} compact />
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Production Orders */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Recent Production Orders</h2>
+          <span className="text-[11px] text-gray-400">{recentOrders.length} orders</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+              <tr className="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wider border-b border-gray-100">
                 <th className="px-5 py-3 text-left font-medium">Batch</th>
                 <th className="px-5 py-3 text-left font-medium">Product</th>
-                <th className="px-5 py-3 text-left font-medium">Planned Qty</th>
-                <th className="px-5 py-3 text-left font-medium">Actual Qty</th>
+                <th className="px-5 py-3 text-left font-medium">Planned</th>
+                <th className="px-5 py-3 text-left font-medium">Actual</th>
                 <th className="px-5 py-3 text-left font-medium">Status</th>
                 <th className="px-5 py-3 text-left font-medium">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-gray-100">
               {recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-slate-400">No production orders found</td>
+                  <td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-[13px]">No production orders found</td>
                 </tr>
               ) : (
                 recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-medium text-slate-700">{order.batch_number}</td>
-                    <td className="px-5 py-3 text-slate-600">{order.formulations?.name || '-'}</td>
-                    <td className="px-5 py-3 text-slate-600">{order.planned_qty} {order.unit}</td>
-                    <td className="px-5 py-3 text-slate-600">{order.actual_qty} {order.unit}</td>
+                  <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3 font-mono text-[12px] text-gray-600">{order.batch_number}</td>
+                    <td className="px-5 py-3 text-[13px] text-gray-800 font-medium">{order.formulations?.name || '-'}</td>
+                    <td className="px-5 py-3 text-[13px] text-gray-600">{order.planned_qty} {order.unit}</td>
+                    <td className="px-5 py-3 text-[13px] text-gray-600">{order.actual_qty} {order.unit}</td>
                     <td className="px-5 py-3"><StatusBadge status={order.status} /></td>
-                    <td className="px-5 py-3 text-slate-500">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
+                    <td className="px-5 py-3 text-[12px] text-gray-400">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
                   </tr>
                 ))
               )}

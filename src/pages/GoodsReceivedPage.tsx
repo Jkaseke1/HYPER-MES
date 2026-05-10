@@ -308,13 +308,14 @@ export default function GoodsReceivedPage() {
 
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Create New GRN</DialogTitle>
             <DialogDescription>Add a new goods received note for incoming materials</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="overflow-y-auto flex-1 pr-1">
+          <div className="space-y-4 py-2">
             {/* Header Section */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -368,8 +369,8 @@ export default function GoodsReceivedPage() {
               {items.map((item, index) => (
                 <Card key={index}>
                   <CardContent className="pt-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-3 space-y-2">
+                    <div className="space-y-3">
+                      <div className="space-y-2">
                         <Label>Raw Material *</Label>
                         <Select
                           value={item.raw_material_id}
@@ -388,55 +389,56 @@ export default function GoodsReceivedPage() {
                         </Select>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Ordered Qty</Label>
-                        <Input
-                          type="number"
-                          value={item.ordered_qty}
-                          onChange={(e) => updateItem(index, 'ordered_qty', Number(e.target.value))}
-                          step="0.01"
-                        />
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Ordered Qty</Label>
+                          <Input
+                            type="number"
+                            value={item.ordered_qty}
+                            onChange={(e) => updateItem(index, 'ordered_qty', Number(e.target.value))}
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Received Qty *</Label>
+                          <Input
+                            type="number"
+                            value={item.received_qty}
+                            onChange={(e) => updateItem(index, 'received_qty', Number(e.target.value))}
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Unit Cost</Label>
+                          <Input
+                            type="number"
+                            value={item.unit_cost}
+                            onChange={(e) => updateItem(index, 'unit_cost', Number(e.target.value))}
+                            step="0.01"
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Received Qty *</Label>
-                        <Input
-                          type="number"
-                          value={item.received_qty}
-                          onChange={(e) => updateItem(index, 'received_qty', Number(e.target.value))}
-                          step="0.01"
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Batch Number</Label>
+                          <Input
+                            value={item.batch_number}
+                            onChange={(e) => updateItem(index, 'batch_number', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Expiry Date</Label>
+                          <Input
+                            type="date"
+                            value={item.expiry_date}
+                            onChange={(e) => updateItem(index, 'expiry_date', e.target.value)}
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Unit Cost</Label>
-                        <Input
-                          type="number"
-                          value={item.unit_cost}
-                          onChange={(e) => updateItem(index, 'unit_cost', Number(e.target.value))}
-                          step="0.01"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Batch Number</Label>
-                        <Input
-                          value={item.batch_number}
-                          onChange={(e) => updateItem(index, 'batch_number', e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Expiry Date</Label>
-                        <Input
-                          type="date"
-                          value={item.expiry_date}
-                          onChange={(e) => updateItem(index, 'expiry_date', e.target.value)}
-                        />
-                      </div>
-
-                      <div className="flex items-end">
-                        {items.length > 1 && (
+                      {items.length > 1 && (
+                        <div className="flex justify-end">
                           <Button
                             type="button"
                             variant="destructive"
@@ -445,23 +447,24 @@ export default function GoodsReceivedPage() {
                           >
                             Remove
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveGRN} disabled={saving}>
-                {saving ? 'Creating...' : 'Create GRN'}
-              </Button>
-            </div>
+          </div>
+          </div>
+
+          <div className="shrink-0 flex justify-end space-x-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveGRN} disabled={saving}>
+              {saving ? 'Creating...' : 'Create GRN'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
