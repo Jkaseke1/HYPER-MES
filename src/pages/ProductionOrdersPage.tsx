@@ -546,6 +546,14 @@ export default function ProductionOrdersPage() {
         // Don't throw - stock movement is secondary to the main issuance
       }
 
+      // Auto-link to DRS issues
+      await supabase.from('rm_daily_issues').insert({
+        issue_date: new Date().toISOString().split('T')[0],
+        raw_material_name: material.raw_materials?.name || 'Unknown',
+        quantity_kg: material.planned_qty,
+        production_order_ref: selected.batch_number,
+      });
+
       // Refresh materials - add small delay to ensure database is updated
       await new Promise(resolve => setTimeout(resolve, 100));
       
@@ -625,7 +633,16 @@ export default function ProductionOrdersPage() {
 
       // Now update order status to materials_issued
       await updateStatus('materials_issued');
-      
+
+      // Auto-link to DRS issues
+      const issueEntries = detailMaterials.map((m) => ({
+        issue_date: new Date().toISOString().split('T')[0],
+        raw_material_name: m.raw_materials?.name || 'Unknown',
+        quantity_kg: m.planned_qty,
+        production_order_ref: selected.batch_number,
+      }));
+      await supabase.from('rm_daily_issues').insert(issueEntries);
+
       setSaving(false);
     } catch (error: any) {
       console.error('Error bulk issuing materials:', error);

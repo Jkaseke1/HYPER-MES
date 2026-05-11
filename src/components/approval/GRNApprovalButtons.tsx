@@ -90,8 +90,8 @@ export default function GRNApprovalButtons({
         try {
           // Fetch GRN details and line items
           const [grnRes, itemsRes, latestRateRes] = await Promise.all([
-            supabase.from('goods_received_notes').select('received_date').eq('id', grnId).single(),
-            supabase.from('grn_items').select('raw_material_id, received_qty, unit_cost').eq('grn_id', grnId),
+            supabase.from('goods_received_notes').select('received_date, grn_number').eq('id', grnId).single(),
+            supabase.from('grn_items').select('raw_material_id, received_qty, unit_cost, raw_materials(name)').eq('grn_id', grnId),
             supabase.from('usd_zig_rate_history').select('rate').order('effective_date', { ascending: false }).limit(1),
           ]);
 
@@ -111,6 +111,15 @@ export default function GRNApprovalButtons({
             }));
 
             await supabase.from('rm_cost_register').insert(costEntries);
+
+            // Auto-link to DRS receipts
+            const receiptEntries = items.map((item: any) => ({
+              receipt_date: grnDate,
+              raw_material_name: item.raw_materials?.name || 'Unknown',
+              quantity_kg: item.received_qty,
+              grn_reference: grnRes.data?.grn_number || grnId,
+            }));
+            await supabase.from('rm_daily_receipts').insert(receiptEntries);
           }
         } catch (costError) {
           console.warn('Failed to auto-create RM cost entries:', costError);
