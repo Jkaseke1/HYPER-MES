@@ -948,7 +948,7 @@ export default function FormulationsPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Copy from existing BOM (optional)</label>
               <select
                 value=""

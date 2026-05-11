@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
   const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [varianceAlerts, setVarianceAlerts] = useState<{ raw_material_name: string; stock_variance: number }[]>([]);
   const [liveOrders, setLiveOrders] = useState<ProductionOrder[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -58,7 +59,8 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboardData() {
       setLoading(true);
-      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes] =
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes] =
         await Promise.all([
           supabase.from('production_orders').select('planned_qty, actual_qty, status'),
           supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
@@ -68,6 +70,7 @@ export default function DashboardPage() {
           supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target').order('name'),
           supabase.from('monthly_operations_trends').select('*'),
           supabase.from('inventory_depletion_forecasts').select('*'),
+          supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
         ]);
 
       const orders = ordersRes.data || [];
@@ -92,7 +95,7 @@ export default function DashboardPage() {
       setLowStockItems(allMaterials);
       setTrends((trendRes.data as MonthlyTrendRow[]) || []);
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
-      
+      setVarianceAlerts((varianceRes.data as any[]) || []);
       setLoading(false);
     }
     fetchDashboardData();
@@ -304,6 +307,25 @@ export default function DashboardPage() {
 
         {/* Right column */}
         <div className="space-y-5">
+          {/* RM Variance Alert Banner */}
+          {varianceAlerts.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <h3 className="text-[13px] font-semibold text-red-800">RM Stock Variance Alert</h3>
+                <span className="ml-auto text-[11px] text-red-600 font-medium">{varianceAlerts.length} issue{varianceAlerts.length > 1 ? 's' : ''}</span>
+              </div>
+              <div className="space-y-1.5">
+                {varianceAlerts.map((v) => (
+                  <div key={v.raw_material_name} className="flex items-center justify-between text-[12px]">
+                    <span className="text-red-700 font-medium">{v.raw_material_name}</span>
+                    <span className="text-red-600 font-bold tabular-nums">{v.stock_variance.toLocaleString('en-GB', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Stock Alerts */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">

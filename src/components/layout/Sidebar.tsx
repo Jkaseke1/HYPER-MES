@@ -64,6 +64,10 @@ const navGroups: NavGroup[] = [
     label: 'Raw Materials',
     icon: PackageIcon,
     items: [
+      { to: '/raw-materials/dashboard', icon: LayoutDashboard, label: 'Stock Dashboard (DRS)' },
+      { to: '/raw-materials/receipts', icon: PackageCheck, label: 'Monthly Receipts' },
+      { to: '/raw-materials/issues', icon: ArrowRightLeft, label: 'Monthly Issues' },
+      { to: '/raw-materials/history', icon: History, label: 'Historical Snapshots' },
       { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
       { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse / Inventory' },

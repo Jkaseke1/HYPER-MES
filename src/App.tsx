@@ -29,6 +29,10 @@ const RMCostRegisterPage = lazy(() => import('./pages/RMCostRegisterPage'));
 const MonthlyRMReconciliationPage = lazy(() => import('./pages/MonthlyRMReconciliationPage'));
 const GrossMarginReportPage = lazy(() => import('./pages/GrossMarginReportPage'));
 const MacropackManufacturingPage = lazy(() => import('./pages/MacropackManufacturingPage'));
+const RMStockDashboardPage = lazy(() => import('./pages/RMStockDashboardPage'));
+const RMReceiptsMatrixPage = lazy(() => import('./pages/RMReceiptsMatrixPage'));
+const RMIssuesMatrixPage = lazy(() => import('./pages/RMIssuesMatrixPage'));
+const RMHistoryPage = lazy(() => import('./pages/RMHistoryPage'));
 const ShiftReportsPage = lazy(() => import('./pages/ShiftReportsPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -106,6 +110,10 @@ function AppRoutes() {
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/raw-materials" element={<RawMaterialsPage />} />
+          <Route path="/raw-materials/dashboard" element={<RMStockDashboardPage />} />
+          <Route path="/raw-materials/receipts" element={<RMReceiptsMatrixPage />} />
+          <Route path="/raw-materials/issues" element={<RMIssuesMatrixPage />} />
+          <Route path="/raw-materials/history" element={<RMHistoryPage />} />
           <Route path="/stock-take" element={<StockTakePage />} />
           <Route path="/stock-take/:id" element={<ErrorBoundary><StockTakeDetailPage /></ErrorBoundary>} />
           <Route path="/goods-received" element={<GoodsReceivedPage />} />
