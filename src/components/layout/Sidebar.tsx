@@ -173,13 +173,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       }`}
     >
       <div className="flex items-center gap-2.5 px-5 pt-5 pb-4 flex-shrink-0">
-        <div className="w-8 h-8 bg-[#00d4aa] rounded flex items-center justify-center flex-shrink-0">
-          <div className="w-4 h-4 border-2 border-white rounded-sm" />
+        <div className="w-9 h-9 bg-[#00d4aa] rounded-md flex items-center justify-center flex-shrink-0">
+          <div className="w-[18px] h-[18px] border-2 border-white rounded-sm" />
         </div>
         {!collapsed && (
           <div className="leading-tight overflow-hidden">
-            <h1 className="text-[13px] tracking-wide text-white/90 uppercase">Hyperfeeds</h1>
-            <p className="text-[11px] text-white/50 uppercase tracking-wider">Manufacturing System</p>
+            <h1 className="text-[14px] font-semibold tracking-wide text-white uppercase">Hyperfeeds</h1>
+            <p className="text-[11px] text-white/55 uppercase tracking-wider mt-0.5">Manufacturing System</p>
           </div>
         )}
       </div>
@@ -204,20 +204,20 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           to="/"
           end
           className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[13px] transition-colors ${
+            `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[16px] transition-colors ${
               isActive
-                ? 'bg-white/5 text-white/90'
-                : 'text-white/50 hover:text-white/70'
+                ? 'bg-white/10 text-white font-medium'
+                : 'text-white/90 hover:text-white hover:bg-white/[0.04]'
             }`
           }
         >
           {({ isActive }) => (
             <>
-              <div className={`w-1 h-1 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
               {!collapsed ? (
                 <span>Dashboard</span>
               ) : (
-                <LayoutDashboard className={`w-4 h-4 ${isActive ? 'text-[#00d4aa]' : ''}`} />
+                <LayoutDashboard className={`w-[18px] h-[18px] ${isActive ? 'text-[#00d4aa]' : ''}`} />
               )}
             </>
           )}
@@ -234,12 +234,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   <div className="my-3 border-t border-white/5" />
                   <button
                     onClick={() => toggleGroup(group.label)}
-                    className={`flex items-center justify-between w-full px-3 mb-2 text-[10px] uppercase tracking-wider transition-colors ${
-                      containsActive ? 'text-white/50' : 'text-white/30 hover:text-white/50'
+                    className={`flex items-center justify-between w-full px-3 mb-2 text-[11px] uppercase tracking-[0.1em] font-semibold transition-colors ${
+                      containsActive ? 'text-white/70' : 'text-white/45 hover:text-white/65'
                     }`}
                   >
                     <span>{group.label}</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
                 </>
               )}
@@ -251,16 +251,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       key={item.to}
                       to={item.to}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[13px] transition-colors ${
+                        `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[14px] transition-colors ${
                           isActive
-                            ? 'bg-white/5 text-white/90'
-                            : 'text-white/50 hover:text-white/70'
+                            ? 'bg-white/10 text-white font-medium'
+                            : 'text-white/75 hover:text-white hover:bg-white/[0.04]'
                         }`
                       }
                     >
                       {({ isActive }) => (
                         <>
-                          <div className={`w-1 h-1 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#00d4aa]' : 'bg-transparent'}`} />
                           <span>{item.label}</span>
                         </>
                       )}
@@ -294,13 +294,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* User profile + sign out */}
       <div className="p-3 border-t border-white/5 flex-shrink-0">
         {!collapsed ? (
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className="w-7 h-7 bg-[#00d4aa]/20 rounded-full flex items-center justify-center text-[11px] text-[#00d4aa] flex-shrink-0">
+          <div className="flex items-center gap-2.5 px-3 py-2">
+            <div className="w-8 h-8 bg-[#00d4aa]/20 rounded-full flex items-center justify-center text-[12px] font-semibold text-[#00d4aa] flex-shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] text-white/80 truncate">{profile?.full_name || profile?.email || 'User'}</p>
-              <p className="text-[10px] text-white/40 truncate">{profile?.role || 'Operator'}</p>
+              <p className="text-[13px] font-medium text-white truncate">{profile?.full_name || profile?.email || 'User'}</p>
+              <p className="text-[11px] text-white/55 truncate">{profile?.role || 'Operator'}</p>
             </div>
             <button
               onClick={doSignOut || signOut}
