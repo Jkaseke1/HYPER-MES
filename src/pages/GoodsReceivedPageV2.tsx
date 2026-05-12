@@ -487,34 +487,34 @@ export default function GoodsReceivedPageV2() {
             <div>
               <Label className="text-base mb-3 block">Line Items</Label>
               <div className="border rounded-md overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[200px]">Material</TableHead>
-                        <TableHead className="text-right w-24">Ordered</TableHead>
-                        <TableHead className="text-right w-24">Received</TableHead>
-                        <TableHead className="text-right w-24">Unit Cost</TableHead>
-                        <TableHead className="w-32">Batch</TableHead>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[35%]">Material</TableHead>
+                      <TableHead className="text-right w-[13%]">Ordered</TableHead>
+                      <TableHead className="text-right w-[13%]">Received</TableHead>
+                      <TableHead className="text-right w-[13%]">Unit Cost</TableHead>
+                      <TableHead className="w-[26%]">Batch</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {viewItems.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="w-[35%]">
+                          <div className="truncate" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
+                            {item.raw_materials?.code} - {item.raw_materials?.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right w-[13%]">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-right w-[13%] font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-right w-[13%]">${item.unit_cost.toFixed(2)}</TableCell>
+                        <TableCell className="w-[26%]">
+                          <div className="truncate" title={item.batch_number || '-'}>{item.batch_number || '-'}</div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {viewItems.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="min-w-[200px]">
-                            <div className="truncate" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
-                              {item.raw_materials?.code} - {item.raw_materials?.name}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right w-24">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                          <TableCell className="text-right w-24 font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
-                          <TableCell className="text-right w-24">${item.unit_cost.toFixed(2)}</TableCell>
-                          <TableCell className="w-32 truncate" title={item.batch_number || '-'}>{item.batch_number || '-'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </div>
