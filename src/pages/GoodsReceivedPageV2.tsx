@@ -320,10 +320,10 @@ export default function GoodsReceivedPageV2() {
               <div className="space-y-2">
                 <Label htmlFor="supplier">Supplier *</Label>
                 <Select value={supplierId} onValueChange={setSupplierId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white">
                     <SelectValue placeholder="Select supplier" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[100]">
                     {suppliers.map((supplier) => (
                       <SelectItem key={supplier.id} value={supplier.id}>
                         {supplier.name}
@@ -375,10 +375,10 @@ export default function GoodsReceivedPageV2() {
                           value={item.raw_material_id}
                           onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="bg-white">
                             <SelectValue placeholder="Select material" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="z-[100]">
                             {materials.map((material) => (
                               <SelectItem key={material.id} value={material.id}>
                                 {material.code} - {material.name}
