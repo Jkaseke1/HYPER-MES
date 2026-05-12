@@ -71,12 +71,15 @@ function SelectContent({
           className,
         )}
         position={position}
+        align="center"
+        sideOffset={4}
+        avoidCollisions
         {...props}
       >
         <SelectScrollUpButton />
         <SelectPrimitive.Viewport
           className={cn(
-            "p-1 w-full min-w-[var(--radix-select-trigger-width)] max-h-72 overflow-y-auto scroll-my-1",
+            "p-1 w-full min-w-[var(--radix-select-trigger-width)] max-h-72 overflow-y-auto scroll-smooth scrollbar-thin scroll-my-1",
           )}
         >
           {children}
