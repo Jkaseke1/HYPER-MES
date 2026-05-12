@@ -468,7 +468,7 @@ export default function GoodsReceivedPageV2() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{viewing?.grn_number}</DialogTitle>
             <DialogDescription>
@@ -476,7 +476,7 @@ export default function GoodsReceivedPageV2() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto flex-1">
             {viewing?.notes && (
               <div>
                 <Label>Notes</Label>
@@ -486,30 +486,36 @@ export default function GoodsReceivedPageV2() {
 
             <div>
               <Label className="text-base mb-3 block">Line Items</Label>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Ordered</TableHead>
-                    <TableHead>Received</TableHead>
-                    <TableHead>Unit Cost</TableHead>
-                    <TableHead>Batch</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {viewItems.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        {item.raw_materials?.code} - {item.raw_materials?.name}
-                      </TableCell>
-                      <TableCell>{item.ordered_qty} kg</TableCell>
-                      <TableCell>{item.received_qty} kg</TableCell>
-                      <TableCell>${item.unit_cost.toFixed(2)}</TableCell>
-                      <TableCell>{item.batch_number || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="border rounded-md overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[200px]">Material</TableHead>
+                        <TableHead className="text-right w-24">Ordered</TableHead>
+                        <TableHead className="text-right w-24">Received</TableHead>
+                        <TableHead className="text-right w-24">Unit Cost</TableHead>
+                        <TableHead className="w-32">Batch</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {viewItems.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="min-w-[200px]">
+                            <div className="truncate" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
+                              {item.raw_materials?.code} - {item.raw_materials?.name}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right w-24">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                          <TableCell className="text-right w-24 font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
+                          <TableCell className="text-right w-24">${item.unit_cost.toFixed(2)}</TableCell>
+                          <TableCell className="w-32 truncate" title={item.batch_number || '-'}>{item.batch_number || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             </div>
           </div>
         </DialogContent>
