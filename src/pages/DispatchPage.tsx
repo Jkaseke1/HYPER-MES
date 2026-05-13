@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
@@ -43,6 +43,8 @@ export default function DispatchPage() {
   const [pendingDeliverCallback, setPendingDeliverCallback] = useState<(() => Promise<void>) | null>(null);
   const [batchNumbers, setBatchNumbers] = useState<{ [key: string]: string[] }>({});
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
+  const [showPickingSlip, setShowPickingSlip] = useState(false);
+  const [pickingSlipOrder, setPickingSlipOrder] = useState<DispatchOrder | null>(null);
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
@@ -418,6 +420,10 @@ export default function DispatchPage() {
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={viewOrder.status} />
+                <button onClick={() => { setPickingSlipOrder(viewOrder); setShowPickingSlip(true); }} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200">
+                  <FileText className="w-3.5 h-3.5" />
+                  Picking Slip
+                </button>
                 {nextStatus(viewOrder.status) && (
                   <button onClick={() => updateStatus(viewOrder.id, nextStatus(viewOrder.status)!.next)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
                     {nextStatus(viewOrder.status)!.label}
@@ -518,6 +524,94 @@ export default function DispatchPage() {
           }
         }}
       />
+
+      {/* Picking Slip Modal */}
+      <Modal open={showPickingSlip} onClose={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} title="Picking Slip" size="lg">
+        {pickingSlipOrder && viewItems.length > 0 && (
+          <div className="space-y-4">
+            <div className="border-b border-slate-200 pb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">PICKING SLIP</h3>
+                  <p className="text-sm text-slate-500">Dispatch: {pickingSlipOrder.dispatch_number}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Date</p>
+                  <p className="text-sm font-medium text-slate-700">{format(new Date(pickingSlipOrder.dispatch_date), 'dd MMM yyyy')}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">Branch</p>
+                  <p className="font-medium text-slate-800">{(pickingSlipOrder.branches as any)?.name || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Vehicle / Driver</p>
+                  <p className="font-medium text-slate-800">{pickingSlipOrder.vehicle_number} / {pickingSlipOrder.driver_name}</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-3">Items to Pick</h4>
+              <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Product</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Batch</th>
+                    <th className="text-right px-3 py-2 font-semibold text-slate-600">Qty</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Unit</th>
+                    <th className="text-center px-3 py-2 font-semibold text-slate-600">Picked</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {viewItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-700 font-medium">{(item.formulations as any)?.name || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600 font-mono text-xs">{item.batch_number}</td>
+                      <td className="px-3 py-2 text-right text-slate-700 font-semibold">{item.quantity.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-slate-600">{item.unit}</td>
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">Total Weight</p>
+                  <p className="text-lg font-bold text-slate-800">{pickingSlipOrder.total_weight.toLocaleString()} kg</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Total Value</p>
+                  <p className="text-lg font-bold text-slate-800">${pickingSlipOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+            </div>
+
+            {pickingSlipOrder.delivery_notes && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-amber-800 mb-1">Delivery Notes</p>
+                <p className="text-sm text-amber-700">{pickingSlipOrder.delivery_notes}</p>
+              </div>
+            )}
+
+            <div className="border-t border-slate-200 pt-4 flex justify-between">
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm">
+                <FileText className="w-4 h-4" />
+                Print Slip
+              </button>
+              <button onClick={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium text-sm">
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
