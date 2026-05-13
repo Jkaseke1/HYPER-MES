@@ -358,18 +358,31 @@ export default function GoodsReceivedPage() {
 
             <div className="space-y-2">
               <Label htmlFor="weigh_bridge">Weigh Bridge Ticket</Label>
-              <Select value={weighBridgeTicketId} onValueChange={setWeighBridgeTicketId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select weigh bridge ticket (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {wbTickets.map((ticket) => (
-                    <SelectItem key={ticket.id} value={ticket.id}>
-                      {ticket.ticket_no} - {ticket.vehicle_reg || 'N/A'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={weighBridgeTicketId} onValueChange={setWeighBridgeTicketId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select weigh bridge ticket (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wbTickets.map((ticket) => (
+                      <SelectItem key={ticket.id} value={ticket.id}>
+                        {ticket.ticket_no} - {ticket.vehicle_reg || 'N/A'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {weighBridgeTicketId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setWeighBridgeTicketId('')}
+                    className="text-slate-500 hover:text-red-600 shrink-0"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
