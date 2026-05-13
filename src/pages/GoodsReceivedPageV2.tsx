@@ -490,27 +490,25 @@ export default function GoodsReceivedPageV2() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[35%]">Material</TableHead>
-                      <TableHead className="text-right w-[13%]">Ordered</TableHead>
-                      <TableHead className="text-right w-[13%]">Received</TableHead>
-                      <TableHead className="text-right w-[13%]">Unit Cost</TableHead>
-                      <TableHead className="w-[26%]">Batch</TableHead>
+                      <TableHead className="w-[30%]">Material</TableHead>
+                      <TableHead className="text-right w-[15%]">Ordered</TableHead>
+                      <TableHead className="text-right w-[15%]">Received</TableHead>
+                      <TableHead className="text-right w-[15%]">Unit Cost</TableHead>
+                      <TableHead className="w-[25%]">Batch</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {viewItems.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell className="w-[35%]">
+                        <TableCell className="w-[30%]">
                           <div className="truncate" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
                             {item.raw_materials?.code} - {item.raw_materials?.name}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right w-[13%]">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-right w-[13%] font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-right w-[13%]">${item.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell className="w-[26%]">
-                          <div className="truncate" title={item.batch_number || '-'}>{item.batch_number || '-'}</div>
-                        </TableCell>
+                        <TableCell className="text-right w-[15%]">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-right w-[15%] font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-right w-[15%]">${item.unit_cost.toFixed(2)}</TableCell>
+                        <TableCell className="w-[25%]">{item.batch_number || '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
