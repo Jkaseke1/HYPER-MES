@@ -52,18 +52,22 @@ export default function GoodsReceivedPage() {
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
+  const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
+  const [wbTickets, setWbTickets] = useState<any[]>([]);
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
+      supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
+    setWbTickets(wbRes.data || []);
     setLoading(false);
   }
 
@@ -107,17 +111,23 @@ export default function GoodsReceivedPage() {
         .single();
 
       // Create GRN header
+      const grnData: any = {
+        grn_number: grnNumber,
+        supplier_id: supplierId,
+        warehouse_id: warehouse?.id,
+        received_date: receivedDate,
+        status: 'pending',
+        notes: notes || null,
+        received_by: profile?.id,
+      };
+
+      if (weighBridgeTicketId) {
+        grnData.weigh_bridge_ticket_id = weighBridgeTicketId;
+      }
+
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
-        .insert({
-          grn_number: grnNumber,
-          supplier_id: supplierId,
-          warehouse_id: warehouse?.id,
-          received_date: receivedDate,
-          status: 'pending',
-          notes: notes || null,
-          created_by: profile?.id,
-        })
+        .insert(grnData)
         .select()
         .single();
 
@@ -156,6 +166,7 @@ export default function GoodsReceivedPage() {
     setSupplierId('');
     setReceivedDate(new Date().toISOString().split('T')[0]);
     setNotes('');
+    setWeighBridgeTicketId('');
     setItems([emptyItem]);
   };
 
@@ -343,6 +354,22 @@ export default function GoodsReceivedPage() {
                   onChange={(e) => setReceivedDate(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="weigh_bridge">Weigh Bridge Ticket</Label>
+              <Select value={weighBridgeTicketId} onValueChange={setWeighBridgeTicketId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select weigh bridge ticket (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {wbTickets.map((ticket) => (
+                    <SelectItem key={ticket.id} value={ticket.id}>
+                      {ticket.ticket_no} - {ticket.vehicle_reg || 'N/A'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
