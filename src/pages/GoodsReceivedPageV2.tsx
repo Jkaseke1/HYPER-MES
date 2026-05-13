@@ -118,7 +118,7 @@ export default function GoodsReceivedPageV2() {
         received_date: receivedDate,
         status: 'pending',
         notes: notes || null,
-        created_by: profile?.id,
+        received_by: profile?.id,
       };
       
       if (weighBridgeTicketId) {
