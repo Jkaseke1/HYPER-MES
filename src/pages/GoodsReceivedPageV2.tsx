@@ -47,23 +47,27 @@ export default function GoodsReceivedPageV2() {
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [wbTickets, setWbTickets] = useState<any[]>([]);
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
+  const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes] = await Promise.all([
+    const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
       supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
+      supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
     ]);
     setGrns(grnsRes.data || []);
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
+    setWbTickets(wbRes.data || []);
     setLoading(false);
   }
 
@@ -107,17 +111,23 @@ export default function GoodsReceivedPageV2() {
         .single();
 
       // Create GRN header
+      const grnData: any = {
+        grn_number: grnNumber,
+        supplier_id: supplierId,
+        warehouse_id: warehouse?.id,
+        received_date: receivedDate,
+        status: 'pending',
+        notes: notes || null,
+        created_by: profile?.id,
+      };
+      
+      if (weighBridgeTicketId) {
+        grnData.weigh_bridge_ticket_id = weighBridgeTicketId;
+      }
+
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
-        .insert({
-          grn_number: grnNumber,
-          supplier_id: supplierId,
-          warehouse_id: warehouse?.id,
-          received_date: receivedDate,
-          status: 'pending',
-          notes: notes || null,
-          created_by: profile?.id,
-        })
+        .insert(grnData)
         .select()
         .single();
 
@@ -345,6 +355,22 @@ export default function GoodsReceivedPageV2() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="weigh_bridge">Weigh Bridge Ticket</Label>
+              <Select value={weighBridgeTicketId} onValueChange={setWeighBridgeTicketId}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Select weigh bridge ticket (optional)" />
+                </SelectTrigger>
+                <SelectContent className="z-[100]">
+                  {wbTickets.map((ticket) => (
+                    <SelectItem key={ticket.id} value={ticket.id}>
+                      {ticket.ticket_no} - {ticket.vehicle_reg || 'N/A'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea
                 id="notes"
@@ -468,15 +494,22 @@ export default function GoodsReceivedPageV2() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{viewing?.grn_number}</DialogTitle>
-            <DialogDescription>
-              Supplier: {viewing?.suppliers?.name} | Date: {viewing && format(new Date(viewing.received_date), 'PPP')}
-            </DialogDescription>
+        <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col p-6">
+          <DialogHeader className="pb-4 border-b">
+            <div className="flex justify-between items-start">
+              <div>
+                <DialogTitle className="text-2xl">{viewing?.grn_number}</DialogTitle>
+                <DialogDescription className="mt-2">
+                  {viewing?.suppliers?.name} | {viewing && format(new Date(viewing.received_date), 'PPP')}
+                </DialogDescription>
+              </div>
+              <Badge variant={viewing?.status === 'approved' ? 'default' : 'secondary'}>
+                {viewing?.status?.toUpperCase()}
+              </Badge>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 overflow-y-auto flex-1">
+          <div className="space-y-4 overflow-y-auto flex-1 pr-4">
             {viewing?.notes && (
               <div>
                 <Label>Notes</Label>
@@ -484,35 +517,35 @@ export default function GoodsReceivedPageV2() {
               </div>
             )}
 
-            <div>
-              <Label className="text-base mb-3 block">Line Items</Label>
-              <div className="border rounded-md overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[30%]">Material</TableHead>
-                      <TableHead className="text-right w-[15%]">Ordered</TableHead>
-                      <TableHead className="text-right w-[15%]">Received</TableHead>
-                      <TableHead className="text-right w-[15%]">Unit Cost</TableHead>
-                      <TableHead className="w-[25%]">Batch</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <Label className="text-sm font-semibold mb-3 block">Line Items</Label>
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold w-[35%]">Material</th>
+                      <th className="text-right px-3 py-2 font-semibold w-[15%]">Ordered</th>
+                      <th className="text-right px-3 py-2 font-semibold w-[15%]">Received</th>
+                      <th className="text-right px-3 py-2 font-semibold w-[15%]">Unit Cost</th>
+                      <th className="text-left px-3 py-2 font-semibold w-[20%]">Batch</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {viewItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="w-[30%]">
-                          <div className="truncate" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
+                      <tr key={index} className="border-b hover:bg-slate-50">
+                        <td className="px-3 py-2 w-[35%]">
+                          <div className="truncate text-xs" title={`${item.raw_materials?.code} - ${item.raw_materials?.name}`}>
                             {item.raw_materials?.code} - {item.raw_materials?.name}
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right w-[15%]">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-right w-[15%] font-medium">{item.received_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-right w-[15%]">${item.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell className="w-[25%]">{item.batch_number || '-'}</TableCell>
-                      </TableRow>
+                        </td>
+                        <td className="text-right px-3 py-2 w-[15%]">{item.ordered_qty.toLocaleString()} kg</td>
+                        <td className="text-right px-3 py-2 font-medium w-[15%]">{item.received_qty.toLocaleString()} kg</td>
+                        <td className="text-right px-3 py-2 w-[15%]">${item.unit_cost.toFixed(2)}</td>
+                        <td className="px-3 py-2 w-[20%] text-xs">{item.batch_number || '-'}</td>
+                      </tr>
                     ))}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
