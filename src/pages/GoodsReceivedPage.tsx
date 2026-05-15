@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale } from 'lucide-react';
+import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -682,6 +683,33 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
             </div>
+
+            {/* Approval Actions */}
+            {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
+              <div className="pt-4 border-t border-slate-200">
+                <GRNApprovalButtons
+                  grnId={viewing.id}
+                  currentStatus={viewing.status}
+                  rm_approved_at={(viewing as any).rm_approved_at || (viewing as any).approved_at}
+                  accountant_approved_at={(viewing as any).accountant_approved_at}
+                  onApproved={() => {
+                    setViewModalOpen(false);
+                    fetchData();
+                  }}
+                  onRejected={() => {
+                    setViewModalOpen(false);
+                    fetchData();
+                  }}
+                />
+              </div>
+            )}
+
+            {viewing && (viewing as any).rejection_reason && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
+                <p className="text-sm text-red-700">{(viewing as any).rejection_reason}</p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
