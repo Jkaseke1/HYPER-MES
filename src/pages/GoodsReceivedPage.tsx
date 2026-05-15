@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
+import ApprovalHistory from '../components/approval/ApprovalHistory';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -60,7 +61,7 @@ export default function GoodsReceivedPage() {
   async function fetchData() {
     setLoading(true);
     const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
+      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), rm_approver:profiles!rm_approved_by(full_name), accountant_approver:profiles!accountant_approved_by(full_name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
@@ -690,7 +691,7 @@ export default function GoodsReceivedPage() {
                 <GRNApprovalButtons
                   grnId={viewing.id}
                   currentStatus={viewing.status}
-                  rm_approved_at={(viewing as any).rm_approved_at || (viewing as any).approved_at}
+                  rm_approved_at={(viewing as any).rm_approved_at}
                   accountant_approved_at={(viewing as any).accountant_approved_at}
                   onApproved={() => {
                     setViewModalOpen(false);
@@ -701,6 +702,13 @@ export default function GoodsReceivedPage() {
                     fetchData();
                   }}
                 />
+              </div>
+            )}
+
+            {/* Approval History - Always visible */}
+            {viewing && (
+              <div className="pt-4 border-t border-slate-200">
+                <ApprovalHistory entityType="grn" entityId={viewing.id} />
               </div>
             )}
 
