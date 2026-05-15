@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -511,88 +511,175 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-6 sm:!max-w-[1400px]">
-          <DialogHeader>
+        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto p-0 sm:!max-w-[1200px]">
+          {/* Header Banner */}
+          <div className="bg-slate-900 text-white px-8 py-6 rounded-t-lg">
             <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle>{viewing?.grn_number}</DialogTitle>
-                <DialogDescription className="mt-1">
-                  {viewing && format(new Date(viewing.received_date), 'PPP')}
-                </DialogDescription>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Package className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">{viewing?.grn_number}</h2>
+                  <p className="text-slate-400 text-sm mt-0.5">
+                    <Calendar className="w-3.5 h-3.5 inline mr-1" />
+                    Received {viewing && format(new Date(viewing.received_date), 'PPP')}
+                  </p>
+                </div>
               </div>
-              {viewing && getStatusBadge(viewing.status)}
+              {viewing && (
+                <Badge
+                  variant={viewing.status === 'approved' ? 'default' : viewing.status === 'rejected' ? 'destructive' : 'secondary'}
+                  className="text-sm px-4 py-1.5 capitalize"
+                >
+                  {viewing.status}
+                </Badge>
+              )}
             </div>
-          </DialogHeader>
+          </div>
 
-          <div className="space-y-5">
-            {/* Header Info */}
-            <div className="grid grid-cols-3 gap-4 bg-slate-50 rounded-lg p-4">
-              <div>
-                <p className="text-xs text-slate-500">Supplier</p>
-                <p className="text-sm font-medium text-slate-800">{viewing?.suppliers?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Warehouse</p>
-                <p className="text-sm font-medium text-slate-800">{viewing?.warehouses?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Created</p>
-                <p className="text-sm font-medium text-slate-800">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
-              </div>
+          <div className="px-8 py-6 space-y-6">
+            {/* Info Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card className="border-l-4 border-l-blue-500 shadow-sm">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
+                    <Truck className="w-4.5 h-4.5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Supplier</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.suppliers?.name || 'N/A'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-amber-500 shadow-sm">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center shrink-0">
+                    <Warehouse className="w-4.5 h-4.5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Warehouse</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.warehouses?.name || 'N/A'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
+                    <User className="w-4.5 h-4.5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Created</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {viewing?.notes && (
-              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                <Label className="text-xs text-slate-500">Notes</Label>
-                <p className="text-sm text-slate-700 mt-1">{viewing.notes}</p>
-              </div>
+              <Card className="bg-amber-50/50 border-amber-200 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-2">
+                    <FileText className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-700 uppercase tracking-wide">Notes</p>
+                      <p className="text-sm text-slate-700 mt-1">{viewing.notes}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Line Items Table */}
             <div>
-              <Label className="text-base mb-3 block">Line Items</Label>
-              <div className="border border-slate-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+                  <Scale className="w-4 h-4 text-slate-600" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800">Line Items</h3>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3">Material</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Ordered</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Received</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Unit Cost</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[120px]">Line Total</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3 w-[130px]">Batch</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3 w-[120px]">Expiry</TableHead>
+                    <TableRow className="bg-slate-50 hover:bg-slate-50">
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4">Material</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Ordered</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Received</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Unit Cost</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[120px]">Line Total</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4 w-[140px]">Batch</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4 w-[110px]">Expiry</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {viewItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="text-sm font-medium text-slate-700 py-2 px-3">
-                          {item.raw_materials?.code} - {item.raw_materials?.name}
+                      <TableRow key={index} className="hover:bg-slate-50/50">
+                        <TableCell className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center">
+                              <Package className="w-3.5 h-3.5 text-emerald-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{item.raw_materials?.name}</p>
+                              <p className="text-xs text-slate-500 font-mono">{item.raw_materials?.code}</p>
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">{item.received_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">${item.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-medium text-slate-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-slate-600 font-mono text-xs py-2 px-3">{item.batch_number || '-'}</TableCell>
-                        <TableCell className="text-sm text-slate-600 py-2 px-3">{item.expiry_date ? format(new Date(item.expiry_date), 'PP') : '-'}</TableCell>
+                        <TableCell className="text-sm text-right text-slate-600 py-3 px-4 font-medium">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-sm text-right text-slate-800 py-3 px-4 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-sm text-right text-slate-600 py-3 px-4">${item.unit_cost.toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-bold text-emerald-700 py-3 px-4">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-slate-600 py-3 px-4">
+                          {item.batch_number ? (
+                            <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-xs font-mono">{item.batch_number}</span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600 py-3 px-4">
+                          {item.expiry_date ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-amber-500" />
+                              {format(new Date(item.expiry_date), 'PP')}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
 
-              {/* Totals */}
-              <div className="flex justify-end gap-8 mt-3 text-sm">
-                <span className="text-slate-600">
-                  Total Ordered: <strong className="text-slate-800">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
-                </span>
-                <span className="text-slate-600">
-                  Total Received: <strong className="text-slate-800">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} kg</strong>
-                </span>
-                <span className="text-slate-600">
-                  Total Value: <strong className="text-slate-800">${viewItems.reduce((s, i) => s + (i.received_qty || 0) * (i.unit_cost || 0), 0).toFixed(2)}</strong>
-                </span>
+              {/* Totals Footer */}
+              <div className="mt-4 bg-slate-900 text-white rounded-xl p-5 flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm text-slate-300">
+                      Total Ordered: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
+                    </span>
+                  </div>
+                  <div className="w-px h-5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm text-slate-300">
+                      Total Received: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} kg</strong>
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 bg-emerald-500 px-5 py-2.5 rounded-lg">
+                  <DollarSign className="w-5 h-5 text-white" />
+                  <div>
+                    <p className="text-xs text-emerald-100 font-medium">Total Value</p>
+                    <p className="text-lg font-bold text-white">${viewItems.reduce((s, i) => s + (i.received_qty || 0) * (i.unit_cost || 0), 0).toFixed(2)}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
