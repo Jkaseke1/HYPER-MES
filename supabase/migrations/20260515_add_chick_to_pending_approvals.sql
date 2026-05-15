@@ -27,7 +27,7 @@ SELECT
   status,
   created_at,
   received_by as created_by,
-  branch_id
+  NULL as branch_id
 FROM goods_received_notes
 WHERE status = 'pending'
 
