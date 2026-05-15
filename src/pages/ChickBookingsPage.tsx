@@ -549,29 +549,29 @@ export default function ChickBookingsPage() {
 
           <div className="px-8 py-6 space-y-6">
             {/* Info Cards */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase">Supplier</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.supplier_name || 'N/A'}</p>
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Supplier</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{viewing?.supplier_name || 'N/A'}</p>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-                <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase">Ordered</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.ordered_qty.toLocaleString()} chicks</p>
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Ordered</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.ordered_qty.toLocaleString()} <span className="text-xs font-normal text-slate-500">chicks</span></p>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-amber-500 shadow-sm">
-                <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase">Delivered</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.delivered_qty.toLocaleString()} chicks</p>
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Delivered</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.delivered_qty.toLocaleString()} <span className="text-xs font-normal text-slate-500">chicks</span></p>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-purple-500 shadow-sm">
-                <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase">Remaining</p>
-                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.remaining_qty.toLocaleString()} chicks</p>
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Remaining</p>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.remaining_qty.toLocaleString()} <span className="text-xs font-normal text-slate-500">chicks</span></p>
                 </CardContent>
               </Card>
             </div>
