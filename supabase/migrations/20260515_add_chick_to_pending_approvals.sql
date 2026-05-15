@@ -168,6 +168,21 @@ WHERE status = 'pending'
 
 UNION ALL
 
+-- Weigh Bridge Tickets
+SELECT 
+  'weigh_bridge_ticket' as entity_type,
+  id as entity_id,
+  ticket_no as entity_number,
+  COALESCE(vehicle_reg, ticket_no) as entity_name,
+  'pending_link' as status,
+  created_at,
+  created_by,
+  NULL as branch_id
+FROM weigh_bridge_tickets
+WHERE status = 'open'
+
+UNION ALL
+
 -- Work Orders (Maintenance)
 SELECT 
   'work_order' as entity_type,

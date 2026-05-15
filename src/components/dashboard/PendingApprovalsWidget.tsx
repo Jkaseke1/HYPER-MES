@@ -16,6 +16,7 @@ const CATEGORY_META: Record<string, { label: string; pill: string }> = {
   reconciliation_period: { label: 'Reconciliation',  pill: 'bg-emerald-100 text-emerald-700' },
   material_transfer:     { label: 'Transfer',        pill: 'bg-amber-100 text-amber-700' },
   chick_booking:         { label: 'Chick Bookings',  pill: 'bg-emerald-100 text-emerald-700' },
+  weigh_bridge_ticket:   { label: 'Weigh Bridge',    pill: 'bg-cyan-100 text-cyan-700' },
 };
 
 const STAGE_META: Record<string, string> = {
@@ -94,6 +95,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       macropack_order: '/macropack-manufacturing',
       chick_booking: '/chick-bookings',
       material_transfer: '/material-transfer',
+      weigh_bridge_ticket: '/weigh-bridge',
     };
     const route = routes[approval.entity_type];
     if (route) navigate(route);
