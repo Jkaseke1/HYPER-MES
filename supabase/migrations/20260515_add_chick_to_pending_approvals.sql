@@ -23,7 +23,7 @@ SELECT
   'grn' as entity_type,
   id as entity_id,
   grn_number as entity_number,
-  supplier_name as entity_name,
+  COALESCE((SELECT name FROM suppliers WHERE id = supplier_id), 'Unknown') as entity_name,
   status,
   created_at,
   received_by as created_by,
@@ -131,7 +131,7 @@ SELECT
   order_number as entity_name,
   status,
   created_at,
-  created_by,
+  COALESCE(created_by, NULL) as created_by,
   NULL as branch_id
 FROM macropack_orders
 WHERE status = 'pending'
