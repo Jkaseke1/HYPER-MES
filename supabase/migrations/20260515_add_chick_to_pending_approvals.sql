@@ -127,14 +127,14 @@ UNION ALL
 SELECT 
   'macropack_order' as entity_type,
   id as entity_id,
-  order_number as entity_number,
-  order_number as entity_name,
+  id::text as entity_number,
+  id::text as entity_name,
   status,
   created_at,
-  COALESCE(created_by, NULL) as created_by,
+  submitted_by as created_by,
   NULL as branch_id
-FROM macropack_orders
-WHERE status = 'pending'
+FROM macropack_manufacture_orders
+WHERE status IN ('PENDING_RM', 'PENDING_SUPERVISOR')
 
 UNION ALL
 
