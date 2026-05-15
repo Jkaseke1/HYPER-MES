@@ -142,29 +142,14 @@ UNION ALL
 SELECT 
   'reconciliation_period' as entity_type,
   id as entity_id,
-  period_name as entity_number,
-  period_name as entity_name,
+  year::text || '-' || LPAD(month::text, 2, '0') as entity_number,
+  TO_CHAR(TO_DATE(month::text || '-' || year::text, 'MM-YYYY'), 'Mon YYYY') as entity_name,
   status,
   created_at,
   created_by,
-  NULL as branch_id
+  branch_id
 FROM reconciliation_periods
-WHERE status = 'pending'
-
-UNION ALL
-
--- Material Transfers
-SELECT 
-  'material_transfer' as entity_type,
-  id as entity_id,
-  transfer_number as entity_number,
-  transfer_number as entity_name,
-  status,
-  created_at,
-  created_by,
-  NULL as branch_id
-FROM material_transfers
-WHERE status = 'pending'
+WHERE status = 'draft'
 
 UNION ALL
 
@@ -172,11 +157,11 @@ UNION ALL
 SELECT 
   'work_order' as entity_type,
   id as entity_id,
-  work_order_number as entity_number,
-  description as entity_name,
+  wo_number as entity_number,
+  title as entity_name,
   status,
   created_at,
-  created_by,
-  NULL as branch_id
+  reported_by as created_by,
+  branch_id
 FROM maintenance_work_orders
-WHERE status = 'pending';
+WHERE status = 'open';

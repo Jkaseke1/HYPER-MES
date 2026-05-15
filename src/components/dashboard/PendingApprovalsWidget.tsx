@@ -14,7 +14,6 @@ const CATEGORY_META: Record<string, { label: string; pill: string }> = {
   dispatch_order:        { label: 'Dispatch',        pill: 'bg-indigo-100 text-indigo-700' },
   work_order:            { label: 'Maintenance',     pill: 'bg-slate-100 text-slate-600' },
   reconciliation_period: { label: 'Reconciliation',  pill: 'bg-emerald-100 text-emerald-700' },
-  material_transfer:     { label: 'Transfer',        pill: 'bg-amber-100 text-amber-700' },
   chick_booking:         { label: 'Chick Bookings',  pill: 'bg-emerald-100 text-emerald-700' },
 };
 
