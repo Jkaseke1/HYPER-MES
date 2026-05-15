@@ -1,0 +1,355 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Calendar, ChevronLeft, ChevronRight, Download, Plus, Save, Truck, Users } from 'lucide-react';
+import { format, addDays, subDays, endOfWeek } from 'date-fns';
+import { supabase } from '../lib/supabase';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+
+interface Route { id: string; name: string; sort_order: number; }
+interface Customer { id: string; name: string; code: string; route_id?: string; }
+interface DistLine {
+  id: string;
+  customer_id: string;
+  route_id: string;
+  delivery_date: string;
+  planned_qty: number;
+  actual_qty: number;
+}
+
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+function getMonday(d: Date) {
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+export default function ChickDistributionPage() {
+  const [weekStart, setWeekStart] = useState(getMonday(new Date()));
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [lines, setLines] = useState<DistLine[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [scheduleId, setScheduleId] = useState<string | null>(null);
+
+  const weekDates = DAYS.map((_, i) => addDays(weekStart, i));
+  const weekEnding = endOfWeek(weekStart, { weekStartsOn: 1 });
+
+  const fetchData = useCallback(async () => {
+    const [rRes, cRes, sRes] = await Promise.all([
+      supabase.from('chick_routes').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('chick_customers').select('*').eq('is_active', true).order('name'),
+      supabase.from('chick_distribution_schedules').select('*').eq('week_ending', format(weekEnding, 'yyyy-MM-dd')).maybeSingle(),
+    ]);
+    setRoutes(rRes.data || []);
+    setCustomers(cRes.data || []);
+
+    if (sRes.data) {
+      setScheduleId(sRes.data.id);
+      const { data: lData } = await supabase
+        .from('chick_distribution_lines')
+        .select('*')
+        .eq('schedule_id', sRes.data.id);
+      setLines(lData || []);
+    } else {
+      setScheduleId(null);
+      setLines([]);
+    }
+  }, [weekStart]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const getQty = (customerId: string, routeId: string, date: Date) => {
+    const line = lines.find(l =>
+      l.customer_id === customerId &&
+      l.route_id === routeId &&
+      l.delivery_date === format(date, 'yyyy-MM-dd')
+    );
+    return line?.planned_qty || 0;
+  };
+
+  const setQty = (customerId: string, routeId: string, date: Date, qty: number) => {
+    const key = format(date, 'yyyy-MM-dd');
+    setLines(prev => {
+      const idx = prev.findIndex(l => l.customer_id === customerId && l.route_id === routeId && l.delivery_date === key);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], planned_qty: qty };
+        return copy;
+      }
+      return [...prev, {
+        id: '',
+        customer_id: customerId,
+        route_id: routeId,
+        delivery_date: key,
+        planned_qty: qty,
+        actual_qty: 0,
+      }];
+    });
+  };
+
+  const customerTotal = (customerId: string) => {
+    return lines.filter(l => l.customer_id === customerId).reduce((s, l) => s + (l.planned_qty || 0), 0);
+  };
+
+  const grandTotal = () => lines.reduce((s, l) => s + (l.planned_qty || 0), 0);
+
+  const customerAvg = (customerId: string) => {
+    const total = customerTotal(customerId);
+    const daysWithQty = lines.filter(l => l.customer_id === customerId && (l.planned_qty || 0) > 0).length;
+    return daysWithQty > 0 ? Math.round(total / daysWithQty) : 0;
+  };
+
+  const customerPct = (customerId: string) => {
+    const total = grandTotal();
+    return total > 0 ? ((customerTotal(customerId) / total) * 100).toFixed(2) : '0.00';
+  };
+
+  const createSchedule = async () => {
+    setSaving(true);
+    const { data, error } = await supabase.from('chick_distribution_schedules').insert({
+      week_ending: format(weekEnding, 'yyyy-MM-dd'),
+      status: 'draft',
+    }).select().single();
+    setSaving(false);
+    if (error) { alert('Failed to create schedule: ' + error.message); return; }
+    setScheduleId(data.id);
+  };
+
+  const saveAll = async () => {
+    if (!scheduleId) { await createSchedule(); return; }
+    setSaving(true);
+    const inserts = lines.filter(l => !l.id && (l.planned_qty || 0) > 0).map(l => ({
+      schedule_id: scheduleId,
+      customer_id: l.customer_id,
+      route_id: l.route_id,
+      delivery_date: l.delivery_date,
+      planned_qty: l.planned_qty,
+      actual_qty: l.actual_qty,
+    }));
+    const updates = lines.filter(l => l.id && (l.planned_qty || 0) >= 0).map(l => ({
+      id: l.id,
+      planned_qty: l.planned_qty,
+    }));
+
+    if (inserts.length > 0) {
+      const { data } = await supabase.from('chick_distribution_lines').insert(inserts).select();
+      if (data) {
+        setLines(prev => prev.map(p => {
+          const matched = data.find((d: any) => !p.id && p.customer_id === d.customer_id && p.route_id === d.route_id && p.delivery_date === d.delivery_date);
+          return matched ? { ...p, id: matched.id } : p;
+        }));
+      }
+    }
+    for (const u of updates) {
+      await supabase.from('chick_distribution_lines').update({ planned_qty: u.planned_qty }).eq('id', u.id);
+    }
+    setSaving(false);
+  };
+
+  const exportCSV = () => {
+    let csv = 'Customer,' + DAYS.map((d) => routes.map(r => `${d} - ${r.name}`).join(',')).join(',') + ',TOTAL,AVG,%\n';
+    for (const c of customers) {
+      const row = [c.name];
+      for (let i = 0; i < 5; i++) {
+        for (const r of routes) {
+          row.push(String(getQty(c.id, r.id, weekDates[i])));
+        }
+      }
+      row.push(String(customerTotal(c.id)));
+      row.push(String(customerAvg(c.id)));
+      row.push(customerPct(c.id));
+      csv += row.join(',') + '\n';
+    }
+    // totals row
+    const totals = ['TOTAL'];
+    for (let i = 0; i < 5; i++) {
+      for (const r of routes) {
+        totals.push(String(lines.filter(l => l.delivery_date === format(weekDates[i], 'yyyy-MM-dd') && l.route_id === r.id).reduce((s, l) => s + (l.planned_qty || 0), 0)));
+      }
+    }
+    totals.push(String(grandTotal()));
+    totals.push('');
+    totals.push('');
+    csv += totals.join(',') + '\n';
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Chick_Distribution_${format(weekEnding, 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Chick Distribution Schedule</h1>
+          <p className="text-sm text-slate-500 mt-1">Weekly delivery planning by route and customer</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setWeekStart(subDays(weekStart, 7))}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <span className="text-sm font-medium text-slate-700">
+              {format(weekStart, 'MMM d')} — {format(weekEnding, 'MMM d, yyyy')}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-3 flex items-center gap-3">
+            <Users className="w-5 h-5 text-blue-500" />
+            <div>
+              <p className="text-xs text-slate-500">Customers</p>
+              <p className="text-lg font-bold text-slate-800">{customers.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 flex items-center gap-3">
+            <Truck className="w-5 h-5 text-emerald-500" />
+            <div>
+              <p className="text-xs text-slate-500">Routes</p>
+              <p className="text-lg font-bold text-slate-800">{routes.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-amber-500" />
+            <div>
+              <p className="text-xs text-slate-500">Week Total</p>
+              <p className="text-lg font-bold text-slate-800">{grandTotal().toLocaleString()}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="text-right flex-1">
+              <p className="text-xs text-slate-500">Status</p>
+              <Badge variant={scheduleId ? 'default' : 'secondary'}>
+                {scheduleId ? 'Draft' : 'Not Created'}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {!scheduleId && (
+            <Button size="sm" onClick={createSchedule} disabled={saving}>
+              <Plus className="w-4 h-4 mr-1" />
+              {saving ? 'Creating...' : 'Create Schedule'}
+            </Button>
+          )}
+          {scheduleId && (
+            <Button size="sm" onClick={saveAll} disabled={saving}>
+              <Save className="w-4 h-4 mr-1" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={exportCSV}>
+          <Download className="w-4 h-4 mr-1" />
+          Export CSV
+        </Button>
+      </div>
+
+      {/* Distribution Grid */}
+      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 w-40 sticky left-0 bg-slate-50 z-10">Customer</th>
+                {DAYS.map((_, i) => (
+                  <th key={DAYS[i]} colSpan={routes.length} className="text-center px-2 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 bg-slate-100">
+                    {DAYS[i]} {format(weekDates[i], 'd')}
+                  </th>
+                ))}
+                <th className="text-center px-3 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 bg-slate-100">TOTAL</th>
+                <th className="text-center px-3 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 bg-slate-100">AVG</th>
+                <th className="text-center px-3 py-2 text-xs font-semibold text-slate-600 border-b border-slate-200 bg-slate-100">%</th>
+              </tr>
+              <tr className="bg-slate-50">
+                <th className="border-r border-b border-slate-200 sticky left-0 bg-slate-50 z-10"></th>
+                {DAYS.map((day) => (
+                  routes.map(r => (
+                    <th key={`${day}-${r.id}`} className="text-center px-1 py-1 text-[10px] font-semibold text-slate-500 border-b border-r border-slate-200 uppercase tracking-wide w-20">
+                      {r.name}
+                    </th>
+                  ))
+                ))}
+                <th className="border-r border-b border-slate-200"></th>
+                <th className="border-r border-b border-slate-200"></th>
+                <th className="border-b border-slate-200"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map((c, idx) => (
+                <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                  <td className="px-3 py-1.5 text-sm font-medium text-slate-700 border-r border-b border-slate-200 sticky left-0 bg-inherit z-10">
+                    {c.name}
+                  </td>
+                  {DAYS.map((_, dayIdx) => (
+                    routes.map(r => (
+                      <td key={`${c.id}-${dayIdx}-${r.id}`} className="border-r border-b border-slate-200 p-0">
+                        <input
+                          type="number"
+                          min={0}
+                          value={getQty(c.id, r.id, weekDates[dayIdx]) || ''}
+                          onChange={(e) => setQty(c.id, r.id, weekDates[dayIdx], parseInt(e.target.value) || 0)}
+                          className="w-full px-1 py-1 text-center text-sm border-0 focus:ring-0 focus:bg-blue-50 bg-transparent"
+                          placeholder="0"
+                        />
+                      </td>
+                    ))
+                  ))}
+                  <td className="text-center px-2 py-1.5 text-sm font-bold text-slate-800 border-r border-b border-slate-200 bg-slate-50">
+                    {customerTotal(c.id).toLocaleString()}
+                  </td>
+                  <td className="text-center px-2 py-1.5 text-sm text-slate-600 border-r border-b border-slate-200">
+                    {customerAvg(c.id)}
+                  </td>
+                  <td className="text-center px-2 py-1.5 text-sm text-slate-600 border-b border-slate-200">
+                    {customerPct(c.id)}%
+                  </td>
+                </tr>
+              ))}
+              {/* Totals row */}
+              <tr className="bg-slate-100 font-semibold">
+                <td className="px-3 py-2 text-sm text-slate-800 border-r border-b border-slate-200 sticky left-0 bg-slate-100 z-10">TOTAL</td>
+                {DAYS.map((_, dayIdx) => (
+                  routes.map(r => (
+                    <td key={`total-${dayIdx}-${r.id}`} className="text-center px-2 py-2 text-sm text-slate-800 border-r border-b border-slate-200">
+                      {lines.filter(l => l.delivery_date === format(weekDates[dayIdx], 'yyyy-MM-dd') && l.route_id === r.id).reduce((s, l) => s + (l.planned_qty || 0), 0).toLocaleString()}
+                    </td>
+                  ))
+                ))}
+                <td className="text-center px-2 py-2 text-sm font-bold text-slate-800 border-r border-b border-slate-200">
+                  {grandTotal().toLocaleString()}
+                </td>
+                <td className="border-r border-b border-slate-200"></td>
+                <td className="border-b border-slate-200"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

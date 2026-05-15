@@ -41,6 +41,7 @@ const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
 const ChickBookingsPage = lazy(() => import('./pages/ChickBookingsPage'));
 const ProcessLossReportPage = lazy(() => import('./pages/ProcessLossReportPage'));
+const ChickDistributionPage = lazy(() => import('./pages/ChickDistributionPage'));
 const StockTakePage = lazy(() => import('./pages/StockTakePage'));
 const StockTakeDetailPage = lazy(() => import('./pages/StockTakeDetailPage'));
 const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/MaintenanceSparesPage'));
@@ -139,6 +140,7 @@ function AppRoutes() {
           <Route path="/reports/labour" element={<LabourCostReportPage />} />
           <Route path="/reports/gross-margin" element={<GrossMarginReportPage />} />
           <Route path="/reports/process-loss" element={<ProcessLossReportPage />} />
+          <Route path="/chick-distribution" element={<ChickDistributionPage />} />
           <Route path="/simple-test" element={<SimpleTestPage />} />
           <Route path="/payroll/workers" element={<TempWorkersPage />} />
           <Route path="/payroll/attendance" element={<WorkerAttendancePage />} />

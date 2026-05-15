@@ -23,6 +23,7 @@ const pageTitles: Record<string, string> = {
   '/reports/gross-margin': 'Gross Margin Report',
   '/reports/process-loss': 'Process Loss & Yield Report',
   '/chick-bookings': 'Chick Bookings',
+  '/chick-distribution': 'Chick Distribution',
   '/reports': 'Reports & Analytics',
   '/maintenance-work-orders': 'Maintenance Work Orders',
   '/maintenance-schedules': 'PM Schedules',
