@@ -108,6 +108,7 @@ const navGroups: NavGroup[] = [
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials Report' },
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
       { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
+      { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
       { to: '/reports', icon: FileText, label: 'Reports' },
     ],
   },

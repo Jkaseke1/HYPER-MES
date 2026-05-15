@@ -96,7 +96,8 @@ export default function ProductionOrdersPage() {
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [logs, setLogs] = useState<ProductionLog[]>([]);
-  const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs'>('materials');
+  const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs' | 'operations'>('materials');
+  const [operations, setOperations] = useState<any[]>([]);
   const [downtimeEntries, setDowntimeEntries] = useState<any[]>([]);
   const [downtimeForm, setDowntimeForm] = useState({ downtime_hours: '', category: 'Mechanical', reason: '' });
   const [labourRatePerTonne, setLabourRatePerTonne] = useState<number>(5.00);
@@ -331,6 +332,14 @@ export default function ProductionOrdersPage() {
       average_throughput: order.average_throughput != null ? String(order.average_throughput) : '',
     });
     setDetailTab('materials');
+
+    // Load job cards / operations
+    const { data: opsData } = await supabase
+      .from('production_operations')
+      .select('*, profiles!operator_id(full_name), machines(name)')
+      .eq('production_order_id', order.id)
+      .order('seq_no', { ascending: true });
+    setOperations(opsData || []);
     
     // Load materials with issuance status
     const { data } = await supabase
@@ -1332,7 +1341,7 @@ export default function ProductionOrdersPage() {
             {/* Detail Tabs */}
             <div className="border-b border-slate-200">
               <div className="flex gap-4">
-                {(['materials', 'costing', 'output', 'variance', 'downtime', 'logs'] as const).map((t) => (
+                {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDetailTab(t)}
@@ -1686,6 +1695,39 @@ export default function ProductionOrdersPage() {
                   </div>
                 </div>
 
+                {/* Yield & Process Loss Summary */}
+                {(output.actual_qty > 0 || selected.actual_qty > 0) && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                      <p className="text-xs text-emerald-600 uppercase font-medium">Yield %</p>
+                      <p className="text-xl font-bold text-emerald-800">
+                        {selected.planned_qty > 0 ? Math.round(((selected.actual_qty || output.actual_qty) / selected.planned_qty) * 1000) / 10 : 0}%
+                      </p>
+                      <p className="text-xs text-emerald-600 mt-1">
+                        {(selected.actual_qty || output.actual_qty).toLocaleString()} of {selected.planned_qty.toLocaleString()} kg
+                      </p>
+                    </div>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                      <p className="text-xs text-amber-600 uppercase font-medium">Process Loss</p>
+                      <p className="text-xl font-bold text-amber-800">
+                        {selected.planned_qty > 0 ? Math.round(((selected.planned_qty - (selected.actual_qty || output.actual_qty)) / selected.planned_qty) * 1000) / 10 : 0}%
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1">
+                        {Math.max(0, selected.planned_qty - (selected.actual_qty || output.actual_qty)).toLocaleString()} kg lost
+                      </p>
+                    </div>
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-center">
+                      <p className="text-xs text-red-600 uppercase font-medium">Rejects + Wastage</p>
+                      <p className="text-xl font-bold text-red-800">
+                        {((output.rejected_qty || selected.rejected_qty || 0) + (output.wastage_qty || selected.wastage_qty || 0)).toLocaleString()} kg
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        {(output.rejected_qty || selected.rejected_qty || 0)} rejected + {(output.wastage_qty || selected.wastage_qty || 0)} wastage
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Save Output Button */}
                 {selected.status === 'in_progress' && (
                   <div className="flex justify-end pt-4 border-t border-slate-200">
@@ -1709,6 +1751,98 @@ export default function ProductionOrdersPage() {
                     <div className="text-xs text-green-600 mt-1">
                       You can now complete the production order
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Operations / Job Cards Tab */}
+            {detailTab === 'operations' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-800">Job Cards (Per-Operation Tracking)</h3>
+                  {selected.status !== 'completed' && (
+                    <button
+                      onClick={async () => {
+                        if (!selected) return;
+                        setSaving(true);
+                        // Seed default operations from templates
+                        const { data: templates } = await supabase.from('operation_templates').select('*').eq('is_active', true).order('seq_no');
+                        if (!templates?.length) { setSaving(false); return; }
+                        const ops = templates.map((t: any) => ({
+                          production_order_id: selected.id,
+                          seq_no: t.seq_no,
+                          operation_name: t.name,
+                          description: t.description,
+                          estimated_time_mins: t.default_estimated_time_mins,
+                          prep_time_mins: t.default_prep_time_mins,
+                          planned_qty: selected.planned_qty,
+                          status: 'pending',
+                        }));
+                        const { error } = await supabase.from('production_operations').insert(ops);
+                        setSaving(false);
+                        if (error) { setWorkflowError('Failed to create operations: ' + error.message); return; }
+                        // Refresh
+                        const { data: opsData } = await supabase.from('production_operations').select('*, profiles!operator_id(full_name), machines(name)').eq('production_order_id', selected.id).order('seq_no');
+                        setOperations(opsData || []);
+                      }}
+                      disabled={saving || operations.length > 0}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <Play className="w-4 h-4" />
+                      {operations.length > 0 ? 'Operations Created' : 'Generate Operations'}
+                    </button>
+                  )}
+                </div>
+
+                {operations.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 border border-dashed border-slate-200 rounded-lg">
+                    <Layers className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm">No operations recorded yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Generate operations to track each manufacturing step</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {operations.map((op: any) => (
+                      <div key={op.id} className={`border rounded-lg p-4 ${op.status === 'completed' ? 'border-emerald-200 bg-emerald-50/30' : op.status === 'in_progress' ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">{op.seq_no}</span>
+                            <div>
+                              <p className="font-semibold text-slate-800 text-sm">{op.operation_name}</p>
+                              <p className="text-xs text-slate-500">{op.description}</p>
+                            </div>
+                          </div>
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            op.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            op.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            op.status === 'skipped' ? 'bg-slate-100 text-slate-600' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>{op.status.replace('_', ' ')}</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-slate-500">Planned Qty</p>
+                            <p className="font-medium text-slate-700">{op.planned_qty?.toLocaleString() || 0} kg</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Actual Qty</p>
+                            <p className="font-medium text-slate-700">{op.actual_qty?.toLocaleString() || 0} kg</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Est. Time</p>
+                            <p className="font-medium text-slate-700">{op.estimated_time_mins || 0} min</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">Actual Time</p>
+                            <p className="font-medium text-slate-700">{op.actual_time_mins || 0} min</p>
+                          </div>
+                        </div>
+                        {op.profiles?.full_name && (
+                          <p className="text-xs text-slate-500 mt-2">Operator: {op.profiles.full_name}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1988,7 +2122,7 @@ export default function ProductionOrdersPage() {
 
             <div className="flex justify-between pt-4 border-t border-slate-200">
               <div className="flex gap-2">
-                {(selected.status === 'pending' || selected.status === 'approved') && detailMaterials.length > 0 && (
+                {selected.status === 'pending' && detailMaterials.length > 0 && (
                   <button
                     onClick={bulkIssueMaterials}
                     disabled={saving || !allMaterialsAvailable()}
