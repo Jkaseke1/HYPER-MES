@@ -511,7 +511,7 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-6">
+        <DialogContent className="max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-6 sm:!max-w-[1400px]">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <div>
