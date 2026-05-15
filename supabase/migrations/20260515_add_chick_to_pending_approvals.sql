@@ -153,6 +153,21 @@ WHERE status = 'draft'
 
 UNION ALL
 
+-- Material Transfers
+SELECT 
+  'material_transfer' as entity_type,
+  id as entity_id,
+  transfer_number as entity_number,
+  COALESCE((SELECT name FROM raw_materials WHERE id = raw_material_id), 'Unknown') as entity_name,
+  status,
+  created_at,
+  requested_by as created_by,
+  NULL as branch_id
+FROM material_transfers
+WHERE status = 'pending'
+
+UNION ALL
+
 -- Work Orders (Maintenance)
 SELECT 
   'work_order' as entity_type,
