@@ -22,6 +22,7 @@ const pageTitles: Record<string, string> = {
   '/reports/rm-reconciliation': 'Monthly RM Reconciliation',
   '/reports/gross-margin': 'Gross Margin Report',
   '/reports/process-loss': 'Process Loss & Yield Report',
+  '/chick': 'Chick Management',
   '/chick-bookings': 'Chick Bookings',
   '/chick-distribution': 'Chick Distribution',
   '/reports': 'Reports & Analytics',

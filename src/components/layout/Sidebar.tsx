@@ -70,13 +70,20 @@ const navGroups: NavGroup[] = [
       { to: '/raw-materials/history', icon: History, label: 'Historical Snapshots' },
       { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
-      { to: '/chick-bookings', icon: Truck, label: 'Chick Bookings' },
-      { to: '/chick-distribution', icon: Truck, label: 'Chick Distribution' },
       { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse / Inventory' },
       { to: '/stock-take', icon: ClipboardList, label: 'Stock Take' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
       { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
+    ],
+  },
+  {
+    label: 'Chick Management',
+    icon: Truck,
+    items: [
+      { to: '/chick', icon: ClipboardList, label: 'Chick Hub' },
+      { to: '/chick-bookings', icon: ClipboardList, label: 'Chick Bookings' },
+      { to: '/chick-distribution', icon: Truck, label: 'Chick Distribution' },
     ],
   },
   {
