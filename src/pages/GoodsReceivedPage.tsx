@@ -511,7 +511,7 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -526,7 +526,7 @@ export default function GoodsReceivedPage() {
 
           <div className="space-y-5">
             {/* Header Info */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 rounded-lg p-4">
+            <div className="grid grid-cols-3 gap-4 bg-slate-50 rounded-lg p-4">
               <div>
                 <p className="text-xs text-slate-500">Supplier</p>
                 <p className="text-sm font-medium text-slate-800">{viewing?.suppliers?.name || '-'}</p>
@@ -551,31 +551,31 @@ export default function GoodsReceivedPage() {
             {/* Line Items Table */}
             <div>
               <Label className="text-base mb-3 block">Line Items</Label>
-              <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <div className="border border-slate-200 rounded-lg">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead className="text-xs font-semibold text-slate-600 whitespace-nowrap min-w-[180px]">Material</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right whitespace-nowrap">Ordered</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right whitespace-nowrap">Received</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right whitespace-nowrap">Unit Cost</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 text-right whitespace-nowrap">Line Total</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 whitespace-nowrap">Batch</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-600 whitespace-nowrap">Expiry</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3">Material</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Ordered</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Received</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[100px]">Unit Cost</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 text-right py-2 px-3 w-[120px]">Line Total</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3 w-[130px]">Batch</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-600 py-2 px-3 w-[120px]">Expiry</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {viewItems.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                        <TableCell className="text-sm font-medium text-slate-700 py-2 px-3">
                           {item.raw_materials?.code} - {item.raw_materials?.name}
                         </TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 whitespace-nowrap">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 whitespace-nowrap">{item.received_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 whitespace-nowrap">${item.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-medium text-slate-700 whitespace-nowrap">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-slate-600 font-mono text-xs whitespace-nowrap">{item.batch_number || '-'}</TableCell>
-                        <TableCell className="text-sm text-slate-600 whitespace-nowrap">{item.expiry_date ? format(new Date(item.expiry_date), 'PP') : '-'}</TableCell>
+                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">{item.received_qty.toLocaleString()} kg</TableCell>
+                        <TableCell className="text-sm text-right text-slate-600 py-2 px-3">${item.unit_cost.toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-medium text-slate-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-slate-600 font-mono text-xs py-2 px-3">{item.batch_number || '-'}</TableCell>
+                        <TableCell className="text-sm text-slate-600 py-2 px-3">{item.expiry_date ? format(new Date(item.expiry_date), 'PP') : '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -583,7 +583,7 @@ export default function GoodsReceivedPage() {
               </div>
 
               {/* Totals */}
-              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-6 mt-3 text-sm">
+              <div className="flex justify-end gap-8 mt-3 text-sm">
                 <span className="text-slate-600">
                   Total Ordered: <strong className="text-slate-800">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
                 </span>
