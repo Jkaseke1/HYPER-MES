@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
+import GRNAttachments from '../components/grn/GRNAttachments';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -709,6 +710,13 @@ export default function GoodsReceivedPage() {
             {viewing && (
               <div className="pt-4 border-t border-slate-200">
                 <ApprovalHistory entityType="grn" entityId={viewing.id} />
+              </div>
+            )}
+
+            {/* Attachments */}
+            {viewing && (
+              <div className="pt-4 border-t border-slate-200">
+                <GRNAttachments grnId={viewing.id} />
               </div>
             )}
 
