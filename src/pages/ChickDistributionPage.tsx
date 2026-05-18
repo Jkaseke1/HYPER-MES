@@ -40,16 +40,14 @@ export default function ChickDistributionPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [lines, setLines] = useState<DistLine[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
 
   const weekDates = DAYS.map((_, i) => addDays(weekStart, i));
   const weekEnding = endOfWeek(weekStart, { weekStartsOn: 1 });
 
   const fetchData = useCallback(async () => {
-    // Reset state first to show correct button
-    setScheduleId(null);
-    setLines([]);
-    
+    setLoading(true);
     const [rRes, cRes, sRes] = await Promise.all([
       supabase.from('chick_routes').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('chick_customers').select('*').eq('is_active', true).order('name'),
@@ -65,7 +63,12 @@ export default function ChickDistributionPage() {
         .select('*')
         .eq('schedule_id', sRes.data.id);
       setLines(lData || []);
+    } else {
+      // Only reset if no schedule found
+      setScheduleId(null);
+      setLines([]);
     }
+    setLoading(false);
   }, [weekEnding]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -280,7 +283,15 @@ export default function ChickDistributionPage() {
       </div>
 
       {/* Distribution Grid */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white relative">
+        {loading && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-20">
+            <div className="flex items-center gap-2 text-slate-600">
+              <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+              <span className="text-sm font-medium">Loading schedule...</span>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
