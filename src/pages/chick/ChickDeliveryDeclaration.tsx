@@ -351,7 +351,7 @@ export default function ChickDeliveryDeclaration() {
 
       {/* Declaration Modal */}
       <Dialog open={declaringId !== null} onOpenChange={(open) => !open && closeDeclarationModal()}>
-        <DialogContent className="max-w-lg flex flex-col p-0">
+        <DialogContent className="sm:max-w-lg flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Declare Delivery</DialogTitle>
             <DialogDescription>

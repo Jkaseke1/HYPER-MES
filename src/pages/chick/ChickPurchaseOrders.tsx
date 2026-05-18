@@ -439,7 +439,7 @@ export default function ChickPurchaseOrders() {
 
       {/* Create PO Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-6xl h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Create New Purchase Order</DialogTitle>
             <DialogDescription>Book chicks from a supplier for expected delivery</DialogDescription>
@@ -630,7 +630,7 @@ export default function ChickPurchaseOrders() {
 
       {/* View PO Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-5xl h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <div className="flex items-center justify-between">
               <div>

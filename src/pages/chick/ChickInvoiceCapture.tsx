@@ -536,7 +536,7 @@ export default function ChickInvoiceCapture() {
 
       {/* Capture Invoice Modal */}
       <Dialog open={capturingId !== null} onOpenChange={(open) => !open && closeCaptureModal()}>
-        <DialogContent className="max-w-2xl flex flex-col p-0">
+        <DialogContent className="sm:max-w-2xl flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Capture Supplier Invoice</DialogTitle>
             <DialogDescription>
