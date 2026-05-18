@@ -351,8 +351,8 @@ export default function ChickDeliveryDeclaration() {
 
       {/* Declaration Modal */}
       <Dialog open={declaringId !== null} onOpenChange={(open) => !open && closeDeclarationModal()}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Declare Delivery</DialogTitle>
             <DialogDescription>
               Record the actual quantity received for DNOTE {declaringNote?.dnote_number}
@@ -360,7 +360,7 @@ export default function ChickDeliveryDeclaration() {
           </DialogHeader>
 
           {declaringNote && (
-            <div className="space-y-4 py-4">
+            <div className="px-6 py-4 space-y-4">
               <div className="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Supplier:</span>
@@ -404,17 +404,17 @@ export default function ChickDeliveryDeclaration() {
                   rows={3}
                 />
               </div>
-
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={closeDeclarationModal} disabled={saving}>
-                  Cancel
-                </Button>
-                <Button onClick={handleDeclareDelivery} disabled={saving}>
-                  {saving ? 'Declaring...' : 'Confirm Delivery'}
-                </Button>
-              </div>
             </div>
           )}
+
+          <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+            <Button variant="outline" onClick={closeDeclarationModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleDeclareDelivery} disabled={saving}>
+              {saving ? 'Declaring...' : 'Confirm Delivery'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

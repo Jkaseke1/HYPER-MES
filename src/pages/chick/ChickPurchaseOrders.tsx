@@ -438,13 +438,13 @@ export default function ChickPurchaseOrders() {
 
       {/* Create PO Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Create New Purchase Order</DialogTitle>
             <DialogDescription>Book chicks from a supplier for expected delivery</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="supplier">Supplier *</Label>
@@ -612,23 +612,23 @@ export default function ChickPurchaseOrders() {
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSavePO} disabled={saving}>
-                {saving ? 'Creating...' : 'Create PO'}
-              </Button>
-            </div>
+          <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePO} disabled={saving}>
+              {saving ? 'Creating...' : 'Create PO'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* View PO Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="text-2xl">{viewing?.po_number}</DialogTitle>
@@ -639,7 +639,7 @@ export default function ChickPurchaseOrders() {
           </DialogHeader>
 
           {viewing && (
-            <div className="space-y-4 py-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-slate-500">Supplier</p>
@@ -702,18 +702,18 @@ export default function ChickPurchaseOrders() {
                   {viewing.lines.reduce((sum, line) => sum + line.booked_qty, 0).toLocaleString()} chicks
                 </span>
               </div>
+            </div>
+          )}
 
-              {viewing.status === 'SUBMITTED' && profile?.role === 'admin' && (
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setViewModalOpen(false)}>
-                    Close
-                  </Button>
-                  <Button onClick={() => handleApprovePO(viewing.id)} disabled={saving}>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {saving ? 'Approving...' : 'Approve PO'}
-                  </Button>
-                </div>
-              )}
+          {viewing && viewing.status === 'SUBMITTED' && profile?.role === 'admin' && (
+            <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+                Close
+              </Button>
+              <Button onClick={() => handleApprovePO(viewing.id)} disabled={saving}>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                {saving ? 'Approving...' : 'Approve PO'}
+              </Button>
             </div>
           )}
         </DialogContent>

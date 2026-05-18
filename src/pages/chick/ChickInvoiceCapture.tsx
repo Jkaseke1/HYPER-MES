@@ -536,8 +536,8 @@ export default function ChickInvoiceCapture() {
 
       {/* Capture Invoice Modal */}
       <Dialog open={capturingId !== null} onOpenChange={(open) => !open && closeCaptureModal()}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Capture Supplier Invoice</DialogTitle>
             <DialogDescription>
               Enter invoice details for {capturingConsignment?.supplier.name}
@@ -545,7 +545,7 @@ export default function ChickInvoiceCapture() {
           </DialogHeader>
 
           {capturingConsignment && (
-            <div className="space-y-4 py-4">
+            <div className="px-6 py-4 space-y-4">
               <div className="bg-slate-50 rounded p-3 text-sm space-y-1">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Total Received:</span>
@@ -625,17 +625,17 @@ export default function ChickInvoiceCapture() {
                   rows={2}
                 />
               </div>
-
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={closeCaptureModal} disabled={saving}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSaveInvoice} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Invoice'}
-                </Button>
-              </div>
             </div>
           )}
+
+          <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+            <Button variant="outline" onClick={closeCaptureModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveInvoice} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Invoice'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
