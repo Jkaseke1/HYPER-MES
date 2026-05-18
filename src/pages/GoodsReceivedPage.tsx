@@ -59,6 +59,24 @@ export default function GoodsReceivedPage() {
   const [wbTickets, setWbTickets] = useState<any[]>([]);
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
+  // Weigh bridge inline form fields
+  const [wbForm, setWbForm] = useState({
+    transaction_no: '',
+    vehicle_reg: '',
+    haulier_code: 'HYPER',
+    product_code: '',
+    comment: '',
+    trailer_number: '',
+    driver_name: '',
+    driver_id: '',
+    time_in: '',
+    first_mass: '',
+    time_out: '',
+    second_mass: '',
+    nett_mass: '',
+    driver_signed: false,
+  });
+
   async function fetchData() {
     setLoading(true);
     const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
@@ -128,6 +146,22 @@ export default function GoodsReceivedPage() {
         grnData.weigh_bridge_ticket_id = weighBridgeTicketId;
       }
 
+      // Add weigh bridge fields if any are filled
+      if (wbForm.transaction_no) grnData.wb_transaction_no = wbForm.transaction_no;
+      if (wbForm.vehicle_reg) grnData.wb_vehicle_reg = wbForm.vehicle_reg;
+      if (wbForm.haulier_code) grnData.wb_haulier_code = wbForm.haulier_code;
+      if (wbForm.product_code) grnData.wb_product_code = wbForm.product_code;
+      if (wbForm.comment) grnData.wb_comment = wbForm.comment;
+      if (wbForm.trailer_number) grnData.wb_trailer_number = wbForm.trailer_number;
+      if (wbForm.driver_name) grnData.wb_driver_name = wbForm.driver_name;
+      if (wbForm.driver_id) grnData.wb_driver_id = wbForm.driver_id;
+      if (wbForm.time_in) grnData.wb_time_in = wbForm.time_in;
+      if (wbForm.first_mass) grnData.wb_first_mass = parseFloat(wbForm.first_mass);
+      if (wbForm.time_out) grnData.wb_time_out = wbForm.time_out;
+      if (wbForm.second_mass) grnData.wb_second_mass = parseFloat(wbForm.second_mass);
+      if (wbForm.nett_mass) grnData.wb_nett_mass = parseFloat(wbForm.nett_mass);
+      grnData.wb_driver_signed = wbForm.driver_signed;
+
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
         .insert(grnData)
@@ -135,6 +169,11 @@ export default function GoodsReceivedPage() {
         .single();
 
       if (grnError) throw grnError;
+
+      // Mark WB ticket as linked if selected
+      if (weighBridgeTicketId) {
+        await supabase.from('weigh_bridge_tickets').update({ status: 'linked' }).eq('id', weighBridgeTicketId);
+      }
 
       // Create GRN items
       const grnItems = items.map(item => ({
@@ -171,6 +210,11 @@ export default function GoodsReceivedPage() {
     setNotes('');
     setWeighBridgeTicketId('');
     setItems([emptyItem]);
+    setWbForm({
+      transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
+      comment: '', trailer_number: '', driver_name: '', driver_id: '',
+      time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', driver_signed: false,
+    });
   };
 
   const handleViewGRN = async (grn: GoodsReceivedNote) => {
@@ -279,6 +323,7 @@ export default function GoodsReceivedPage() {
               <TableRow>
                 <TableHead>GRN Number</TableHead>
                 <TableHead>Supplier</TableHead>
+                <TableHead>Weigh Bridge</TableHead>
                 <TableHead>Received Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created By</TableHead>
@@ -288,15 +333,23 @@ export default function GoodsReceivedPage() {
             <TableBody>
               {filteredGRNs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No GRNs found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredGRNs.map((grn) => (
                   <TableRow key={grn.id}>
-                    <TableCell className="font-medium">{grn.grn_number}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {(grn as any).wb_transaction_no && (
+                          <span title="Weigh Bridge data captured"><Scale className="w-3.5 h-3.5 text-teal-500 shrink-0" /></span>
+                        )}
+                        <span className="font-mono text-xs text-slate-500">{grn.grn_number}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>{grn.suppliers?.name}</TableCell>
+                    <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                     <TableCell>{format(new Date(grn.received_date), 'PPP')}</TableCell>
                     <TableCell>{getStatusBadge(grn.status)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -359,17 +412,48 @@ export default function GoodsReceivedPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="weigh_bridge">Weigh Bridge Ticket</Label>
+            {/* Weigh Bridge Ticket Section */}
+            <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4 space-y-4">
               <div className="flex items-center gap-2">
-                <Select value={weighBridgeTicketId} onValueChange={setWeighBridgeTicketId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select weigh bridge ticket (optional)" />
+                <Scale className="w-4 h-4 text-teal-600" />
+                <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
+                <span className="text-xs text-slate-400">(optional — pick existing or fill manually)</span>
+              </div>
+
+              {/* Ticket Picker */}
+              <div className="flex items-center gap-2">
+                <Select
+                  value={weighBridgeTicketId}
+                  onValueChange={(val) => {
+                    setWeighBridgeTicketId(val);
+                    const ticket = wbTickets.find((t: any) => t.id === val);
+                    if (ticket) {
+                      setWbForm({
+                        transaction_no: ticket.ticket_no || '',
+                        vehicle_reg: ticket.vehicle_reg || '',
+                        haulier_code: ticket.haulier_code || 'HYPER',
+                        product_code: ticket.product_code || '',
+                        comment: ticket.comment || '',
+                        trailer_number: ticket.trailer_number || '',
+                        driver_name: ticket.driver_name || '',
+                        driver_id: ticket.driver_id || '',
+                        time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
+                        first_mass: ticket.first_mass != null ? String(ticket.first_mass) : '',
+                        time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
+                        second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
+                        nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
+                        driver_signed: ticket.driver_signed || false,
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1 bg-white">
+                    <SelectValue placeholder="Select an existing ticket..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {wbTickets.map((ticket) => (
-                      <SelectItem key={ticket.id} value={ticket.id}>
-                        {ticket.ticket_no} - {ticket.vehicle_reg || 'N/A'}
+                    {wbTickets.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -379,12 +463,94 @@ export default function GoodsReceivedPage() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setWeighBridgeTicketId('')}
+                    onClick={() => {
+                      setWeighBridgeTicketId('');
+                      setWbForm({
+                        transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
+                        comment: '', trailer_number: '', driver_name: '', driver_id: '',
+                        time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', driver_signed: false,
+                      });
+                    }}
                     className="text-slate-500 hover:text-red-600 shrink-0"
                   >
                     Clear
                   </Button>
                 )}
+              </div>
+              {wbTickets.length === 0 && (
+                <p className="text-xs text-slate-400">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
+              )}
+
+              {/* Manual WB Fields */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Ticket No</Label>
+                  <Input value={wbForm.transaction_no} onChange={(e) => setWbForm({ ...wbForm, transaction_no: e.target.value })} placeholder="WB-001" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Vehicle Reg</Label>
+                  <Input value={wbForm.vehicle_reg} onChange={(e) => setWbForm({ ...wbForm, vehicle_reg: e.target.value })} placeholder="ABC-1234" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Haulier</Label>
+                  <Input value={wbForm.haulier_code} onChange={(e) => setWbForm({ ...wbForm, haulier_code: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Product Code</Label>
+                  <Input value={wbForm.product_code} onChange={(e) => setWbForm({ ...wbForm, product_code: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Trailer No</Label>
+                  <Input value={wbForm.trailer_number} onChange={(e) => setWbForm({ ...wbForm, trailer_number: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Driver Name</Label>
+                  <Input value={wbForm.driver_name} onChange={(e) => setWbForm({ ...wbForm, driver_name: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Time In</Label>
+                  <Input type="datetime-local" value={wbForm.time_in} onChange={(e) => setWbForm({ ...wbForm, time_in: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">First Mass (kg)</Label>
+                  <Input type="number" value={wbForm.first_mass} onChange={(e) => setWbForm({ ...wbForm, first_mass: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Time Out</Label>
+                  <Input type="datetime-local" value={wbForm.time_out} onChange={(e) => setWbForm({ ...wbForm, time_out: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Second Mass (kg)</Label>
+                  <Input type="number" value={wbForm.second_mass} onChange={(e) => setWbForm({ ...wbForm, second_mass: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nett Mass (kg)</Label>
+                  <Input type="number" value={wbForm.nett_mass} onChange={(e) => setWbForm({ ...wbForm, nett_mass: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Driver ID</Label>
+                  <Input value={wbForm.driver_id} onChange={(e) => setWbForm({ ...wbForm, driver_id: e.target.value })} />
+                </div>
+                <div className="flex items-center gap-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="wb_driver_signed"
+                    checked={wbForm.driver_signed}
+                    onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <Label htmlFor="wb_driver_signed" className="text-xs">Driver Signed</Label>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Comment</Label>
+                <Input value={wbForm.comment} onChange={(e) => setWbForm({ ...wbForm, comment: e.target.value })} placeholder="Optional comment..." />
               </div>
             </div>
 
@@ -580,6 +746,55 @@ export default function GoodsReceivedPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Weigh Bridge Ticket Card */}
+            {(viewing as any).wb_transaction_no && (
+              <Card className="border-teal-200 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Scale className="w-4 h-4 text-teal-600" />
+                    <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
+                  </div>
+                  <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500">Ticket No</p>
+                      <p className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Vehicle</p>
+                      <p className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Haulier</p>
+                      <p className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Driver</p>
+                      <p className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">First Mass</p>
+                      <p className="text-slate-800">{(viewing as any).wb_first_mass != null ? `${(viewing as any).wb_first_mass} kg` : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Second Mass</p>
+                      <p className="text-slate-800">{(viewing as any).wb_second_mass != null ? `${(viewing as any).wb_second_mass} kg` : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Nett Mass</p>
+                      <p className="font-semibold text-teal-700">{(viewing as any).wb_nett_mass != null ? `${(viewing as any).wb_nett_mass} kg` : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Driver Signed</p>
+                      <p className="text-slate-800">{(viewing as any).wb_driver_signed ? 'Yes' : 'No'}</p>
+                    </div>
+                  </div>
+                  {(viewing as any).wb_comment && (
+                    <p className="text-xs text-slate-500 mt-3">{(viewing as any).wb_comment}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {viewing?.notes && (
               <Card className="bg-amber-50/50 border-amber-200 shadow-sm">
