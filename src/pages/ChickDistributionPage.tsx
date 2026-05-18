@@ -46,6 +46,10 @@ export default function ChickDistributionPage() {
   const weekEnding = endOfWeek(weekStart, { weekStartsOn: 1 });
 
   const fetchData = useCallback(async () => {
+    // Reset state first to show correct button
+    setScheduleId(null);
+    setLines([]);
+    
     const [rRes, cRes, sRes] = await Promise.all([
       supabase.from('chick_routes').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('chick_customers').select('*').eq('is_active', true).order('name'),
@@ -61,11 +65,8 @@ export default function ChickDistributionPage() {
         .select('*')
         .eq('schedule_id', sRes.data.id);
       setLines(lData || []);
-    } else {
-      setScheduleId(null);
-      setLines([]);
     }
-  }, [weekStart]);
+  }, [weekEnding]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
