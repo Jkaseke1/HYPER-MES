@@ -513,19 +513,20 @@ export default function ChickPurchaseOrders() {
                 </p>
               ) : (
                 <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead className="w-[200px]">Branch *</TableHead>
-                        <TableHead className="w-[120px] text-right">Booked Qty *</TableHead>
-                        <TableHead className="w-[120px] text-right">Wish Qty</TableHead>
-                        <TableHead className="w-[120px]">Chick Type</TableHead>
-                        <TableHead className="w-[120px]">Delivery</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="w-[60px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-slate-50 z-10">
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="w-[200px]">Branch *</TableHead>
+                          <TableHead className="w-[120px] text-right">Booked Qty *</TableHead>
+                          <TableHead className="w-[120px] text-right">Wish Qty</TableHead>
+                          <TableHead className="w-[120px]">Chick Type</TableHead>
+                          <TableHead className="w-[120px]">Delivery</TableHead>
+                          <TableHead>Notes</TableHead>
+                          <TableHead className="w-[60px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                       {lines.map((line, index) => (
                         <TableRow key={index}>
                           <TableCell>
@@ -602,6 +603,7 @@ export default function ChickPurchaseOrders() {
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               )}
 
