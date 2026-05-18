@@ -19,6 +19,15 @@ interface DistLine {
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+// Color coding per day - distinct light/dark pairs for headers and cells
+const DAY_COLORS = [
+  { header: 'bg-blue-100 text-blue-900', sub: 'bg-blue-50 text-blue-800', cell: 'bg-blue-50/40' },        // Monday
+  { header: 'bg-emerald-100 text-emerald-900', sub: 'bg-emerald-50 text-emerald-800', cell: 'bg-emerald-50/40' },  // Tuesday
+  { header: 'bg-amber-100 text-amber-900', sub: 'bg-amber-50 text-amber-800', cell: 'bg-amber-50/40' },    // Wednesday
+  { header: 'bg-purple-100 text-purple-900', sub: 'bg-purple-50 text-purple-800', cell: 'bg-purple-50/40' }, // Thursday
+  { header: 'bg-pink-100 text-pink-900', sub: 'bg-pink-50 text-pink-800', cell: 'bg-pink-50/40' },        // Friday
+];
+
 function getMonday(d: Date) {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -247,8 +256,8 @@ export default function ChickDistributionPage() {
         </Card>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between">
+      {/* Actions - sticky bar */}
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm">
         <div className="flex gap-2">
           {!scheduleId && (
             <Button size="sm" onClick={createSchedule} disabled={saving}>
@@ -277,7 +286,7 @@ export default function ChickDistributionPage() {
               <tr className="bg-slate-50">
                 <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 w-40 sticky left-0 bg-slate-50 z-10">Customer</th>
                 {DAYS.map((_, i) => (
-                  <th key={DAYS[i]} colSpan={routes.length} className="text-center px-2 py-2 text-xs font-semibold text-slate-600 border-b border-r border-slate-200 bg-slate-100">
+                  <th key={DAYS[i]} colSpan={routes.length} className={`text-center px-2 py-2 text-xs font-bold border-b border-r border-slate-200 ${DAY_COLORS[i].header}`}>
                     {DAYS[i]} {format(weekDates[i], 'd')}
                   </th>
                 ))}
@@ -287,9 +296,9 @@ export default function ChickDistributionPage() {
               </tr>
               <tr className="bg-slate-50">
                 <th className="border-r border-b border-slate-200 sticky left-0 bg-slate-50 z-10"></th>
-                {DAYS.map((day) => (
+                {DAYS.map((day, dayIdx) => (
                   routes.map(r => (
-                    <th key={`${day}-${r.id}`} className="text-center px-1 py-1 text-[10px] font-semibold text-slate-500 border-b border-r border-slate-200 uppercase tracking-wide w-20">
+                    <th key={`${day}-${r.id}`} className={`text-center px-1 py-1 text-[10px] font-semibold border-b border-r border-slate-200 uppercase tracking-wide w-20 ${DAY_COLORS[dayIdx].sub}`}>
                       {r.name}
                     </th>
                   ))
@@ -307,13 +316,13 @@ export default function ChickDistributionPage() {
                   </td>
                   {DAYS.map((_, dayIdx) => (
                     routes.map(r => (
-                      <td key={`${c.id}-${dayIdx}-${r.id}`} className="border-r border-b border-slate-200 p-0">
+                      <td key={`${c.id}-${dayIdx}-${r.id}`} className={`border-r border-b border-slate-200 p-0 ${DAY_COLORS[dayIdx].cell}`}>
                         <input
                           type="number"
                           min={0}
                           value={getQty(c.id, r.id, weekDates[dayIdx]) || ''}
                           onChange={(e) => setQty(c.id, r.id, weekDates[dayIdx], parseInt(e.target.value) || 0)}
-                          className="w-full px-1 py-1 text-center text-sm border-0 focus:ring-0 focus:bg-blue-50 bg-transparent"
+                          className="w-full px-1 py-1 text-center text-sm border-0 focus:ring-0 focus:bg-white bg-transparent"
                           placeholder="0"
                         />
                       </td>
@@ -335,7 +344,7 @@ export default function ChickDistributionPage() {
                 <td className="px-3 py-2 text-sm text-slate-800 border-r border-b border-slate-200 sticky left-0 bg-slate-100 z-10">TOTAL</td>
                 {DAYS.map((_, dayIdx) => (
                   routes.map(r => (
-                    <td key={`total-${dayIdx}-${r.id}`} className="text-center px-2 py-2 text-sm text-slate-800 border-r border-b border-slate-200">
+                    <td key={`total-${dayIdx}-${r.id}`} className={`text-center px-2 py-2 text-sm font-bold border-r border-b border-slate-200 ${DAY_COLORS[dayIdx].sub}`}>
                       {lines.filter(l => l.delivery_date === format(weekDates[dayIdx], 'yyyy-MM-dd') && l.route_id === r.id).reduce((s, l) => s + (l.planned_qty || 0), 0).toLocaleString()}
                     </td>
                   ))
