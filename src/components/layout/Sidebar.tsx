@@ -82,7 +82,10 @@ const navGroups: NavGroup[] = [
     icon: Truck,
     items: [
       { to: '/chick', icon: ClipboardList, label: 'Chick Hub' },
-      { to: '/chick-bookings', icon: ClipboardList, label: 'Chick Bookings' },
+      { to: '/chick/purchase-orders', icon: FileText, label: 'Purchase Orders' },
+      { to: '/chick/night-intake', icon: Activity, label: 'Night Intake' },
+      { to: '/chick/delivery-declaration', icon: PackageCheck, label: 'Delivery Declaration' },
+      { to: '/chick/invoice-capture', icon: DollarSign, label: 'Invoice Capture' },
       { to: '/chick-distribution', icon: Truck, label: 'Chick Distribution' },
     ],
   },
