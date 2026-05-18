@@ -53,74 +53,78 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: 'Planning & Setup',
-    icon: ClipboardList,
-    items: [
-      { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
-      { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
-    ],
-  },
-  {
-    label: 'Raw Materials',
+    label: 'Inventory',
     icon: PackageIcon,
     items: [
+      // Inbound workflow
+      { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
+      { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
+      { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
+      { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse' },
+      { to: '/stock-take', icon: ClipboardList, label: 'Stock Take' },
+      { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
+      // Analytics
       { to: '/raw-materials/dashboard', icon: LayoutDashboard, label: 'Stock Dashboard (DRS)' },
       { to: '/raw-materials/receipts', icon: PackageCheck, label: 'Monthly Receipts' },
       { to: '/raw-materials/issues', icon: ArrowRightLeft, label: 'Monthly Issues' },
       { to: '/raw-materials/history', icon: History, label: 'Historical Snapshots' },
-      { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
-      { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
-      { to: '/raw-materials', icon: PackageIcon2, label: 'RM Warehouse / Inventory' },
-      { to: '/stock-take', icon: ClipboardList, label: 'Stock Take' },
-      { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
-      { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
-    ],
-  },
-  {
-    label: 'Chick Management',
-    icon: Truck,
-    items: [
-      { to: '/chick', icon: ClipboardList, label: 'Chick Hub' },
-      { to: '/chick/purchase-orders', icon: FileText, label: 'Purchase Orders' },
-      { to: '/chick/night-intake', icon: Activity, label: 'Night Intake' },
-      { to: '/chick/delivery-declaration', icon: PackageCheck, label: 'Delivery Declaration' },
-      { to: '/chick/invoice-capture', icon: DollarSign, label: 'Invoice Capture' },
-      { to: '/chick-distribution', icon: Truck, label: 'Chick Distribution' },
     ],
   },
   {
     label: 'Production',
     icon: Factory,
     items: [
+      // Planning
+      { to: '/formulations', icon: Beaker, label: 'Formulations (BOM)' },
+      { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
+      // Execution
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
       { to: '/macropack', icon: Beaker, label: 'Macropack Manufacturing' },
       { to: '/production-warehouse', icon: Boxes, label: 'Production Warehouse' },
-      { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
+      // Reporting
       { to: '/shift-reports', icon: ClipboardType, label: 'Shift Reports' },
+      { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
     ],
   },
   {
     label: 'Warehouse & Dispatch',
     icon: WarehouseIcon,
     items: [
-      { to: '/warehouse', icon: WarehouseIcon, label: 'Warehouse' },
+      { to: '/warehouse', icon: WarehouseIcon, label: 'Finished Goods Warehouse' },
       { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
     ],
   },
   {
-    label: 'Reconciliation & Reporting',
+    label: 'Chicks',
+    icon: Truck,
+    items: [
+      { to: '/chick', icon: LayoutDashboard, label: 'Chick Hub' },
+      // Procurement workflow
+      { to: '/chick/purchase-orders', icon: FileText, label: 'Purchase Orders' },
+      { to: '/chick/night-intake', icon: Activity, label: 'Night Intake' },
+      { to: '/chick/delivery-declaration', icon: PackageCheck, label: 'Delivery Declaration' },
+      { to: '/chick/invoice-capture', icon: DollarSign, label: 'Invoice Capture' },
+      // Distribution
+      { to: '/chick-distribution', icon: Truck, label: 'Chick Distribution' },
+    ],
+  },
+  {
+    label: 'Reports',
     icon: BarChart3Icon,
     items: [
+      // Financial
+      { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
+      { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost' },
+      // Operational
+      { to: '/reports/production', icon: BarChart3Icon2, label: 'Production' },
+      { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
+      { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
+      // Reconciliation
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },
-      { to: '/admin/sync-log', icon: Activity, label: 'Sync Log' },
-      { to: '/reports/production', icon: BarChart3Icon2, label: 'Production Report' },
-      { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials Report' },
-      { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost Report' },
-      { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
-      { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
-      { to: '/reports', icon: FileText, label: 'Reports' },
+      { to: '/admin/sync-log', icon: Activity, label: 'Sage Sync Log' },
+      { to: '/reports', icon: FileText, label: 'All Reports' },
     ],
   },
   {
@@ -134,22 +138,22 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Plant Maintenance',
+    label: 'Maintenance',
     icon: Wrench,
     items: [
       { to: '/maintenance/pm-schedules', icon: Calendar, label: 'PM Schedules' },
       { to: '/maintenance/work-orders', icon: Wrench, label: 'Work Orders' },
       { to: '/maintenance/spares', icon: PackagePlus, label: 'Spares Inventory' },
-      { to: '/maintenance/transactions', icon: ArrowRightLeft, label: 'Issue/Receive Stock' },
-      { to: '/maintenance/low-stock', icon: AlertTriangle, label: 'Low Stock Report' },
+      { to: '/maintenance/transactions', icon: ArrowRightLeft, label: 'Issue/Receive' },
+      { to: '/maintenance/low-stock', icon: AlertTriangle, label: 'Low Stock' },
     ],
   },
   {
-    label: 'System Administration',
+    label: 'Administration',
     icon: Shield,
     items: [
-      { to: '/settings', icon: Settings, label: 'Settings' },
       { to: '/admin/users', icon: Users, label: 'User Management' },
+      { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
 ];
