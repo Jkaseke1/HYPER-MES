@@ -517,13 +517,13 @@ export default function ChickPurchaseOrders() {
                     <Table>
                       <TableHeader className="sticky top-0 bg-slate-50 z-10">
                         <TableRow className="bg-slate-50">
-                          <TableHead className="w-[200px]">Branch *</TableHead>
-                          <TableHead className="w-[120px] text-right">Booked Qty *</TableHead>
-                          <TableHead className="w-[120px] text-right">Wish Qty</TableHead>
-                          <TableHead className="w-[120px]">Chick Type</TableHead>
-                          <TableHead className="w-[120px]">Delivery</TableHead>
-                          <TableHead>Notes</TableHead>
-                          <TableHead className="w-[60px]"></TableHead>
+                          <TableHead className="w-[180px]">Branch *</TableHead>
+                          <TableHead className="w-[110px] text-right">Booked Qty *</TableHead>
+                          <TableHead className="w-[100px] text-right">Wish Qty</TableHead>
+                          <TableHead className="w-[110px]">Chick Type</TableHead>
+                          <TableHead className="w-[100px]">Delivery</TableHead>
+                          <TableHead className="w-[200px]">Notes</TableHead>
+                          <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
