@@ -748,7 +748,7 @@ export default function GoodsReceivedPage() {
             </div>
 
             {/* Weigh Bridge Ticket Card */}
-            {(viewing as any).wb_transaction_no && (
+            {viewing && (viewing as any).wb_transaction_no && (
               <Card className="border-teal-200 shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-3">
