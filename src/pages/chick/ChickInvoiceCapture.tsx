@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, FileText, CheckCircle, Download, Printer, AlertCircle } from 'lucide-react';
+// Force rebuild - v2.2 - Payment alerts
+import { DollarSign, FileText, CheckCircle, Download, Printer, AlertCircle, Bell, Mail, MessageCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -75,10 +76,67 @@ export default function ChickInvoiceCapture() {
   const [invoiceNotes, setInvoiceNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [showWorksheet, setShowWorksheet] = useState(false);
+  const [alertsMap, setAlertsMap] = useState<Record<string, any[]>>({});
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConsignments();
+    fetchAlerts();
   }, []);
+
+  async function fetchAlerts() {
+    const { data } = await supabase
+      .from('chick_payment_alerts')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) {
+      const map: Record<string, any[]> = {};
+      for (const alert of data) {
+        if (!map[alert.invoice_id]) map[alert.invoice_id] = [];
+        map[alert.invoice_id].push(alert);
+      }
+      setAlertsMap(map);
+    }
+  }
+
+  async function sendPaymentReminder(invoiceId: string, consignment: Consignment) {
+    setSendingReminder(invoiceId);
+    try {
+      // Get finance/admin users
+      const { data: recipients } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, whatsapp_number, role')
+        .in('role', ['finance', 'admin', 'accountant'])
+        .eq('notify_email', true);
+
+      const inv = consignment.invoice;
+      if (!inv) return;
+
+      for (const r of recipients || []) {
+        const { error } = await supabase.from('chick_payment_alerts').insert({
+          invoice_id: invoiceId,
+          alert_type: 'REMINDER',
+          channel: r.whatsapp_number ? 'BOTH' : 'EMAIL',
+          recipient_email: r.email,
+          recipient_phone: r.whatsapp_number,
+          recipient_name: r.full_name,
+          recipient_role: r.role,
+          message_subject: `REMINDER: Payment for Invoice ${inv.invoice_number} from ${consignment.supplier.name}`,
+          message_body: `REMINDER: Invoice ${inv.invoice_number} from ${consignment.supplier.name}\nAmount: $${inv.invoice_amount.toFixed(2)}\nStatus: ${inv.status}\nPlease process payment.`,
+          status: 'PENDING',
+          triggered_by: profile?.id,
+        });
+        if (error) console.error('Insert alert error:', error);
+      }
+
+      toast.success('Payment reminder queued for finance team');
+      fetchAlerts();
+    } catch (e: any) {
+      toast.error('Failed to send reminder: ' + e.message);
+    } finally {
+      setSendingReminder(null);
+    }
+  }
 
   async function fetchConsignments() {
     setLoading(true);
@@ -522,6 +580,52 @@ export default function ChickInvoiceCapture() {
                             <p className="text-xs text-slate-600">
                               Sage Ref: <span className="font-mono">{consignment.invoice.sage_posting_ref}</span>
                             </p>
+                          )}
+
+                          {/* Payment Alerts */}
+                          {alertsMap[consignment.invoice.id]?.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-green-200">
+                              <p className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
+                                <Bell className="w-3 h-3" /> Payment Alerts
+                              </p>
+                              <div className="space-y-1">
+                                {alertsMap[consignment.invoice.id].slice(0, 3).map((alert: any) => (
+                                  <div key={alert.id} className="flex items-center gap-2 text-xs">
+                                    <Badge
+                                      variant={alert.status === 'SENT' ? 'default' : alert.status === 'FAILED' ? 'destructive' : 'outline'}
+                                      className="text-[10px] h-4"
+                                    >
+                                      {alert.status}
+                                    </Badge>
+                                    <span className="text-slate-500">{alert.alert_type}</span>
+                                    <span className="text-slate-400">to {alert.recipient_name || alert.recipient_role}</span>
+                                    {alert.channel === 'BOTH' ? (
+                                      <span className="flex items-center gap-0.5 text-slate-400"><Mail className="w-3 h-3" /><MessageCircle className="w-3 h-3" /></span>
+                                    ) : alert.channel === 'EMAIL' ? (
+                                      <Mail className="w-3 h-3 text-slate-400" />
+                                    ) : (
+                                      <MessageCircle className="w-3 h-3 text-slate-400" />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Send Reminder Button */}
+                          {(consignment.invoice.status === 'VERIFIED' || consignment.invoice.status === 'POSTED') && (
+                            <div className="mt-2 pt-2 border-t border-green-200">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7"
+                                onClick={() => sendPaymentReminder(consignment.invoice!.id, consignment)}
+                                disabled={sendingReminder === consignment.invoice.id}
+                              >
+                                <Bell className="w-3 h-3 mr-1" />
+                                {sendingReminder === consignment.invoice.id ? 'Sending...' : 'Send Payment Reminder'}
+                              </Button>
+                            </div>
                           )}
                         </div>
                       )}
