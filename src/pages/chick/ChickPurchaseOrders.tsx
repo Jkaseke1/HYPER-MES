@@ -130,6 +130,20 @@ export default function ChickPurchaseOrders() {
     setLoading(false);
   }
 
+  async function fetchSuppliersOnly() {
+    const { data, error } = await supabase
+      .from('chick_suppliers')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    if (error) {
+      console.error('Error fetching suppliers:', error);
+    } else {
+      console.log('Fresh suppliers fetched:', data);
+      setSuppliers(data || []);
+    }
+  }
+
   async function generatePONumber() {
     const year = new Date().getFullYear();
     const { data: existing } = await supabase
@@ -188,6 +202,14 @@ export default function ChickPurchaseOrders() {
     }
 
     console.log('Saving PO with supplierId:', supplierId, 'suppliers loaded:', suppliers.map(s => ({ id: s.id, name: s.name })));
+
+    // Validate supplier exists in loaded data
+    const selectedSupplier = suppliers.find(s => s.id === supplierId);
+    if (!selectedSupplier) {
+      toast.error('Selected supplier not found. Please re-select from dropdown.');
+      setSupplierId('');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -366,7 +388,7 @@ export default function ChickPurchaseOrders() {
           </h1>
           <p className="text-muted-foreground mt-1">Manage chick bookings and supplier orders</p>
         </div>
-        <Button onClick={() => { resetForm(); setModalOpen(true); }} size="lg">
+        <Button onClick={async () => { resetForm(); await fetchSuppliersOnly(); setModalOpen(true); }} size="lg">
           <Plus className="mr-2 h-4 w-4" />
           New PO
         </Button>
