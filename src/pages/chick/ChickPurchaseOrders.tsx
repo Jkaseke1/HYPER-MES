@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, FileText, CheckCircle, XCircle, Trash2, Send, Pencil } from 'lucide-react';
-// Force rebuild - v2.2 - branches fix + PO adjustment
+import { Plus, Search, Eye, FileText, CheckCircle, Trash2, Send, Pencil } from 'lucide-react';
+// Force rebuild - v2.3 - stale supplierId fix + debug logging
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -187,6 +187,8 @@ export default function ChickPurchaseOrders() {
       return;
     }
 
+    console.log('Saving PO with supplierId:', supplierId, 'suppliers loaded:', suppliers.map(s => ({ id: s.id, name: s.name })));
+
     setSaving(true);
     try {
       const poNumber = await generatePONumber();
@@ -364,7 +366,7 @@ export default function ChickPurchaseOrders() {
           </h1>
           <p className="text-muted-foreground mt-1">Manage chick bookings and supplier orders</p>
         </div>
-        <Button onClick={() => setModalOpen(true)} size="lg">
+        <Button onClick={() => { resetForm(); setModalOpen(true); }} size="lg">
           <Plus className="mr-2 h-4 w-4" />
           New PO
         </Button>
@@ -681,7 +683,7 @@ export default function ChickPurchaseOrders() {
           </div>
 
           <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
+            <Button variant="outline" onClick={() => { resetForm(); setModalOpen(false); }} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleSavePO} disabled={saving}>
