@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, CheckCircle, XCircle, Trash2, Send, Pencil } from 'lucide-react';
-// Force rebuild - v2.1 - PO adjustment feature
+// Force rebuild - v2.2 - branches fix + PO adjustment
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -103,6 +103,14 @@ export default function ChickPurchaseOrders() {
       supabase.from('chick_suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('chick_branches').select('*').eq('is_active', true).order('branch_name'),
     ]);
+
+    if (branchesRes.error) {
+      console.error('chick_branches fetch error:', branchesRes.error);
+      toast.error('Failed to load branches: ' + branchesRes.error.message);
+    }
+    if ((branchesRes.data || []).length === 0) {
+      console.warn('No branches found — run migration: 20260518_chick_seed_data.sql');
+    }
 
     // Transform data
     const transformedPos = (posRes.data || []).map((po: any) => ({
@@ -543,9 +551,16 @@ export default function ChickPurchaseOrders() {
 
             {/* Branch Demand Lines */}
             <div className="space-y-3">
+              {branches.length === 0 && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
+                  <p className="font-semibold">No branches available</p>
+                  <p>Run the seed migration in Supabase SQL Editor:</p>
+                  <code className="block mt-1 bg-red-100 rounded px-2 py-1 text-xs font-mono">20260518_chick_seed_data.sql</code>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <Label className="text-base font-semibold">Branch Demand</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                <Button type="button" variant="outline" size="sm" onClick={addLine} disabled={branches.length === 0}>
                   <Plus className="h-4 w-4 mr-1" />
                   Add Branch
                 </Button>
