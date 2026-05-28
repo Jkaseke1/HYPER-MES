@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, FileText, CheckCircle, XCircle, Trash2, Send } from 'lucide-react';
-// Force rebuild - v2.0
+import { Plus, Search, Eye, FileText, CheckCircle, XCircle, Trash2, Send, Pencil } from 'lucide-react';
+// Force rebuild - v2.1 - PO adjustment feature
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -64,6 +64,9 @@ export default function ChickPurchaseOrders() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustingPO, setAdjustingPO] = useState<PurchaseOrder | null>(null);
+  const [adjustLines, setAdjustLines] = useState<POLine[]>([]);
 
   // Form state
   const [supplierId, setSupplierId] = useState('');
@@ -262,6 +265,31 @@ export default function ChickPurchaseOrders() {
     }
   }
 
+  async function handleSaveAdjustment() {
+    if (!adjustingPO) return;
+    setSaving(true);
+    try {
+      // Update each line's booked_qty
+      for (const line of adjustLines) {
+        const { error } = await supabase
+          .from('chick_po_lines')
+          .update({ booked_qty: line.booked_qty })
+          .eq('id', line.id);
+        if (error) throw error;
+      }
+
+      toast.success('PO quantities adjusted successfully');
+      setAdjustModalOpen(false);
+      setAdjustingPO(null);
+      fetchData();
+    } catch (error: any) {
+      console.error('Error adjusting PO:', error);
+      toast.error(`Failed to adjust: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function resetForm() {
     setSupplierId('');
     setExpectedDate('');
@@ -426,6 +454,21 @@ export default function ChickPurchaseOrders() {
                         >
                           <Send className="h-4 w-4 mr-1" />
                           Submit
+                        </Button>
+                      )}
+                      {(po.status === 'APPROVED' || po.status === 'DISPATCHED' || po.status === 'DELIVERED') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAdjustingPO(po);
+                            setAdjustLines(po.lines.map(l => ({ ...l })));
+                            setAdjustModalOpen(true);
+                          }}
+                          disabled={saving}
+                        >
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Adjust
                         </Button>
                       )}
                     </TableCell>
@@ -719,6 +762,90 @@ export default function ChickPurchaseOrders() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust PO Modal */}
+      <Dialog open={adjustModalOpen} onOpenChange={setAdjustModalOpen}>
+        <DialogContent className="sm:max-w-5xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl">Adjust PO</DialogTitle>
+                <DialogDescription>
+                  Modify quantities for {adjustingPO?.po_number}
+                </DialogDescription>
+              </div>
+              {adjustingPO && getStatusBadge(adjustingPO.status)}
+            </div>
+          </DialogHeader>
+
+          {adjustingPO && (
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
+                <p><strong>Tip:</strong> Adjust the Booked Qty to reflect actual/revised quantities.
+                Original total: <strong>{adjustingPO.lines.reduce((s, l) => s + l.booked_qty, 0).toLocaleString()}</strong> chicks</p>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead>Branch</TableHead>
+                    <TableHead className="text-right">Booked Qty</TableHead>
+                    <TableHead className="text-right">Wish Qty</TableHead>
+                    <TableHead>Chick Type</TableHead>
+                    <TableHead>Delivery</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {adjustLines.map((line, idx) => (
+                    <TableRow key={line.id}>
+                      <TableCell className="font-medium">{line.branch_code}</TableCell>
+                      <TableCell className="text-right">
+                        <input
+                          type="number"
+                          min={0}
+                          value={line.booked_qty}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setAdjustLines(prev => prev.map((l, i) => i === idx ? { ...l, booked_qty: val } : l));
+                          }}
+                          className="w-24 px-2 py-1 text-right border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-slate-500">{line.wish_qty.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{line.chick_type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={line.delivery_type === 'LOCAL' ? 'default' : 'secondary'} className="text-xs">
+                          {line.delivery_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">{line.notes || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="bg-slate-900 text-white rounded p-4 flex justify-between items-center">
+                <span className="font-semibold">Adjusted Total:</span>
+                <span className="text-2xl font-bold">
+                  {adjustLines.reduce((sum, line) => sum + line.booked_qty, 0).toLocaleString()} chicks
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAdjustModalOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAdjustment} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Adjustment'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+// Force rebuild - v2.1 - flicker fix + PO comparison
 import { Calendar, ChevronLeft, ChevronRight, Download, Plus, Save, Truck, Users } from 'lucide-react';
 import { format, addDays, subDays, endOfWeek } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 
 interface Route { id: string; name: string; sort_order: number; }
 interface Customer { id: string; name: string; code: string; route_id?: string; }
@@ -40,21 +40,31 @@ export default function ChickDistributionPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [lines, setLines] = useState<DistLine[]>([]);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
+  const [poTotalBooked, setPoTotalBooked] = useState(0);
 
   const weekDates = DAYS.map((_, i) => addDays(weekStart, i));
   const weekEnding = endOfWeek(weekStart, { weekStartsOn: 1 });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    const [rRes, cRes, sRes] = await Promise.all([
-      supabase.from('chick_routes').select('*').eq('is_active', true).order('sort_order'),
-      supabase.from('chick_customers').select('*').eq('is_active', true).order('name'),
-      supabase.from('chick_distribution_schedules').select('*').eq('week_ending', format(weekEnding, 'yyyy-MM-dd')).maybeSingle(),
-    ]);
-    setRoutes(rRes.data || []);
-    setCustomers(cRes.data || []);
+  // Fetch routes and customers once on mount — never changes
+  useEffect(() => {
+    (async () => {
+      const [rRes, cRes] = await Promise.all([
+        supabase.from('chick_routes').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('chick_customers').select('*').eq('is_active', true).order('name'),
+      ]);
+      setRoutes(rRes.data || []);
+      setCustomers(cRes.data || []);
+    })();
+  }, []);
+
+  // Fetch schedule data when week changes — silently, no flash
+  const fetchSchedule = useCallback(async () => {
+    const sRes = await supabase
+      .from('chick_distribution_schedules')
+      .select('*')
+      .eq('week_ending', format(weekEnding, 'yyyy-MM-dd'))
+      .maybeSingle();
 
     if (sRes.data) {
       setScheduleId(sRes.data.id);
@@ -64,14 +74,27 @@ export default function ChickDistributionPage() {
         .eq('schedule_id', sRes.data.id);
       setLines(lData || []);
     } else {
-      // Only reset if no schedule found
       setScheduleId(null);
       setLines([]);
     }
-    setLoading(false);
   }, [weekEnding]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchSchedule(); }, [fetchSchedule]);
+
+  // Fetch total PO booked qty for comparison (all APPROVED/DISPATCHED POs)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('chick_purchase_orders')
+        .select('id, status, lines:chick_po_lines(booked_qty)')
+        .in('status', ['APPROVED', 'DISPATCHED', 'DELIVERED']);
+      const total = (data || []).reduce((sum: number, po: any) => {
+        const poLines = po.lines || [];
+        return sum + poLines.reduce((s: number, l: any) => s + (l.booked_qty || 0), 0);
+      }, 0);
+      setPoTotalBooked(total);
+    })();
+  }, []);
 
   const getQty = (customerId: string, routeId: string, date: Date) => {
     const line = lines.find(l =>
@@ -249,13 +272,18 @@ export default function ChickDistributionPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="text-right flex-1">
-              <p className="text-xs text-slate-500">Status</p>
-              <Badge variant={scheduleId ? 'default' : 'secondary'}>
-                {scheduleId ? 'Draft' : 'Not Created'}
-              </Badge>
+          <CardContent className="p-3">
+            <p className="text-xs text-slate-500 mb-1">PO Booked vs Distribution</p>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-blue-700">{poTotalBooked.toLocaleString()}</span>
+              <span className="text-xs text-slate-400">vs</span>
+              <span className="text-lg font-bold text-emerald-700">{grandTotal().toLocaleString()}</span>
             </div>
+            {poTotalBooked > 0 && (
+              <p className={`text-[11px] mt-0.5 ${grandTotal() > poTotalBooked ? 'text-red-500' : grandTotal() < poTotalBooked ? 'text-amber-500' : 'text-emerald-500'}`}>
+                {grandTotal() > poTotalBooked ? 'Distribution exceeds PO!' : grandTotal() < poTotalBooked ? `${(poTotalBooked - grandTotal()).toLocaleString()} remaining` : 'Fully allocated'}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -283,16 +311,7 @@ export default function ChickDistributionPage() {
       </div>
 
       {/* Distribution Grid */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-20">
-            <div className="flex items-center gap-2 text-slate-600">
-              <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
-              <span className="text-sm font-medium">Loading schedule...</span>
-            </div>
-          </div>
-        )}
-        <div className="overflow-x-auto">
+      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50">
@@ -369,7 +388,6 @@ export default function ChickDistributionPage() {
               </tr>
             </tbody>
           </table>
-        </div>
       </div>
     </div>
   );
