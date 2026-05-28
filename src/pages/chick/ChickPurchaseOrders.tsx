@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, CheckCircle, Trash2, Send, Pencil } from 'lucide-react';
-// Force rebuild - v2.4 - supplier FK fix workaround
+// Force rebuild - v2.5 - null-safe supplier access
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -355,7 +355,7 @@ export default function ChickPurchaseOrders() {
   const filteredPOs = pos.filter(po => {
     const matchesSearch =
       po.po_number.toLowerCase().includes(search.toLowerCase()) ||
-      po.supplier.name.toLowerCase().includes(search.toLowerCase());
+      (po.supplier?.name || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || po.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -458,7 +458,7 @@ export default function ChickPurchaseOrders() {
                     <TableCell className="font-mono text-sm font-semibold text-blue-600">
                       {po.po_number}
                     </TableCell>
-                    <TableCell className="font-medium">{po.supplier.name}</TableCell>
+                    <TableCell className="font-medium">{po.supplier?.name || 'Unknown'}</TableCell>
                     <TableCell>{format(new Date(po.expected_delivery_date), 'PP')}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{po.chick_type}</Badge>
@@ -733,7 +733,7 @@ export default function ChickPurchaseOrders() {
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-slate-500">Supplier</p>
-                  <p className="font-semibold text-lg">{viewing.supplier.name}</p>
+                  <p className="font-semibold text-lg">{viewing?.supplier?.name || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-slate-500">Expected Delivery</p>
