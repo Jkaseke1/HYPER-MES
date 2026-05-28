@@ -39,7 +39,6 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
-const ChickBookingsPage = lazy(() => import('./pages/ChickBookingsPage'));
 const ProcessLossReportPage = lazy(() => import('./pages/ProcessLossReportPage'));
 const ChickDistributionPage = lazy(() => import('./pages/ChickDistributionPage'));
 const ChickHubPage = lazy(() => import('./pages/ChickHubPage'));
@@ -165,7 +164,7 @@ function AppRoutes() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/weigh-bridge" element={<WeighBridgePage />} />
-          <Route path="/chick-bookings" element={<ChickBookingsPage />} />
+          <Route path="/chick-bookings" element={<Navigate to="/chick/purchase-orders" replace />} />
           <Route path="/production-warehouse" element={<ProductionWarehousePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
