@@ -47,41 +47,46 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
 
   useEffect(() => {
     fetchPendingApprovals();
-  }, [limit]);
+  }, [limit, profile?.role]);
 
   async function fetchPendingApprovals() {
     setLoading(true);
-    const { data } = await supabase
-      .from('pending_approvals')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(limit);
+    try {
+      const { data } = await supabase
+        .from('pending_approvals')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(limit);
 
-    // Get total count (filtered by role on client side)
-    const { data: allData } = await supabase.from('pending_approvals').select('entity_type');
-    if (allData && profile?.role) {
-      const total = allData.filter((i: any) => canApprove(i.entity_type, profile.role)).length;
-      setTotalCount(total);
-    }
-
-    if (data && profile?.role) {
-      const filtered = data.filter((item: PendingApproval) =>
-        canApprove(item.entity_type as any, profile.role)
-      );
-      setApprovals(filtered);
-
-      const ids = [...new Set(filtered.map((a: PendingApproval) => a.created_by).filter(Boolean))] as string[];
-      if (ids.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', ids);
-        const map = new Map<string, string>();
-        profiles?.forEach((p: { id: string; full_name: string }) => map.set(p.id, p.full_name));
-        setCreatorNames(map);
+      // Get total count (filtered by role on client side)
+      const { data: allData } = await supabase.from('pending_approvals').select('entity_type');
+      if (allData && profile?.role) {
+        const total = allData.filter((i: any) => canApprove(i.entity_type, profile.role)).length;
+        setTotalCount(total);
       }
+
+      if (data && profile?.role) {
+        const filtered = data.filter((item: PendingApproval) =>
+          canApprove(item.entity_type as any, profile.role)
+        );
+        setApprovals(filtered);
+
+        const ids = [...new Set(filtered.map((a: PendingApproval) => a.created_by).filter(Boolean))] as string[];
+        if (ids.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', ids);
+          const map = new Map<string, string>();
+          profiles?.forEach((p: { id: string; full_name: string }) => map.set(p.id, p.full_name));
+          setCreatorNames(map);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching pending approvals:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function navigateToEntity(approval: PendingApproval) {
