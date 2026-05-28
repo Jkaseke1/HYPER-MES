@@ -104,6 +104,11 @@ export default function ChickPurchaseOrders() {
       supabase.from('chick_branches').select('*').eq('is_active', true).order('branch_name'),
     ]);
 
+    if (suppliersRes.error) {
+      console.error('chick_suppliers fetch error:', suppliersRes.error);
+    }
+    console.log('Loaded suppliers:', suppliersRes.data);
+
     if (branchesRes.error) {
       console.error('chick_branches fetch error:', branchesRes.error);
       toast.error('Failed to load branches: ' + branchesRes.error.message);
