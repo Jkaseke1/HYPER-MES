@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, CheckCircle, Trash2, Send, Pencil } from 'lucide-react';
-// Force rebuild - v2.3 - stale supplierId fix + debug logging
+// Force rebuild - v2.4 - supplier FK fix workaround
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
