@@ -58,20 +58,54 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         .order('created_at', { ascending: true })
         .limit(limit);
 
-      // Get total count (filtered by role on client side)
-      const { data: allData } = await supabase.from('pending_approvals').select('entity_type');
-      if (allData && profile?.role) {
-        const total = allData.filter((i: any) => canApprove(i.entity_type, profile.role)).length;
-        setTotalCount(total);
-      }
+      // Fetch full list (entity_type only) to calculate totals for roles allowed to approve
+      const { data: allData } = await supabase.from('pending_approvals').select('entity_type, entity_id');
+
+      const approvalsMap = new Map<string, PendingApproval>();
 
       if (data && profile?.role) {
         const filtered = data.filter((item: PendingApproval) =>
           canApprove(item.entity_type as any, profile.role)
         );
-        setApprovals(filtered);
+        filtered.forEach(item => approvalsMap.set(`${item.entity_type}:${item.entity_id}`, item));
+      }
 
-        const ids = [...new Set(filtered.map((a: PendingApproval) => a.created_by).filter(Boolean))] as string[];
+      // Fallback: fetch chick POs directly in case the pending_approvals view is outdated
+      if (profile?.role && canApprove('chick_booking', profile.role)) {
+        const { data: chickPOs } = await supabase
+          .from('chick_purchase_orders')
+          .select('id, po_number, status, created_at, created_by, chick_suppliers(name)')
+          .eq('status', 'SUBMITTED');
+
+        chickPOs?.forEach((po: any) => {
+          const approval: PendingApproval = {
+            entity_type: 'chick_booking',
+            entity_id: po.id,
+            entity_number: po.po_number,
+            entity_name: po.chick_suppliers?.name || 'Unknown Supplier',
+            status: 'pending_approval',
+            created_at: po.created_at,
+            created_by: po.created_by || undefined,
+            branch_id: undefined,
+          };
+          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
+        });
+      }
+
+      const combinedApprovals = Array.from(approvalsMap.values()).sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+
+      setApprovals(combinedApprovals.slice(0, limit));
+
+      if (profile?.role) {
+        const totalFromView = allData
+          ? allData.filter((i: any) => canApprove(i.entity_type as any, profile.role)).length
+          : 0;
+        const total = Math.max(totalFromView, combinedApprovals.length);
+        setTotalCount(total);
+
+        const ids = [...new Set(combinedApprovals.map((a) => a.created_by).filter(Boolean))] as string[];
         if (ids.length > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
@@ -80,6 +114,8 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
           const map = new Map<string, string>();
           profiles?.forEach((p: { id: string; full_name: string }) => map.set(p.id, p.full_name));
           setCreatorNames(map);
+        } else {
+          setCreatorNames(new Map());
         }
       }
     } catch (err) {
