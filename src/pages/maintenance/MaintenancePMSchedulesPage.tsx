@@ -284,31 +284,31 @@ export default function MaintenancePMSchedulesPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           icon={Calendar}
-          label="Active Schedules"
+          title="Active Schedules"
           value={activeCount}
           subtitle="Running on schedule"
-          tone="blue"
+          color="blue"
         />
         <StatCard
           icon={AlertTriangle}
-          label="Overdue"
+          title="Overdue"
           value={overdueCount}
           subtitle="Past due date"
-          tone="red"
+          color="red"
         />
         <StatCard
           icon={Clock}
-          label="Due This Week"
+          title="Due This Week"
           value={dueSoonCount}
           subtitle="Coming up soon"
-          tone="amber"
+          color="amber"
         />
         <StatCard
           icon={CheckCircle}
-          label="Total Schedules"
+          title="Total Schedules"
           value={schedules.length}
           subtitle="All PM plans"
-          tone="teal"
+          color="teal"
         />
       </div>
 

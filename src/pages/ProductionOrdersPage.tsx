@@ -625,7 +625,7 @@ export default function ProductionOrdersPage() {
         supabase.rpc('issue_individual_ingredient', {
           p_material_id: material.id,
           p_actual_qty: material.planned_qty,
-          p_issued_by: profile?.id || null
+          p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
         })
       );
 

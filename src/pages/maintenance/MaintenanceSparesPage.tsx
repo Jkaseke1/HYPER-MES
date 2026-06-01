@@ -147,10 +147,10 @@ export default function MaintenanceSparesPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard icon={Package} label="Total Parts" value={stats.total} subtitle="Active inventory" tone="blue" />
-        <StatCard icon={Star} label="Critical Parts" value={stats.critical} subtitle="Essential items" tone="amber" />
-        <StatCard icon={AlertTriangle} label="Out of Stock" value={stats.outOfStock} subtitle="Need ordering" tone="red" />
-        <StatCard icon={AlertTriangle} label="Low Stock" value={stats.lowStock} subtitle="Below reorder level" tone="amber" />
+        <StatCard icon={Package} title="Total Parts" value={stats.total} subtitle="Active inventory" color="blue" />
+        <StatCard icon={Star} title="Critical Parts" value={stats.critical} subtitle="Essential items" color="amber" />
+        <StatCard icon={AlertTriangle} title="Out of Stock" value={stats.outOfStock} subtitle="Need ordering" color="red" />
+        <StatCard icon={AlertTriangle} title="Low Stock" value={stats.lowStock} subtitle="Below reorder level" color="amber" />
       </div>
 
       {/* Filters */}
@@ -219,7 +219,9 @@ export default function MaintenanceSparesPage() {
                         <div className="flex items-center space-x-2">
                           <span className="text-sm font-medium text-gray-900">{spare.code}</span>
                           {spare.is_critical && (
-                            <Star className="h-4 w-4 text-amber-500 fill-amber-500" title="Critical Part" />
+                            <span title="Critical Part" className="inline-flex">
+                              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                            </span>
                           )}
                         </div>
                       </td>

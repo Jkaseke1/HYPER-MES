@@ -254,10 +254,10 @@ export default function MaintenanceWorkOrdersPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard icon={Wrench} label="Open" value={openCount} subtitle="Awaiting assignment" tone="blue" />
-        <StatCard icon={Clock} label="In Progress" value={inProgressCount} subtitle="Active work" tone="amber" />
-        <StatCard icon={AlertTriangle} label="Critical Priority" value={criticalCount} subtitle="Urgent attention" tone="red" />
-        <StatCard icon={CheckCircle} label="Completed" value={completedCount} subtitle="Finished work" tone="teal" />
+        <StatCard icon={Wrench} title="Open" value={openCount} subtitle="Awaiting assignment" color="blue" />
+        <StatCard icon={Clock} title="In Progress" value={inProgressCount} subtitle="Active work" color="amber" />
+        <StatCard icon={AlertTriangle} title="Critical Priority" value={criticalCount} subtitle="Urgent attention" color="red" />
+        <StatCard icon={CheckCircle} title="Completed" value={completedCount} subtitle="Finished work" color="teal" />
       </div>
 
       {/* Filters */}

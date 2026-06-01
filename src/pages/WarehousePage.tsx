@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter } from 'lucide-react';
+import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { RawMaterial, Warehouse, StockMovement } from '../types/database';
