@@ -58,6 +58,8 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         .order('created_at', { ascending: true })
         .limit(limit);
 
+      console.log('[PendingApprovals] View data:', data);
+
       // Fetch full list (entity_type only) to calculate totals for roles allowed to approve
       const { data: allData } = await supabase.from('pending_approvals').select('entity_type, entity_id');
 
@@ -67,15 +69,19 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         const filtered = data.filter((item: PendingApproval) =>
           canApprove(item.entity_type as any, profile.role)
         );
+        console.log('[PendingApprovals] Filtered for role', profile?.role, ':', filtered);
         filtered.forEach(item => approvalsMap.set(`${item.entity_type}:${item.entity_id}`, item));
       }
 
       // Fallback: fetch chick POs directly in case the pending_approvals view is outdated
+      // Also fetch ALL non-approved statuses to catch any missing ones
       if (profile?.role && canApprove('chick_booking', profile.role)) {
         const { data: chickPOs } = await supabase
           .from('chick_purchase_orders')
           .select('id, po_number, status, created_at, created_by, chick_suppliers(name)')
-          .eq('status', 'SUBMITTED');
+          .not('status', 'in', "('DRAFT','APPROVED','DISPATCHED','DELIVERED','INVOICED','rejected')");
+
+        console.log('[PendingApprovals] Chick POs with pending status:', chickPOs);
 
         chickPOs?.forEach((po: any) => {
           const approval: PendingApproval = {
@@ -83,9 +89,34 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
             entity_id: po.id,
             entity_number: po.po_number,
             entity_name: po.chick_suppliers?.name || 'Unknown Supplier',
-            status: 'pending_approval',
+            status: po.status,
             created_at: po.created_at,
             created_by: po.created_by || undefined,
+            branch_id: undefined,
+          };
+          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
+        });
+      }
+
+      // Fallback: fetch material transfers directly
+      if (profile?.role && canApprove('material_transfer', profile.role)) {
+        const { data: transfers } = await supabase
+          .from('stock_movements')
+          .select('id, movement_type, status, created_at, raw_materials(name), warehouses(name), to_location')
+          .eq('movement_type', 'transfer')
+          .eq('status', 'pending');
+
+        console.log('[PendingApprovals] Material transfers with pending status:', transfers);
+
+        transfers?.forEach((t: any) => {
+          const approval: PendingApproval = {
+            entity_type: 'material_transfer',
+            entity_id: t.id,
+            entity_number: t.id.substring(0, 8),
+            entity_name: t.raw_materials?.name || 'Unknown Material',
+            status: t.status,
+            created_at: t.created_at,
+            created_by: undefined,
             branch_id: undefined,
           };
           approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
