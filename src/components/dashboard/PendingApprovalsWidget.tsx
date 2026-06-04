@@ -100,13 +100,15 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
 
       // Fallback: fetch material transfers directly
       if (profile?.role && canApprove('material_transfer', profile.role)) {
-        const { data: transfers } = await supabase
+        console.log('[PendingApprovals] User role can approve material_transfer:', profile.role);
+        
+        const { data: transfers, error: transferError } = await supabase
           .from('stock_movements')
           .select('id, movement_type, status, created_at, raw_materials(name), warehouses(name), to_location')
           .eq('movement_type', 'transfer')
           .eq('status', 'pending');
 
-        console.log('[PendingApprovals] Material transfers with pending status:', transfers);
+        console.log('[PendingApprovals] Material transfers query result:', { transfers, error: transferError });
 
         transfers?.forEach((t: any) => {
           const approval: PendingApproval = {
