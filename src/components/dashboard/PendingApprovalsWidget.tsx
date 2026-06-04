@@ -98,14 +98,13 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         });
       }
 
-      // Fallback: fetch material transfers directly
+      // Fallback: fetch material transfers directly from material_transfers table
       if (profile?.role && canApprove('material_transfer', profile.role)) {
         console.log('[PendingApprovals] User role can approve material_transfer:', profile.role);
         
         const { data: transfers, error: transferError } = await supabase
-          .from('stock_movements')
-          .select('id, movement_type, status, created_at, raw_materials(name), warehouses(name), to_location')
-          .eq('movement_type', 'transfer')
+          .from('material_transfers')
+          .select('id, transfer_number, status, created_at, requested_by, raw_materials(name), warehouses(name), to_location')
           .eq('status', 'pending');
 
         console.log('[PendingApprovals] Material transfers query result:', { transfers, error: transferError });
@@ -114,11 +113,11 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
           const approval: PendingApproval = {
             entity_type: 'material_transfer',
             entity_id: t.id,
-            entity_number: t.id.substring(0, 8),
+            entity_number: t.transfer_number || t.id.substring(0, 8),
             entity_name: t.raw_materials?.name || 'Unknown Material',
             status: t.status,
             created_at: t.created_at,
-            created_by: undefined,
+            created_by: t.requested_by || undefined,
             branch_id: undefined,
           };
           approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
