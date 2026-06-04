@@ -80,9 +80,8 @@ export default function MaterialTransferPage() {
     setLoading(true);
     const [transfersRes, materialsRes, warehousesRes, ordersRes] = await Promise.all([
       supabase
-        .from('stock_movements')
-        .select('*, raw_materials(name, code, unit), warehouses(name)')
-        .eq('movement_type', 'transfer')
+        .from('material_transfers')
+        .select('*, raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
         .order('created_at', { ascending: false }),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('warehouses').select('*').eq('is_active', true).order('name'),
@@ -94,12 +93,7 @@ export default function MaterialTransferPage() {
     ]);
 
     if (transfersRes.data) {
-      // Ensure all transfers have a status field (for backward compatibility)
-      const transfersWithStatus = transfersRes.data.map((t: any) => ({
-        ...t,
-        status: t.status || 'pending'
-      }));
-      setTransfers(transfersWithStatus as any);
+      setTransfers(transfersRes.data as any);
     }
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
@@ -110,18 +104,17 @@ export default function MaterialTransferPage() {
   async function createTransfer() {
     setSaving(true);
     try {
-      // Resolve batch_number from the selected lot so it is stored on the movement
-      const selectedLot = availableLots.find(l => l.lot_id === form.source_lot_id);
-      const { error } = await supabase.from('stock_movements').insert({
-        movement_type: 'transfer',
+      const { error } = await supabase.from('material_transfers').insert({
         raw_material_id: form.raw_material_id,
-        warehouse_id: form.from_warehouse_id,
-        quantity: -Math.abs(form.quantity), // Negative for outbound
+        from_warehouse_id: form.from_warehouse_id,
+        to_location: form.to_location,
+        quantity: form.quantity,
         unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
-        movement_date: form.transfer_date,
-        batch_number: selectedLot?.batch_number || '',
-        source_lot_id: form.source_lot_id || null,
-        notes: `Transfer to ${form.to_location}. Purpose: ${form.purpose}. ${form.notes}`,
+        transfer_date: form.transfer_date,
+        purpose: form.purpose,
+        production_order_id: form.production_order_id || null,
+        notes: form.notes,
+        status: 'pending',
       });
 
       if (error) {
@@ -480,8 +473,8 @@ export default function MaterialTransferPage() {
           // Fetch the latest data from database before closing
           if (viewTransfer) {
             const { data } = await supabase
-              .from('stock_movements')
-              .select('*, raw_materials(name, code), warehouses(name)')
+              .from('material_transfers')
+              .select('*, raw_materials(name, code), warehouses:from_warehouse_id(name)')
               .eq('id', viewTransfer.id)
               .single();
             if (data) {
