@@ -101,7 +101,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       // Fallback: fetch material transfers directly from material_transfers table
       if (profile?.role && canApprove('material_transfer', profile.role)) {
         console.log('[PendingApprovals] User role can approve material_transfer:', profile.role);
-        
+
         const { data: transfers, error: transferError } = await supabase
           .from('material_transfers')
           .select('id, transfer_number, status, created_at, requested_by, raw_materials(name), warehouses(name), to_location')
@@ -118,6 +118,30 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
             status: t.status,
             created_at: t.created_at,
             created_by: t.requested_by || undefined,
+            branch_id: undefined,
+          };
+          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
+        });
+      }
+
+      // Fallback: fetch GRNs directly in case the pending_approvals view is stale
+      if (profile?.role && canApprove('grn', profile.role)) {
+        const { data: grns, error: grnError } = await supabase
+          .from('goods_received_notes')
+          .select('id, grn_number, status, created_at, received_by, suppliers(name)')
+          .eq('status', 'pending');
+
+        console.log('[PendingApprovals] GRNs query result:', { grns, error: grnError });
+
+        grns?.forEach((g: any) => {
+          const approval: PendingApproval = {
+            entity_type: 'grn',
+            entity_id: g.id,
+            entity_number: g.grn_number,
+            entity_name: g.suppliers?.name || 'Unknown Supplier',
+            status: g.status,
+            created_at: g.created_at,
+            created_by: g.received_by || undefined,
             branch_id: undefined,
           };
           approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
