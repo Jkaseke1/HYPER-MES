@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, ChevronRight, AlertCircle } from 'lucide-react';
+import { Clock, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { canApprove } from '../../types/approval';
@@ -42,144 +42,177 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
   const [totalCount, setTotalCount] = useState<number>(0);
   const [creatorNames, setCreatorNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchPendingApprovals();
-  }, [limit, profile?.role]);
-
-  async function fetchPendingApprovals() {
+  const fetchPendingApprovals = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const { data } = await supabase
-        .from('pending_approvals')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .limit(limit);
-
-      console.log('[PendingApprovals] View data:', data);
-
-      // Fetch full list (entity_type only) to calculate totals for roles allowed to approve
-      const { data: allData } = await supabase.from('pending_approvals').select('entity_type, entity_id');
-
       const approvalsMap = new Map<string, PendingApproval>();
+      const role = profile?.role;
 
-      if (data && profile?.role) {
-        const filtered = data.filter((item: PendingApproval) =>
-          canApprove(item.entity_type as any, profile.role)
-        );
-        console.log('[PendingApprovals] Filtered for role', profile?.role, ':', filtered);
-        filtered.forEach(item => approvalsMap.set(`${item.entity_type}:${item.entity_id}`, item));
+      if (!role) {
+        setApprovals([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
       }
 
-      // Fallback: fetch chick POs directly in case the pending_approvals view is outdated
-      // Also fetch ALL non-approved statuses to catch any missing ones
-      if (profile?.role && canApprove('chick_booking', profile.role)) {
-        const { data: chickPOs } = await supabase
-          .from('chick_purchase_orders')
-          .select('id, po_number, status, created_at, created_by, chick_suppliers(name)')
-          .not('status', 'in', "('DRAFT','APPROVED','DISPATCHED','DELIVERED','INVOICED','rejected')");
-
-        console.log('[PendingApprovals] Chick POs with pending status:', chickPOs);
-
-        chickPOs?.forEach((po: any) => {
-          const approval: PendingApproval = {
-            entity_type: 'chick_booking',
-            entity_id: po.id,
-            entity_number: po.po_number,
-            entity_name: po.chick_suppliers?.name || 'Unknown Supplier',
-            status: po.status,
-            created_at: po.created_at,
-            created_by: po.created_by || undefined,
-            branch_id: undefined,
-          };
-          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
-        });
+      // ── GRN ──
+      if (canApprove('grn', role)) {
+        try {
+          const { data: grns } = await supabase
+            .from('goods_received_notes')
+            .select('id, grn_number, status, created_at, received_by, suppliers(name)')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+          grns?.forEach((g: any) => {
+            approvalsMap.set(`grn:${g.id}`, {
+              entity_type: 'grn', entity_id: g.id, entity_number: g.grn_number,
+              entity_name: g.suppliers?.name || 'Unknown Supplier', status: g.status,
+              created_at: g.created_at, created_by: g.received_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('GRN fallback error:', e); }
       }
 
-      // Fallback: fetch material transfers directly from material_transfers table
-      if (profile?.role && canApprove('material_transfer', profile.role)) {
-        console.log('[PendingApprovals] User role can approve material_transfer:', profile.role);
-
-        const { data: transfers, error: transferError } = await supabase
-          .from('material_transfers')
-          .select('id, transfer_number, status, created_at, requested_by, raw_materials(name), warehouses(name), to_location')
-          .eq('status', 'pending');
-
-        console.log('[PendingApprovals] Material transfers query result:', { transfers, error: transferError });
-
-        transfers?.forEach((t: any) => {
-          const approval: PendingApproval = {
-            entity_type: 'material_transfer',
-            entity_id: t.id,
-            entity_number: t.transfer_number || t.id.substring(0, 8),
-            entity_name: t.raw_materials?.name || 'Unknown Material',
-            status: t.status,
-            created_at: t.created_at,
-            created_by: t.requested_by || undefined,
-            branch_id: undefined,
-          };
-          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
-        });
+      // ── Material Transfers ──
+      if (canApprove('material_transfer', role)) {
+        try {
+          const { data: transfers } = await supabase
+            .from('material_transfers')
+            .select('id, transfer_number, status, created_at, requested_by, raw_materials(name)')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+          transfers?.forEach((t: any) => {
+            approvalsMap.set(`material_transfer:${t.id}`, {
+              entity_type: 'material_transfer', entity_id: t.id,
+              entity_number: t.transfer_number || t.id.substring(0, 8),
+              entity_name: t.raw_materials?.name || 'Unknown Material', status: t.status,
+              created_at: t.created_at, created_by: t.requested_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('Transfer fallback error:', e); }
       }
 
-      // Fallback: fetch GRNs directly in case the pending_approvals view is stale
-      if (profile?.role && canApprove('grn', profile.role)) {
-        const { data: grns, error: grnError } = await supabase
-          .from('goods_received_notes')
-          .select('id, grn_number, status, created_at, received_by, suppliers(name)')
-          .eq('status', 'pending');
-
-        console.log('[PendingApprovals] GRNs query result:', { grns, error: grnError });
-
-        grns?.forEach((g: any) => {
-          const approval: PendingApproval = {
-            entity_type: 'grn',
-            entity_id: g.id,
-            entity_number: g.grn_number,
-            entity_name: g.suppliers?.name || 'Unknown Supplier',
-            status: g.status,
-            created_at: g.created_at,
-            created_by: g.received_by || undefined,
-            branch_id: undefined,
-          };
-          approvalsMap.set(`${approval.entity_type}:${approval.entity_id}`, approval);
-        });
+      // ── Chick Bookings ──
+      if (canApprove('chick_booking', role)) {
+        try {
+          const { data: chickPOs } = await supabase
+            .from('chick_purchase_orders')
+            .select('id, po_number, status, created_at, created_by, chick_suppliers(name)')
+            .not('status', 'in', "('DRAFT','APPROVED','DISPATCHED','DELIVERED','INVOICED','rejected')")
+            .order('created_at', { ascending: false });
+          chickPOs?.forEach((po: any) => {
+            approvalsMap.set(`chick_booking:${po.id}`, {
+              entity_type: 'chick_booking', entity_id: po.id, entity_number: po.po_number,
+              entity_name: po.chick_suppliers?.name || 'Unknown Supplier', status: po.status,
+              created_at: po.created_at, created_by: po.created_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('Chick fallback error:', e); }
       }
 
-      const combinedApprovals = Array.from(approvalsMap.values()).sort((a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      // ── Production Orders ──
+      if (canApprove('production_order', role)) {
+        try {
+          const { data: pos } = await supabase
+            .from('production_orders')
+            .select('id, batch_number, status, created_at, operator_id')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+          pos?.forEach((p: any) => {
+            approvalsMap.set(`production_order:${p.id}`, {
+              entity_type: 'production_order', entity_id: p.id, entity_number: p.batch_number,
+              entity_name: p.batch_number, status: p.status,
+              created_at: p.created_at, created_by: p.operator_id || undefined,
+            });
+          });
+        } catch (e) { console.warn('Production order fallback error:', e); }
+      }
+
+      // ── Dispatch Orders ──
+      if (canApprove('dispatch_order', role)) {
+        try {
+          const { data: dispatches } = await supabase
+            .from('dispatch_orders')
+            .select('id, dispatch_number, status, created_at, prepared_by')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+          dispatches?.forEach((d: any) => {
+            approvalsMap.set(`dispatch_order:${d.id}`, {
+              entity_type: 'dispatch_order', entity_id: d.id, entity_number: d.dispatch_number,
+              entity_name: d.dispatch_number, status: d.status,
+              created_at: d.created_at, created_by: d.prepared_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('Dispatch fallback error:', e); }
+      }
+
+      // ── Macropack Orders ──
+      if (canApprove('macropack_order', role)) {
+        try {
+          const { data: mpos } = await supabase
+            .from('macropack_manufacture_orders')
+            .select('id, status, created_at, submitted_by')
+            .in('status', ['PENDING_RM', 'PENDING_SUPERVISOR'])
+            .order('created_at', { ascending: false });
+          mpos?.forEach((m: any) => {
+            approvalsMap.set(`macropack_order:${m.id}`, {
+              entity_type: 'macropack_order', entity_id: m.id, entity_number: m.id.substring(0, 8),
+              entity_name: 'Macropack Order', status: m.status,
+              created_at: m.created_at, created_by: m.submitted_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('Macropack fallback error:', e); }
+      }
+
+      // ── Weigh Bridge Tickets ──
+      if (canApprove('weigh_bridge_ticket', role)) {
+        try {
+          const { data: wbts } = await supabase
+            .from('weigh_bridge_tickets')
+            .select('id, ticket_no, status, created_at, created_by, vehicle_reg')
+            .eq('status', 'open')
+            .order('created_at', { ascending: false });
+          wbts?.forEach((w: any) => {
+            approvalsMap.set(`weigh_bridge_ticket:${w.id}`, {
+              entity_type: 'weigh_bridge_ticket', entity_id: w.id, entity_number: w.ticket_no,
+              entity_name: w.vehicle_reg || w.ticket_no, status: 'pending_link',
+              created_at: w.created_at, created_by: w.created_by || undefined,
+            });
+          });
+        } catch (e) { console.warn('Weigh bridge fallback error:', e); }
+      }
+
+      const combined = Array.from(approvalsMap.values()).sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
-      setApprovals(combinedApprovals.slice(0, limit));
+      setApprovals(combined.slice(0, limit));
+      setTotalCount(combined.length);
 
-      if (profile?.role) {
-        const totalFromView = allData
-          ? allData.filter((i: any) => canApprove(i.entity_type as any, profile.role)).length
-          : 0;
-        const total = Math.max(totalFromView, combinedApprovals.length);
-        setTotalCount(total);
-
-        const ids = [...new Set(combinedApprovals.map((a) => a.created_by).filter(Boolean))] as string[];
-        if (ids.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .in('id', ids);
-          const map = new Map<string, string>();
-          profiles?.forEach((p: { id: string; full_name: string }) => map.set(p.id, p.full_name));
-          setCreatorNames(map);
-        } else {
-          setCreatorNames(new Map());
-        }
+      // Load creator names
+      const ids = [...new Set(combined.map(a => a.created_by).filter(Boolean))] as string[];
+      if (ids.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        const map = new Map<string, string>();
+        profiles?.forEach((p: any) => map.set(p.id, p.full_name));
+        setCreatorNames(map);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching pending approvals:', err);
+      setError(err.message || 'Failed to load approvals');
     } finally {
       setLoading(false);
     }
-  }
+  }, [limit, profile?.role]);
+
+  useEffect(() => {
+    fetchPendingApprovals();
+  }, [fetchPendingApprovals]);
 
   function navigateToEntity(approval: PendingApproval) {
     const routes: Record<string, string> = {
@@ -224,16 +257,38 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
               <p className="text-xs text-slate-500">Items requiring your approval</p>
             </div>
           </div>
-          {totalCount > 0 && (
-            <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
-              {totalCount}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchPendingApprovals}
+              disabled={loading}
+              className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            {totalCount > 0 && (
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+                {totalCount}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="max-h-[360px] overflow-y-auto">
-        {approvals.length === 0 ? (
+        {error ? (
+          <div className={`${compact ? 'px-4 py-5' : 'px-6 py-8'} text-center`}>
+            <AlertCircle className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} text-red-400 mx-auto mb-2`} />
+            <p className="text-sm text-red-600 font-medium">Error loading approvals</p>
+            <p className="text-xs text-slate-500 mt-1">{error}</p>
+            <button
+              onClick={fetchPendingApprovals}
+              className="mt-3 px-3 py-1.5 text-xs font-semibold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : approvals.length === 0 ? (
           <div className={`${compact ? 'px-4 py-5' : 'px-6 py-8'} text-center`}>
             <AlertCircle className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} text-slate-300 mx-auto mb-2`} />
             <p className="text-sm text-slate-500">No pending approvals</p>
