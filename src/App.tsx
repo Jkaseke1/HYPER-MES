@@ -46,6 +46,7 @@ const ChickPurchaseOrders = lazy(() => import('./pages/chick/ChickPurchaseOrders
 const ChickNightIntake = lazy(() => import('./pages/chick/ChickNightIntake'));
 const ChickDeliveryDeclaration = lazy(() => import('./pages/chick/ChickDeliveryDeclaration'));
 const ChickInvoiceCapture = lazy(() => import('./pages/chick/ChickInvoiceCapture'));
+const ChickReconciliationPage = lazy(() => import('./pages/chick/ChickReconciliationPage'));
 const StockTakePage = lazy(() => import('./pages/StockTakePage'));
 const StockTakeDetailPage = lazy(() => import('./pages/StockTakeDetailPage'));
 const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/MaintenanceSparesPage'));
@@ -150,6 +151,7 @@ function AppRoutes() {
           <Route path="/chick/night-intake" element={<ChickNightIntake />} />
           <Route path="/chick/delivery-declaration" element={<ChickDeliveryDeclaration />} />
           <Route path="/chick/invoice-capture" element={<ChickInvoiceCapture />} />
+          <Route path="/chick/reconciliation" element={<ChickReconciliationPage />} />
           <Route path="/simple-test" element={<SimpleTestPage />} />
           <Route path="/payroll/workers" element={<TempWorkersPage />} />
           <Route path="/payroll/attendance" element={<WorkerAttendancePage />} />

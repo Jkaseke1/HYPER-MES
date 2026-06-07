@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Truck, ClipboardList, Moon, CheckCircle, DollarSign, AlertCircle, FileText } from 'lucide-react';
+import { Truck, Moon, CheckCircle, DollarSign, AlertCircle, FileText, BarChart3 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { supabase } from '../lib/supabase';
@@ -33,6 +33,13 @@ const chickModules = [
     icon: DollarSign,
     to: '/chick/invoice-capture',
     color: 'bg-green-600',
+  },
+  {
+    title: 'Reconciliation',
+    description: 'Ordered vs Received vs Sage GRV vs Sold. Margin analysis. READ-ONLY toward Sage.',
+    icon: BarChart3,
+    to: '/chick/reconciliation',
+    color: 'bg-rose-500',
   },
   {
     title: 'Chick Distribution',
