@@ -11,7 +11,6 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 
 interface Supplier {
   id: string;
@@ -38,6 +37,7 @@ interface PO {
   po_number: string;
   supplier_id: string;
   chick_type: 'STANDARD' | 'HUBBARD';
+  expected_delivery_date?: string;
   lines: POLine[];
 }
 
@@ -99,6 +99,7 @@ export default function ChickNightIntake() {
         po_number,
         supplier_id,
         chick_type,
+        expected_delivery_date,
         chick_po_lines (
           id,
           branch_code,
@@ -108,14 +109,14 @@ export default function ChickNightIntake() {
           delivery_type
         )
       `)
-      .eq('status', 'APPROVED')
-      .eq('expected_delivery_date', hatchDate);
+      .eq('status', 'APPROVED');
 
     const pos: PO[] = (data || []).map((po: any) => ({
       id: po.id,
       po_number: po.po_number,
       supplier_id: po.supplier_id,
       chick_type: po.chick_type,
+      expected_delivery_date: po.expected_delivery_date,
       lines: po.chick_po_lines || [],
     }));
 
@@ -145,7 +146,7 @@ export default function ChickNightIntake() {
           const po = approvedPOs.find(p => p.supplier_id === value);
           if (po) {
             // Pre-populate lines from PO
-            const lines: AllocationLine[] = po.lines.map((line, idx) => ({
+            const lines: AllocationLine[] = po.lines.map((line) => ({
               id: crypto.randomUUID(),
               branch_code: line.branch_code,
               po_booked_qty: line.booked_qty,

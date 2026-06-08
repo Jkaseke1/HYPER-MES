@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, TrendingUp, TrendingDown, Truck, Building2, Filter } from 'lucide-react';
+import { CheckCircle, AlertCircle, TrendingUp, TrendingDown, Truck, Building2, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Label } from '../../components/ui/label';
@@ -43,6 +43,7 @@ export default function ChickDeliveryDeclaration() {
   const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<'ALL' | 'LOCAL' | 'BRANCH'>('ALL');
+  const [search, setSearch] = useState('');
   const [declaringId, setDeclaringId] = useState<string | null>(null);
   const [receivedQty, setReceivedQty] = useState<number>(0);
   const [conditionNotes, setConditionNotes] = useState('');
@@ -179,8 +180,12 @@ export default function ChickDeliveryDeclaration() {
   }
 
   const filteredNotes = deliveryNotes.filter(d => {
-    if (filterType === 'ALL') return true;
-    return d.delivery_type === filterType;
+    const matchesSearch =
+      d.branch_code.toLowerCase().includes(search.toLowerCase()) ||
+      d.dnote_number.toLowerCase().includes(search.toLowerCase()) ||
+      (d.consignment?.supplier?.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesType = filterType === 'ALL' || d.delivery_type === filterType;
+    return matchesSearch && matchesType;
   });
 
   const stats = {
@@ -264,12 +269,20 @@ export default function ChickDeliveryDeclaration() {
       {/* Filter */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <CardTitle>Pending Deliveries</CardTitle>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-500" />
+            <div className="flex items-center gap-2 flex-1 max-w-md">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search branch, dnote, or supplier..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
               <Select value={filterType} onValueChange={(val: any) => setFilterType(val)}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[140px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
