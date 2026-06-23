@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -82,6 +83,7 @@ const emptyForm = {
 };
 
 export default function ProductionOrdersPage() {
+  const { profile } = useAuth();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [productionLines, setProductionLines] = useState<ProductionLine[]>([]);
@@ -114,8 +116,14 @@ export default function ProductionOrdersPage() {
   const [showPkgModal, setShowPkgModal] = useState(false);
   const [pkgBomItems, setPkgBomItems] = useState<any[]>([]);
 
-  // Delete production order with status protection
+  // Delete production order with status and admin protection
   const deleteOrder = async (order: ProductionOrder) => {
+    // Check if user is admin
+    if (profile?.role !== 'admin') {
+      setWorkflowError('Access denied — only administrators can delete production orders.');
+      return;
+    }
+
     if (order.status !== 'pending') {
       setWorkflowError('Cannot delete — this order has been processed. Only pending orders can be deleted.');
       return;
