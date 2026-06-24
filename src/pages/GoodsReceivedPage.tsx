@@ -680,16 +680,16 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] p-0 sm:!max-w-[1200px] flex flex-col">
+        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col">
           {/* Header Banner */}
-          <div className="bg-slate-900 text-white px-8 py-6 rounded-t-lg flex-shrink-0">
+          <div className="bg-slate-900 text-white px-6 py-4 rounded-t-lg flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
                   <Package className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight">{viewing?.grn_number}</h2>
+                  <h2 className="text-xl font-bold tracking-tight">{viewing?.grn_number}</h2>
                   <p className="text-slate-400 text-sm mt-0.5">
                     <Calendar className="w-3.5 h-3.5 inline mr-1" />
                     Received {viewing && format(new Date(viewing.received_date), 'PPP')}
@@ -707,10 +707,10 @@ export default function GoodsReceivedPage() {
             </div>
           </div>
 
-          <div className="px-8 py-6 space-y-6 overflow-y-auto flex-1">
+          <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
             {/* Approval Actions - Sticky so user can approve without scrolling down */}
             {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
-              <div className="sticky top-0 z-20 -mx-8 px-8 py-3 bg-white/95 backdrop-blur border-b border-slate-200">
+              <div className="sticky top-0 z-20 -mx-6 px-6 py-2.5 bg-white/95 backdrop-blur border-b border-slate-200">
                 <GRNApprovalButtons
                   grnId={viewing.id}
                   currentStatus={viewing.status}
@@ -775,7 +775,7 @@ export default function GoodsReceivedPage() {
                     <Scale className="w-4 h-4 text-teal-600" />
                     <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
                   </div>
-                  <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                     <div>
                       <p className="text-xs text-slate-500">Ticket No</p>
                       <p className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
@@ -840,7 +840,7 @@ export default function GoodsReceivedPage() {
                 <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-[260px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
@@ -895,7 +895,7 @@ export default function GoodsReceivedPage() {
               </div>
 
               {/* Totals Footer */}
-              <div className="mt-4 bg-slate-900 text-white rounded-xl p-5 flex items-center justify-between">
+              <div className="mt-3 bg-slate-900 text-white rounded-xl p-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Hash className="w-4 h-4 text-slate-400" />
@@ -921,18 +921,24 @@ export default function GoodsReceivedPage() {
               </div>
             </div>
 
-            {/* Approval History - Always visible */}
+            {/* Approval History */}
             {viewing && (
-              <div className="pt-4 border-t border-slate-200">
-                <ApprovalHistory entityType="grn" entityId={viewing.id} />
-              </div>
+              <details className="pt-3 border-t border-slate-200">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Approval History</summary>
+                <div className="mt-3">
+                  <ApprovalHistory entityType="grn" entityId={viewing.id} />
+                </div>
+              </details>
             )}
 
             {/* Attachments */}
             {viewing && (
-              <div className="pt-4 border-t border-slate-200">
-                <GRNAttachments grnId={viewing.id} />
-              </div>
+              <details className="pt-3 border-t border-slate-200">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Attachments</summary>
+                <div className="mt-3">
+                  <GRNAttachments grnId={viewing.id} />
+                </div>
+              </details>
             )}
 
             {viewing && (viewing as any).rejection_reason && (
