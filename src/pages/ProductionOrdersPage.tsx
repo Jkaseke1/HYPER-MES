@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
