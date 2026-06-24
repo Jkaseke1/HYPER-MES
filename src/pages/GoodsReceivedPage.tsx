@@ -680,9 +680,9 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto p-0 sm:!max-w-[1200px]">
+        <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] p-0 sm:!max-w-[1200px] flex flex-col">
           {/* Header Banner */}
-          <div className="bg-slate-900 text-white px-8 py-6 rounded-t-lg">
+          <div className="bg-slate-900 text-white px-8 py-6 rounded-t-lg flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
@@ -707,7 +707,7 @@ export default function GoodsReceivedPage() {
             </div>
           </div>
 
-          <div className="px-8 py-6 space-y-6">
+          <div className="px-8 py-6 space-y-6 overflow-y-auto flex-1">
             {/* Info Cards */}
             <div className="grid grid-cols-3 gap-4">
               <Card className="border-l-4 border-l-blue-500 shadow-sm">
