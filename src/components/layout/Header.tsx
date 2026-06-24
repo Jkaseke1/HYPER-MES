@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, Search } from 'lucide-react';
+import { Bell, Loader2, Search, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -13,9 +13,10 @@ interface NotificationItem {
 
 interface HeaderProps {
   title: string;
+  onMobileMenuToggle?: () => void;
 }
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
@@ -78,10 +79,19 @@ export default function Header({ title }: HeaderProps) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
-      <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
+    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6">
+      {/* Mobile menu button */}
+      <button
+        onClick={onMobileMenuToggle}
+        className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+        aria-label="Toggle menu"
+      >
+        <Menu className="w-6 h-6 text-slate-600" />
+      </button>
 
-      <div className="flex items-center gap-4">
+      <h2 className="text-base sm:text-lg font-semibold text-slate-800 truncate">{title}</h2>
+
+      <div className="flex items-center gap-2 sm:gap-4">
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input

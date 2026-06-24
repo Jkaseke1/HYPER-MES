@@ -161,9 +161,11 @@ const navGroups: NavGroup[] = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileMenuOpen?: boolean;
+  onMobileMenuClose?: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileMenuClose }: SidebarProps) {
   const { signOut } = useAuth();
   const location = useLocation();
   const [query, setQuery] = useState('');
@@ -189,9 +191,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full bg-[#0c1f2e] text-white z-40 transition-all duration-300 flex flex-col ${
+      className={`fixed left-0 top-0 h-full bg-[#0c1f2e] text-white z-50 transition-all duration-300 flex flex-col ${
         collapsed ? 'w-[68px]' : 'w-[240px]'
-      }`}
+      } ${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      } lg:translate-x-0`}
     >
       <div className="flex items-center gap-2.5 px-5 pt-5 pb-4 flex-shrink-0">
         <div className="w-9 h-9 bg-[#00d4aa] rounded-md flex items-center justify-center flex-shrink-0">
@@ -224,6 +228,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <NavLink
           to="/"
           end
+          onClick={onMobileMenuClose}
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[16px] transition-colors ${
               isActive
@@ -271,6 +276,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      onClick={onMobileMenuClose}
                       className={({ isActive }) =>
                         `flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded text-[14px] transition-colors ${
                           isActive
@@ -295,6 +301,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      onClick={onMobileMenuClose}
                       title={item.label}
                       className={({ isActive }) =>
                         `flex items-center justify-center px-2 py-2 mb-0.5 rounded transition-colors ${
@@ -347,7 +354,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
         <button
           onClick={onToggle}
-          className="flex items-center justify-center w-full py-1.5 mt-1 rounded text-white/30 hover:text-white/70 transition-all"
+          className="hidden lg:flex items-center justify-center w-full py-1.5 mt-1 rounded text-white/30 hover:text-white/70 transition-all"
         >
           {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
