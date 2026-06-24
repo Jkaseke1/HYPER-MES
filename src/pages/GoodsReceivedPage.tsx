@@ -708,6 +708,26 @@ export default function GoodsReceivedPage() {
           </div>
 
           <div className="px-8 py-6 space-y-6 overflow-y-auto flex-1">
+            {/* Approval Actions - Sticky so user can approve without scrolling down */}
+            {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
+              <div className="sticky top-0 z-20 -mx-8 px-8 py-3 bg-white/95 backdrop-blur border-b border-slate-200">
+                <GRNApprovalButtons
+                  grnId={viewing.id}
+                  currentStatus={viewing.status}
+                  rm_approved_at={(viewing as any).rm_approved_at}
+                  accountant_approved_at={(viewing as any).accountant_approved_at}
+                  onApproved={() => {
+                    setViewModalOpen(false);
+                    fetchData();
+                  }}
+                  onRejected={() => {
+                    setViewModalOpen(false);
+                    fetchData();
+                  }}
+                />
+              </div>
+            )}
+
             {/* Info Cards */}
             <div className="grid grid-cols-3 gap-4">
               <Card className="border-l-4 border-l-blue-500 shadow-sm">
@@ -900,26 +920,6 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
             </div>
-
-            {/* Approval Actions */}
-            {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
-              <div className="pt-4 border-t border-slate-200">
-                <GRNApprovalButtons
-                  grnId={viewing.id}
-                  currentStatus={viewing.status}
-                  rm_approved_at={(viewing as any).rm_approved_at}
-                  accountant_approved_at={(viewing as any).accountant_approved_at}
-                  onApproved={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
-                  onRejected={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
-                />
-              </div>
-            )}
 
             {/* Approval History - Always visible */}
             {viewing && (
