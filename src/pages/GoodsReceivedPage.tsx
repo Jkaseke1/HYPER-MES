@@ -680,7 +680,7 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col">
+        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button]:opacity-100 [&>button]:text-white [&>button]:bg-black/25 [&>button]:border [&>button]:border-white/30 [&>button]:rounded-md [&>button]:p-1.5 [&>button]:top-3 [&>button]:right-3 [&>button]:z-50 hover:[&>button]:bg-black/40">
           {/* Header Banner */}
           <div className="bg-slate-900 text-white px-6 py-4 rounded-t-lg flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -707,7 +707,7 @@ export default function GoodsReceivedPage() {
             </div>
           </div>
 
-          <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+          <div className="px-6 py-4 space-y-3 overflow-y-auto flex-1">
             {/* Approval Actions - Sticky so user can approve without scrolling down */}
             {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
               <div className="sticky top-0 z-20 -mx-6 px-6 py-2.5 bg-white/95 backdrop-blur border-b border-slate-200">
@@ -728,10 +728,12 @@ export default function GoodsReceivedPage() {
               </div>
             )}
 
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+              <div className="xl:col-span-5 space-y-3">
             {/* Info Cards */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                <CardContent className="p-4 flex items-start gap-3">
+                <CardContent className="p-3 flex items-start gap-3">
                   <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
                     <Truck className="w-4.5 h-4.5 text-blue-600" />
                   </div>
@@ -743,7 +745,7 @@ export default function GoodsReceivedPage() {
               </Card>
 
               <Card className="border-l-4 border-l-amber-500 shadow-sm">
-                <CardContent className="p-4 flex items-start gap-3">
+                <CardContent className="p-3 flex items-start gap-3">
                   <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center shrink-0">
                     <Warehouse className="w-4.5 h-4.5 text-amber-600" />
                   </div>
@@ -754,8 +756,8 @@ export default function GoodsReceivedPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-                <CardContent className="p-4 flex items-start gap-3">
+              <Card className="border-l-4 border-l-emerald-500 shadow-sm sm:col-span-2">
+                <CardContent className="p-3 flex items-start gap-3">
                   <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
                     <User className="w-4.5 h-4.5 text-emerald-600" />
                   </div>
@@ -770,12 +772,12 @@ export default function GoodsReceivedPage() {
             {/* Weigh Bridge Ticket Card */}
             {viewing && (viewing as any).wb_transaction_no && (
               <Card className="border-teal-200 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
                     <Scale className="w-4 h-4 text-teal-600" />
                     <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
                   </div>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p className="text-xs text-slate-500">Ticket No</p>
                       <p className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
@@ -818,7 +820,7 @@ export default function GoodsReceivedPage() {
 
             {viewing?.notes && (
               <Card className="bg-amber-50/50 border-amber-200 shadow-sm">
-                <CardContent className="p-4">
+                <CardContent className="p-3">
                   <div className="flex items-start gap-2">
                     <FileText className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                     <div>
@@ -830,17 +832,19 @@ export default function GoodsReceivedPage() {
               </Card>
             )}
 
+            </div>
+
             {/* Line Items Table */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
+            <div className="xl:col-span-7">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
                   <Scale className="w-4 h-4 text-slate-600" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">Line Items</h3>
+                <h3 className="text-base font-bold text-slate-800">Line Items</h3>
                 <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-[260px] overflow-y-auto">
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-[320px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
@@ -919,6 +923,7 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
               </div>
+            </div>
             </div>
 
             {/* Approval History */}
