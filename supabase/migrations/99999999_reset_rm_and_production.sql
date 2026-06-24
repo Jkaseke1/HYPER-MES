@@ -9,6 +9,8 @@
 -- - PRODUCTION ORDERS (all statuses)
 -- - Production Plans
 -- - Dispatch Orders
+-- - Material Transfers
+-- - Chick Management (POs, Consignments, Deliveries, Invoices)
 -- =====================================================
 
 -- Disable triggers temporarily
@@ -44,7 +46,58 @@ DELETE FROM dispatch_items WHERE 1=1;
 DELETE FROM dispatch_orders WHERE 1=1;
 
 -- =====================================================
--- 3. GOODS RECEIVED NOTES (GRN)
+-- 3. MATERIAL TRANSFERS - Clear all transfers
+-- =====================================================
+
+-- Material transfers
+DELETE FROM material_transfers WHERE 1=1;
+
+-- =====================================================
+-- 4. CHICK MANAGEMENT - Clear all transactional data
+-- =====================================================
+
+-- Chick reconciliation (if exists)
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_reconciliation') THEN
+    DELETE FROM chick_reconciliation WHERE 1=1;
+  END IF;
+END $$;
+
+-- Chick invoices
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_invoices') THEN
+    DELETE FROM chick_invoices WHERE 1=1;
+  END IF;
+END $$;
+
+-- Chick delivery notes
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_delivery_notes') THEN
+    DELETE FROM chick_delivery_notes WHERE 1=1;
+  END IF;
+END $$;
+
+-- Chick supplier consignments
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_supplier_consignments') THEN
+    DELETE FROM chick_supplier_consignments WHERE 1=1;
+  END IF;
+END $$;
+
+-- Chick purchase orders
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_purchase_orders') THEN
+    DELETE FROM chick_purchase_orders WHERE 1=1;
+  END IF;
+END $$;
+
+-- =====================================================
+-- 5. GOODS RECEIVED NOTES (GRN)
 -- =====================================================
 
 -- Quality inspections (must delete first due to foreign keys)
@@ -57,7 +110,7 @@ DELETE FROM grn_items WHERE 1=1;
 DELETE FROM goods_received_notes WHERE 1=1;
 
 -- =====================================================
--- 4. RM WAREHOUSE - Reset ALL stocks to ZERO
+-- 6. RM WAREHOUSE - Reset ALL stocks to ZERO
 -- =====================================================
 
 -- Clear raw material lots (this drives current_stock)
@@ -70,7 +123,7 @@ UPDATE raw_materials SET current_stock = 0 WHERE 1=1;
 DELETE FROM stock_movements WHERE 1=1;
 
 -- =====================================================
--- 5. STOCK TAKE - Clear all stock take records
+-- 7. STOCK TAKE - Clear all stock take records
 -- =====================================================
 
 -- Stock take audit log (must delete first)
@@ -83,7 +136,7 @@ DELETE FROM stock_take_lines WHERE 1=1;
 DELETE FROM stock_takes WHERE 1=1;
 
 -- =====================================================
--- 6. WEIGH BRIDGE TICKETS - Clear all records
+-- 8. WEIGH BRIDGE TICKETS - Clear all records
 -- =====================================================
 
 -- Weigh bridge tickets (only if table exists)
@@ -95,7 +148,7 @@ BEGIN
 END $$;
 
 -- =====================================================
--- 7. MACROPACK MODULE - Clear transactional data (if tables exist)
+-- 9. MACROPACK MODULE - Clear transactional data (if tables exist)
 -- =====================================================
 
 -- Macropack dispensing records (only if table exists)
@@ -115,7 +168,7 @@ BEGIN
 END $$;
 
 -- =====================================================
--- 8. Reset Sequences
+-- 10. Reset Sequences
 -- =====================================================
 
 -- Reset GRN sequence
@@ -153,6 +206,8 @@ SELECT 'Production Plans', COUNT(*) FROM production_plans
 UNION ALL
 SELECT 'Dispatch Orders', COUNT(*) FROM dispatch_orders
 UNION ALL
+SELECT 'Material Transfers', COUNT(*) FROM material_transfers
+UNION ALL
 SELECT 'GRNs', COUNT(*) FROM goods_received_notes
 UNION ALL
 SELECT 'GRN Items', COUNT(*) FROM grn_items
@@ -167,6 +222,20 @@ SELECT 'Stock Take Lines', COUNT(*) FROM stock_take_lines
 UNION ALL
 SELECT 'Raw Material Lots', COUNT(*) FROM raw_material_lots
 ORDER BY table_name;
+
+-- Check chick management counts (if tables exist)
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_purchase_orders') THEN
+    RAISE NOTICE 'Chick Purchase Orders: %', (SELECT COUNT(*) FROM chick_purchase_orders);
+  END IF;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_supplier_consignments') THEN
+    RAISE NOTICE 'Chick Consignments: %', (SELECT COUNT(*) FROM chick_supplier_consignments);
+  END IF;
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'chick_delivery_notes') THEN
+    RAISE NOTICE 'Chick Delivery Notes: %', (SELECT COUNT(*) FROM chick_delivery_notes);
+  END IF;
+END $$;
 
 -- Note: Weigh Bridge Tickets and Macropack tables excluded from count if they don't exist
 
@@ -187,6 +256,11 @@ ORDER BY code;
 --    - ALL Production Orders (all statuses)
 --    - ALL Production Plans
 --    - ALL Dispatch Orders
+--    - ALL Material Transfers
+--    - ALL Chick Purchase Orders
+--    - ALL Chick Consignments
+--    - ALL Chick Delivery Notes
+--    - ALL Chick Invoices
 --    - All GRNs and quality inspections
 --    - All raw material lots
 --    - All raw material stocks (set to ZERO)
