@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale, X } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -680,278 +680,208 @@ export default function GoodsReceivedPage() {
 
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button]:opacity-100 [&>button]:text-white [&>button]:bg-black/25 [&>button]:border [&>button]:border-white/30 [&>button]:rounded-md [&>button]:p-1.5 [&>button]:top-3 [&>button]:right-3 [&>button]:z-50 hover:[&>button]:bg-black/40">
+        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
           {/* Header Banner */}
-          <div className="bg-slate-900 text-white px-6 py-4 rounded-t-lg flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <Package className="w-6 h-6 text-white" />
+          <div className="bg-slate-900 text-white px-5 py-3 rounded-t-lg flex-shrink-0 relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Package className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight">{viewing?.grn_number}</h2>
-                  <p className="text-slate-400 text-sm mt-0.5">
-                    <Calendar className="w-3.5 h-3.5 inline mr-1" />
+                  <h2 className="text-lg font-bold tracking-tight">{viewing?.grn_number}</h2>
+                  <p className="text-slate-400 text-xs">
+                    <Calendar className="w-3 h-3 inline mr-1" />
                     Received {viewing && format(new Date(viewing.received_date), 'PPP')}
                   </p>
                 </div>
               </div>
-              {viewing && (
-                <Badge
-                  variant={viewing.status === 'approved' ? 'default' : viewing.status === 'rejected' ? 'destructive' : 'secondary'}
-                  className="text-sm px-4 py-1.5 capitalize"
-                >
-                  {viewing.status}
-                </Badge>
-              )}
+              <div className="flex items-center gap-3">
+                {viewing && (
+                  <Badge
+                    variant={viewing.status === 'approved' ? 'default' : viewing.status === 'rejected' ? 'destructive' : 'secondary'}
+                    className="text-sm px-3 py-1 capitalize"
+                  >
+                    {viewing.status}
+                  </Badge>
+                )}
+              </div>
             </div>
+            {/* Close Button */}
+            <button
+              onClick={() => setViewModalOpen(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
           </div>
 
-          <div className="px-6 py-4 space-y-3 overflow-y-auto flex-1">
-            {/* Approval Actions - Sticky so user can approve without scrolling down */}
-            {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
-              <div className="sticky top-0 z-20 -mx-6 px-6 py-2.5 bg-white/95 backdrop-blur border-b border-slate-200">
-                <GRNApprovalButtons
-                  grnId={viewing.id}
-                  currentStatus={viewing.status}
-                  rm_approved_at={(viewing as any).rm_approved_at}
-                  accountant_approved_at={(viewing as any).accountant_approved_at}
-                  onApproved={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
-                  onRejected={() => {
-                    setViewModalOpen(false);
-                    fetchData();
-                  }}
-                />
+          {/* Approval Actions */}
+          {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
+            <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
+              <GRNApprovalButtons
+                grnId={viewing.id}
+                currentStatus={viewing.status}
+                rm_approved_at={(viewing as any).rm_approved_at}
+                accountant_approved_at={(viewing as any).accountant_approved_at}
+                onApproved={() => { setViewModalOpen(false); fetchData(); }}
+                onRejected={() => { setViewModalOpen(false); fetchData(); }}
+              />
+            </div>
+          )}
+
+          {/* Rejection Reason */}
+          {viewing && (viewing as any).rejection_reason && (
+            <div className="flex-shrink-0 mx-5 mt-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-semibold text-red-800">Rejection: <span className="font-normal text-red-700">{(viewing as any).rejection_reason}</span></p>
+            </div>
+          )}
+
+          {/* Main Content - Two Column */}
+          <div className="flex-1 overflow-y-auto px-5 py-3">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 h-full">
+              {/* Left Column: Info + Weigh Bridge */}
+              <div className="xl:col-span-4 space-y-2">
+                {/* Supplier / Warehouse / Created - compact inline */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="border-l-3 border-l-blue-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Supplier</p>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing?.suppliers?.name || 'N/A'}</p>
+                  </div>
+                  <div className="border-l-3 border-l-amber-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Warehouse</p>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing?.warehouses?.name || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="border-l-3 border-l-emerald-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Created</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
+                </div>
+
+                {/* Weigh Bridge Ticket */}
+                {viewing && (viewing as any).wb_transaction_no && (
+                  <div className="bg-white rounded-lg border border-teal-200 p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Scale className="w-3.5 h-3.5 text-teal-600" />
+                      <h3 className="text-xs font-semibold text-slate-700">Weigh Bridge Ticket</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      <div><span className="text-slate-400">Ticket:</span> <span className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</span></div>
+                      <div><span className="text-slate-400">Vehicle:</span> <span className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</span></div>
+                      <div><span className="text-slate-400">Haulier:</span> <span className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</span></div>
+                      <div><span className="text-slate-400">Driver:</span> <span className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</span></div>
+                      <div><span className="text-slate-400">1st Mass:</span> <span className="text-slate-800">{(viewing as any).wb_first_mass != null ? `${(viewing as any).wb_first_mass} kg` : '-'}</span></div>
+                      <div><span className="text-slate-400">2nd Mass:</span> <span className="text-slate-800">{(viewing as any).wb_second_mass != null ? `${(viewing as any).wb_second_mass} kg` : '-'}</span></div>
+                      <div><span className="text-slate-400">Nett:</span> <span className="font-semibold text-teal-700">{(viewing as any).wb_nett_mass != null ? `${(viewing as any).wb_nett_mass} kg` : '-'}</span></div>
+                      <div><span className="text-slate-400">Signed:</span> <span className="text-slate-800">{(viewing as any).wb_driver_signed ? 'Yes' : 'No'}</span></div>
+                    </div>
+                    {(viewing as any).wb_comment && (
+                      <p className="text-[10px] text-slate-500 mt-1.5 italic">{(viewing as any).wb_comment}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Notes */}
+                {viewing?.notes && (
+                  <div className="bg-amber-50/60 rounded-lg border border-amber-200 p-2.5">
+                    <div className="flex items-start gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-slate-700">{viewing.notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Approval History & Attachments - compact */}
+                {viewing && (
+                  <div className="space-y-1.5 pt-1">
+                    <details className="bg-white rounded-lg border border-slate-200">
+                      <summary className="cursor-pointer text-xs font-semibold text-slate-600 px-2.5 py-1.5">Approval History</summary>
+                      <div className="px-2.5 pb-2">
+                        <ApprovalHistory entityType="grn" entityId={viewing.id} />
+                      </div>
+                    </details>
+                    <details className="bg-white rounded-lg border border-slate-200">
+                      <summary className="cursor-pointer text-xs font-semibold text-slate-600 px-2.5 py-1.5">Attachments</summary>
+                      <div className="px-2.5 pb-2">
+                        <GRNAttachments grnId={viewing.id} />
+                      </div>
+                    </details>
+                  </div>
+                )}
               </div>
-            )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              <div className="xl:col-span-5 space-y-3">
-            {/* Info Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                <CardContent className="p-3 flex items-start gap-3">
-                  <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
-                    <Truck className="w-4.5 h-4.5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Supplier</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.suppliers?.name || 'N/A'}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-l-4 border-l-amber-500 shadow-sm">
-                <CardContent className="p-3 flex items-start gap-3">
-                  <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center shrink-0">
-                    <Warehouse className="w-4.5 h-4.5 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Warehouse</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing?.warehouses?.name || 'N/A'}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-l-4 border-l-emerald-500 shadow-sm sm:col-span-2">
-                <CardContent className="p-3 flex items-start gap-3">
-                  <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
-                    <User className="w-4.5 h-4.5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Created</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Weigh Bridge Ticket Card */}
-            {viewing && (viewing as any).wb_transaction_no && (
-              <Card className="border-teal-200 shadow-sm">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Scale className="w-4 h-4 text-teal-600" />
-                    <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-500">Ticket No</p>
-                      <p className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Vehicle</p>
-                      <p className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Haulier</p>
-                      <p className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Driver</p>
-                      <p className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">First Mass</p>
-                      <p className="text-slate-800">{(viewing as any).wb_first_mass != null ? `${(viewing as any).wb_first_mass} kg` : '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Second Mass</p>
-                      <p className="text-slate-800">{(viewing as any).wb_second_mass != null ? `${(viewing as any).wb_second_mass} kg` : '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Nett Mass</p>
-                      <p className="font-semibold text-teal-700">{(viewing as any).wb_nett_mass != null ? `${(viewing as any).wb_nett_mass} kg` : '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Driver Signed</p>
-                      <p className="text-slate-800">{(viewing as any).wb_driver_signed ? 'Yes' : 'No'}</p>
-                    </div>
-                  </div>
-                  {(viewing as any).wb_comment && (
-                    <p className="text-xs text-slate-500 mt-3">{(viewing as any).wb_comment}</p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {viewing?.notes && (
-              <Card className="bg-amber-50/50 border-amber-200 shadow-sm">
-                <CardContent className="p-3">
-                  <div className="flex items-start gap-2">
-                    <FileText className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs font-medium text-amber-700 uppercase tracking-wide">Notes</p>
-                      <p className="text-sm text-slate-700 mt-1">{viewing.notes}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            </div>
-
-            {/* Line Items Table */}
-            <div className="xl:col-span-7">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+              {/* Right Column: Line Items + Totals */}
+              <div className="xl:col-span-8 flex flex-col">
+                <div className="flex items-center gap-2 mb-2">
                   <Scale className="w-4 h-4 text-slate-600" />
+                  <h3 className="text-sm font-bold text-slate-800">Line Items</h3>
+                  <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
                 </div>
-                <h3 className="text-base font-bold text-slate-800">Line Items</h3>
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
-              </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-[320px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4">Material</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Ordered</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Received</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[100px]">Unit Cost</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider text-right py-3 px-4 w-[120px]">Line Total</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4 w-[140px]">Batch</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider py-3 px-4 w-[110px]">Expiry</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {viewItems.map((item, index) => (
-                      <TableRow key={index} className="hover:bg-slate-50/50">
-                        <TableCell className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center">
-                              <Package className="w-3.5 h-3.5 text-emerald-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{item.raw_materials?.name}</p>
-                              <p className="text-xs text-slate-500 font-mono">{item.raw_materials?.code}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 py-3 px-4 font-medium">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-800 py-3 px-4 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
-                        <TableCell className="text-sm text-right text-slate-600 py-3 px-4">${item.unit_cost.toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-bold text-emerald-700 py-3 px-4">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-slate-600 py-3 px-4">
-                          {item.batch_number ? (
-                            <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-xs font-mono">{item.batch_number}</span>
-                          ) : (
-                            <span className="text-slate-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600 py-3 px-4">
-                          {item.expiry_date ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-amber-500" />
-                              {format(new Date(item.expiry_date), 'PP')}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-xs">-</span>
-                          )}
-                        </TableCell>
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-1 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider py-2 px-3">Material</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right py-2 px-3 w-[80px]">Ordered</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right py-2 px-3 w-[80px]">Received</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right py-2 px-3 w-[80px]">Unit Cost</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right py-2 px-3 w-[90px]">Line Total</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider py-2 px-3 w-[100px]">Batch</TableHead>
+                        <TableHead className="text-[10px] font-bold text-slate-500 uppercase tracking-wider py-2 px-3 w-[90px]">Expiry</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Totals Footer */}
-              <div className="mt-3 bg-slate-900 text-white rounded-xl p-3.5 flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2">
-                    <Hash className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm text-slate-300">
-                      Total Ordered: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
-                    </span>
-                  </div>
-                  <div className="w-px h-5 bg-slate-700" />
-                  <div className="flex items-center gap-2">
-                    <Scale className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm text-slate-300">
-                      Total Received: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} kg</strong>
-                    </span>
-                  </div>
+                    </TableHeader>
+                    <TableBody>
+                      {viewItems.map((item, index) => (
+                        <TableRow key={index} className="hover:bg-slate-50/50">
+                          <TableCell className="py-2 px-3">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-800">{item.raw_materials?.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">{item.raw_materials?.code}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
+                          <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
+                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">${item.unit_cost.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-slate-600 py-2 px-3">
+                            {item.batch_number ? (
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-mono">{item.batch_number}</span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 py-2 px-3">
+                            {item.expiry_date ? format(new Date(item.expiry_date), 'PP') : <span className="text-slate-400 text-[10px]">-</span>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-                <div className="flex items-center gap-3 bg-emerald-500 px-5 py-2.5 rounded-lg">
-                  <DollarSign className="w-5 h-5 text-white" />
-                  <div>
-                    <p className="text-xs text-emerald-100 font-medium">Total Value</p>
-                    <p className="text-lg font-bold text-white">${viewItems.reduce((s, i) => s + (i.received_qty || 0) * (i.unit_cost || 0), 0).toFixed(2)}</p>
+
+                {/* Totals Footer */}
+                <div className="mt-2 bg-slate-900 text-white rounded-xl p-3 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-300">
+                      Ordered: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
+                    </span>
+                    <div className="w-px h-4 bg-slate-700" />
+                    <span className="text-xs text-slate-300">
+                      Received: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} kg</strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-emerald-500 px-3 py-1.5 rounded-lg">
+                    <DollarSign className="w-4 h-4 text-white" />
+                    <div>
+                      <p className="text-[10px] text-emerald-100 font-medium">Total Value</p>
+                      <p className="text-sm font-bold text-white">${viewItems.reduce((s, i) => s + (i.received_qty || 0) * (i.unit_cost || 0), 0).toFixed(2)}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-            </div>
-
-            {/* Approval History */}
-            {viewing && (
-              <details className="pt-3 border-t border-slate-200">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Approval History</summary>
-                <div className="mt-3">
-                  <ApprovalHistory entityType="grn" entityId={viewing.id} />
-                </div>
-              </details>
-            )}
-
-            {/* Attachments */}
-            {viewing && (
-              <details className="pt-3 border-t border-slate-200">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-700">Attachments</summary>
-                <div className="mt-3">
-                  <GRNAttachments grnId={viewing.id} />
-                </div>
-              </details>
-            )}
-
-            {viewing && (viewing as any).rejection_reason && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
-                <p className="text-sm text-red-700">{(viewing as any).rejection_reason}</p>
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
