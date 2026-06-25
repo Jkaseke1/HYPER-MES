@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import ApprovalButtons from '../components/approval/ApprovalButtons';
+import MaterialTransferApprovalButtons from '../components/approval/MaterialTransferApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 
@@ -19,7 +19,11 @@ interface MaterialTransfer {
   transfer_date: string;
   requested_by: string;
   approved_by?: string;
-  status: 'pending' | 'approved' | 'in_transit' | 'received' | 'rejected';
+  buffer_approved_by?: string;
+  buffer_approved_at?: string;
+  production_approved_by?: string;
+  production_approved_at?: string;
+  status: 'pending' | 'in_buffer' | 'approved' | 'in_transit' | 'received' | 'rejected';
   purpose: string;
   production_order_id?: string;
   notes: string;
@@ -33,6 +37,7 @@ export default function MaterialTransferPage() {
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +64,14 @@ export default function MaterialTransferPage() {
     fetchData();
   }, []);
 
+  // Default from warehouse to Raw Materials Warehouse (code 'RM')
+  useEffect(() => {
+    const rmWarehouse = warehouses.find((w) => w.code === 'RM');
+    if (rmWarehouse && !form.from_warehouse_id) {
+      setForm((f) => ({ ...f, from_warehouse_id: rmWarehouse.id }));
+    }
+  }, [warehouses]);
+
   // Load available lots (FIFO order) whenever the selected raw material changes
   useEffect(() => {
     async function loadLots() {
@@ -78,7 +91,7 @@ export default function MaterialTransferPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [transfersRes, materialsRes, warehousesRes, ordersRes] = await Promise.all([
+    const [transfersRes, materialsRes, warehousesRes, ordersRes, balancesRes] = await Promise.all([
       supabase
         .from('material_transfers')
         .select('*, raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
@@ -90,6 +103,10 @@ export default function MaterialTransferPage() {
         .select('id, batch_number, status')
         .in('status', ['pending', 'materials_issued', 'in_progress'])
         .order('created_at', { ascending: false }),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'RM'),
     ]);
 
     if (transfersRes.data) {
@@ -98,16 +115,43 @@ export default function MaterialTransferPage() {
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);
+    if (balancesRes.data) {
+      const balances: Record<string, number> = {};
+      balancesRes.data.forEach((b: any) => {
+        balances[b.raw_material_id] = Number(b.quantity || 0);
+      });
+      setRmWarehouseBalances(balances);
+    }
     setLoading(false);
   }
 
   async function createTransfer() {
     setSaving(true);
     try {
+      // Find RM warehouse and Buffer warehouse
+      const rmWarehouse = warehouses.find((w) => w.code === 'RM');
+      const bufferWarehouse = warehouses.find((w) => w.code === 'BUFFER');
+      const fromWarehouseId = rmWarehouse?.id || form.from_warehouse_id;
+
+      if (!fromWarehouseId) {
+        alert('Raw Materials Warehouse not found. Please contact admin.');
+        setSaving(false);
+        return;
+      }
+
+      // Check RM warehouse balance
+      const rmBalance = rmWarehouseBalances[form.raw_material_id] || 0;
+      if (form.quantity > rmBalance) {
+        alert(`Insufficient stock in Raw Materials Warehouse. Available: ${rmBalance.toLocaleString()} kg, Requested: ${form.quantity.toLocaleString()} kg`);
+        setSaving(false);
+        return;
+      }
+
       const { error } = await supabase.from('material_transfers').insert({
         raw_material_id: form.raw_material_id,
-        from_warehouse_id: form.from_warehouse_id,
-        to_location: form.to_location,
+        from_warehouse_id: fromWarehouseId,
+        to_location: 'Production Floor',
+        buffer_warehouse_id: bufferWarehouse?.id || null,
         quantity: form.quantity,
         unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
         transfer_date: form.transfer_date,
@@ -161,7 +205,7 @@ export default function MaterialTransferPage() {
   const statusCounts = {
     all: transfers.length,
     pending: transfers.filter(t => t.status === 'pending').length,
-    approved: transfers.filter(t => t.status === 'approved').length,
+    in_buffer: transfers.filter(t => t.status === 'in_buffer').length,
     received: transfers.filter(t => t.status === 'received').length,
   };
 
@@ -208,7 +252,7 @@ export default function MaterialTransferPage() {
         >
           <option value="all">All Status ({statusCounts.all})</option>
           <option value="pending">Pending ({statusCounts.pending})</option>
-          <option value="approved">Approved ({statusCounts.approved})</option>
+          <option value="in_buffer">In Buffer ({statusCounts.in_buffer})</option>
           <option value="received">Received ({statusCounts.received})</option>
         </select>
       </div>
@@ -297,43 +341,31 @@ export default function MaterialTransferPage() {
                 required
               >
                 <option value="">Select material</option>
-                {rawMaterials.map((material) => (
-                  <option key={material.id} value={material.id}>
-                    {material.name} ({material.code}) - Stock: {material.current_stock} {material.unit}
-                  </option>
-                ))}
+                {rawMaterials.map((material) => {
+                  const rmBalance = rmWarehouseBalances[material.id] ?? 0;
+                  return (
+                    <option key={material.id} value={material.id}>
+                      {material.name} ({material.code}) - RM Stock: {rmBalance.toLocaleString()} {material.unit}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">From Warehouse *</label>
-              <select
-                value={form.from_warehouse_id}
-                onChange={(e) => setForm({ ...form, from_warehouse_id: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                required
-              >
-                <option value="">Select warehouse</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-slate-700 mb-1">From Warehouse</label>
+              <div className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 font-medium">
+                Raw Materials Warehouse
+              </div>
+              <p className="text-xs text-slate-500 mt-1">All transfers originate from Raw Materials Warehouse</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">To Location *</label>
-              <select
-                value={form.to_location}
-                onChange={(e) => setForm({ ...form, to_location: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              >
-                <option value="Production Floor">Production Floor</option>
-                <option value="Mixing Area">Mixing Area</option>
-                <option value="Packaging Line">Packaging Line</option>
-                <option value="Quality Lab">Quality Lab</option>
-              </select>
+              <label className="block text-sm font-medium text-slate-700 mb-1">To Location</label>
+              <div className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 font-medium">
+                Production Floor (via Buffer)
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Two-step: RM → Buffer → Production</p>
             </div>
 
             <div>
@@ -449,7 +481,14 @@ export default function MaterialTransferPage() {
             </button>
             <button
               onClick={createTransfer}
-              disabled={saving || !form.raw_material_id || !form.from_warehouse_id || !form.quantity || !form.purpose}
+              disabled={
+                saving ||
+                !form.raw_material_id ||
+                !form.from_warehouse_id ||
+                !form.quantity ||
+                !form.purpose ||
+                (form.quantity > (rmWarehouseBalances[form.raw_material_id] || 0))
+              }
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Creating...' : 'Create Transfer'}
@@ -536,25 +575,23 @@ export default function MaterialTransferPage() {
               </div>
             )}
 
-            {viewTransfer.status === 'pending' && (
+            {(viewTransfer.status === 'pending' || viewTransfer.status === 'in_buffer') && (
               <div className="border-t border-slate-200 pt-4">
-                <ApprovalButtons
-                  entityType="material_transfer"
-                  entityId={viewTransfer.id}
+                <MaterialTransferApprovalButtons
+                  transferId={viewTransfer.id}
                   currentStatus={viewTransfer.status}
-                  approveStatus="approved"
-                  rejectStatus="rejected"
+                  quantity={viewTransfer.quantity}
+                  rawMaterialId={viewTransfer.raw_material_id}
+                  fromWarehouseId={viewTransfer.from_warehouse_id}
                   onApproved={() => {
-                    // Update the viewed transfer with new status
-                    setViewTransfer({ ...viewTransfer, status: 'approved' });
-                    // Refresh the list in background
+                    // Refresh the viewed transfer and list
                     fetchData();
+                    setViewTransfer(null);
                   }}
                   onRejected={() => {
-                    // Update the viewed transfer with new status
-                    setViewTransfer({ ...viewTransfer, status: 'rejected' });
-                    // Refresh the list in background
+                    // Refresh the viewed transfer and list
                     fetchData();
+                    setViewTransfer(null);
                   }}
                 />
               </div>

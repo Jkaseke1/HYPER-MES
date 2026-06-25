@@ -66,6 +66,57 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
           setHistory(entries);
         }
       }
+
+      // For Material Transfer approvals, two-step workflow
+      if (entityType === 'material_transfer') {
+        const { data: transfer } = await supabase
+          .from('material_transfers')
+          .select('*, buffer_approver:profiles!buffer_approved_by(full_name), production_approver:profiles!production_approved_by(full_name), rejecter:profiles!approved_by(full_name)')
+          .eq('id', entityId)
+          .single();
+
+        if (transfer) {
+          const entries: ApprovalEntry[] = [];
+
+          // Add Step 1: RM → Buffer approval
+          if (transfer.buffer_approved_at && transfer.buffer_approved_by) {
+            entries.push({
+              id: `buffer_${transfer.id}`,
+              action: 'rm_approved',
+              previous_status: 'pending',
+              new_status: 'in_buffer',
+              created_at: transfer.buffer_approved_at,
+              approver: transfer.buffer_approver
+            });
+          }
+
+          // Add Step 2: Buffer → Production approval
+          if (transfer.production_approved_at && transfer.production_approved_by) {
+            entries.push({
+              id: `production_${transfer.id}`,
+              action: 'production_approved',
+              previous_status: 'in_buffer',
+              new_status: 'received',
+              created_at: transfer.production_approved_at,
+              approver: transfer.production_approver
+            });
+          }
+
+          // Add rejection if it exists
+          if (transfer.status === 'rejected' && transfer.approved_at) {
+            entries.push({
+              id: `rejected_${transfer.id}`,
+              action: 'rejected',
+              previous_status: transfer.buffer_approved_at ? 'in_buffer' : 'pending',
+              new_status: 'rejected',
+              created_at: transfer.approved_at,
+              approver: transfer.rejecter
+            });
+          }
+
+          setHistory(entries);
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch approval history:', error);
     } finally {
@@ -134,6 +185,8 @@ function getActionLabel(action: string): string {
     submitted: 'Submitted',
     approved: 'Approved',
     rm_manager_approved: 'Raw/Procurement Approved',
+    rm_approved: 'Released to Buffer',
+    production_approved: 'Accepted to Production',
     finance_approved: 'Finance Approved',
     rejected: 'Rejected',
     cancelled: 'Cancelled',
@@ -146,7 +199,9 @@ function formatStatus(status: string): string {
   const labels: Record<string, string> = {
     pending: 'Pending',
     rm_approved: 'RM Approved',
+    in_buffer: 'In Buffer',
     approved: 'Approved',
+    received: 'Received',
     rejected: 'Rejected'
   };
   return labels[status] || status.replace(/_/g, ' ');
@@ -157,6 +212,8 @@ function getActionColor(action: string): string {
     submitted: 'bg-blue-100 text-blue-600',
     approved: 'bg-emerald-100 text-emerald-600',
     rm_manager_approved: 'bg-teal-100 text-teal-600',
+    rm_approved: 'bg-teal-100 text-teal-600',
+    production_approved: 'bg-emerald-100 text-emerald-600',
     finance_approved: 'bg-emerald-100 text-emerald-600',
     rejected: 'bg-red-100 text-red-600',
     cancelled: 'bg-slate-100 text-slate-600',
@@ -170,6 +227,8 @@ function getActionIcon(action: string) {
     submitted: <Clock className="w-3 h-3" />,
     approved: <Clock className="w-3 h-3" />,
     rm_manager_approved: <Clock className="w-3 h-3" />,
+    rm_approved: <Clock className="w-3 h-3" />,
+    production_approved: <Clock className="w-3 h-3" />,
     finance_approved: <Clock className="w-3 h-3" />,
     rejected: <Clock className="w-3 h-3" />,
     cancelled: <Clock className="w-3 h-3" />,

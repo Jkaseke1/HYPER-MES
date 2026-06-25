@@ -38,13 +38,33 @@ export const APPROVAL_PERMISSIONS = {
   dispatch_order: ['warehouse_manager', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
-  material_transfer: ['procurement', 'admin'],
+  material_transfer: ['procurement', 'production_manager', 'admin'],  // Both RM and Production can approve
+  material_transfer_step1: ['procurement', 'admin'],  // Step 1: RM Warehouse → Buffer (Raw Materials approves)
+  material_transfer_step2: ['production_manager', 'supervisor', 'admin'],  // Step 2: Buffer → Production (Production approves)
   weigh_bridge_ticket: ['warehouse_manager', 'procurement', 'admin'],
   macropack_order: ['procurement', 'supervisor', 'production_manager', 'admin'],
   chick_booking: ['finance', 'accountant', 'admin'],
 } as const;
 
 // GRN uses single-step approval: Finance approves directly (pending → approved)
+
+// Material Transfer uses two-step approval:
+// Step 1: pending → in_buffer (Raw Materials/Procurement approves, stock moves to Buffer Warehouse)
+// Step 2: in_buffer → received (Production approves, stock moves to Production Floor)
+export const TWO_STEP_MATERIAL_TRANSFER = {
+  step1: { 
+    roles: ['procurement', 'admin'], 
+    fromStatus: 'pending', 
+    toStatus: 'in_buffer', 
+    label: 'Release to Buffer' 
+  },
+  step2: { 
+    roles: ['production_manager', 'supervisor', 'admin'], 
+    fromStatus: 'in_buffer', 
+    toStatus: 'received', 
+    label: 'Accept to Production' 
+  },
+} as const;
 
 export function canApprove(entityType: keyof typeof APPROVAL_PERMISSIONS, userRole: string): boolean {
   return APPROVAL_PERMISSIONS[entityType].includes(userRole as any);
