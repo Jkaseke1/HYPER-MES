@@ -42,7 +42,7 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
           if (grn.rm_approved_at) {
             entries.push({
               id: `rm_${grn.id}`,
-              action: 'approved',
+              action: 'rm_manager_approved',
               previous_status: 'pending',
               new_status: 'rm_approved',
               created_at: grn.rm_approved_at,
@@ -50,11 +50,11 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
             });
           }
 
-          // Add Accountant approval if it exists
+          // Add Accountant/Finance approval if it exists
           if (grn.accountant_approved_at) {
             entries.push({
               id: `accountant_${grn.id}`,
-              action: 'approved',
+              action: 'finance_approved',
               previous_status: 'rm_approved',
               new_status: 'approved',
               created_at: grn.accountant_approved_at,
@@ -115,12 +115,12 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
                   {getActionIcon(entry.action)}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-800 capitalize">
-                    {entry.action.replace('_', ' ')}
+                  <p className="text-sm font-medium text-slate-800">
+                    {getActionLabel(entry.action)}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {entry.previous_status && `${entry.previous_status} → `}
-                    {entry.new_status}
+                    {entry.previous_status && `${formatStatus(entry.previous_status)} → `}
+                    {formatStatus(entry.new_status)}
                   </p>
                 </div>
               </div>
@@ -142,10 +142,35 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
   );
 }
 
+function getActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    submitted: 'Submitted',
+    approved: 'Approved',
+    rm_manager_approved: 'Raw Material Manager Approved',
+    finance_approved: 'Finance Approved',
+    rejected: 'Rejected',
+    cancelled: 'Cancelled',
+    reopened: 'Reopened'
+  };
+  return labels[action] || action.replace(/_/g, ' ');
+}
+
+function formatStatus(status: string): string {
+  const labels: Record<string, string> = {
+    pending: 'Pending',
+    rm_approved: 'RM Approved',
+    approved: 'Approved',
+    rejected: 'Rejected'
+  };
+  return labels[status] || status.replace(/_/g, ' ');
+}
+
 function getActionColor(action: string): string {
   const colors: Record<string, string> = {
     submitted: 'bg-blue-100 text-blue-600',
     approved: 'bg-emerald-100 text-emerald-600',
+    rm_manager_approved: 'bg-teal-100 text-teal-600',
+    finance_approved: 'bg-emerald-100 text-emerald-600',
     rejected: 'bg-red-100 text-red-600',
     cancelled: 'bg-slate-100 text-slate-600',
     reopened: 'bg-orange-100 text-orange-600'
@@ -157,6 +182,8 @@ function getActionIcon(action: string) {
   const icons: Record<string, JSX.Element> = {
     submitted: <Clock className="w-3 h-3" />,
     approved: <Clock className="w-3 h-3" />,
+    rm_manager_approved: <Clock className="w-3 h-3" />,
+    finance_approved: <Clock className="w-3 h-3" />,
     rejected: <Clock className="w-3 h-3" />,
     cancelled: <Clock className="w-3 h-3" />,
     reopened: <Clock className="w-3 h-3" />
