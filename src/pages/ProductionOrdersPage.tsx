@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import Modal from '../components/ui/Modal';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
@@ -1241,133 +1242,151 @@ export default function ProductionOrdersPage() {
         </div>
       </Modal>
 
-      {/* Order Detail Modal */}
-      <Modal open={showDetail} onClose={() => setShowDetail(false)} title={`Production Order - ${selected?.batch_number}`} size="xl">
-        {selected && (
-          <div className="space-y-6">
-            {workflowError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-2 text-red-800">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">{workflowError}</span>
-                </div>
+      {/* Order Detail Modal - Redesigned wider layout */}
+      <Dialog open={showDetail} onOpenChange={() => setShowDetail(false)}>
+        <DialogContent className="max-w-[1200px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1200px] [&>button.absolute]:hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-6 py-4 flex-shrink-0 relative">
+            <button
+              onClick={() => setShowDetail(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
+                <Factory className="w-6 h-6 text-white" />
               </div>
-            )}
-
-            {/* Creator Tag */}
-            {selected.profiles?.full_name && (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
-                <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                <span className="text-xs font-medium text-blue-700">
-                  Created by <span className="font-semibold">{selected.profiles.full_name}</span>
-                </span>
-              </div>
-            )}
-
-            {/* Order Info */}
-            <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
-              <div>
-                <label className="text-xs font-medium text-slate-500">Formulation</label>
-                <div className="text-sm font-medium text-slate-800">{selected.formulations?.name}</div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500">Production Line</label>
-                <div className="text-sm font-medium text-slate-800">{selected.machines?.name}</div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500">Unit Size</label>
-                <div className="text-sm font-medium text-slate-800">{selected.unit_size || '25kg'}</div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500">Status</label>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={selected.status} />
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold">{selected?.batch_number}</h2>
+                  {selected && <StatusBadge status={selected.status} />}
                   {downtimeEntries.length > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full" title="Total downtime hours">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-300 rounded-full">
                       <Clock className="w-3 h-3" />
-                      {downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)} hrs
+                      {downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)} hrs downtime
                     </span>
                   )}
                 </div>
+                <p className="text-slate-400 text-sm mt-0.5">
+                  {selected?.formulations?.name} • {selected?.machines?.name} • {selected?.unit_size || '25kg'} bags
+                  {selected?.profiles?.full_name && <span className="text-slate-500"> • Created by {selected.profiles.full_name}</span>}
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* Workflow Actions */}
-            <div className="flex items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                {selected.status === 'pending' && (
-                  <button
-                    onClick={() => updateStatus('materials_issued')}
-                    disabled={saving || detailMaterials.length === 0 || !allIngredientsIssued()}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                  >
-                    <Check className="w-4 h-4" />
-                    Approve/Issue Materials
-                  </button>
-                )}
-                
-                {selected.status === 'materials_issued' && (
-                  <button
-                    onClick={() => updateStatus('in_progress')}
-                    disabled={saving}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start Production
-                  </button>
-                )}
-                
-                {selected.status === 'in_progress' && (
-                  <button
-                    onClick={handleCompletionRequest}
-                    disabled={saving || output.actual_qty <= 0}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Complete Production
-                  </button>
-                )}
+          {selected && (
+            <div className="flex-1 overflow-y-auto">
+              {/* Error Banner */}
+              {workflowError && (
+                <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-red-800">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">{workflowError}</span>
+                  </div>
+                </div>
+              )}
 
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <ArrowRight className="w-4 h-4" />
-                  <span>Workflow: Pending → Materials Issued → In Progress → Completed</span>
+              {/* Quick Stats Row */}
+              <div className="grid grid-cols-5 gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 uppercase font-medium">Planned</div>
+                  <div className="text-lg font-bold text-slate-800">{selected.planned_qty?.toLocaleString()} kg</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 uppercase font-medium">Actual</div>
+                  <div className="text-lg font-bold text-emerald-600">{(selected.actual_qty || output.actual_qty || 0).toLocaleString()} kg</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 uppercase font-medium">Yield</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    {selected.planned_qty > 0 ? Math.round(((selected.actual_qty || output.actual_qty || 0) / selected.planned_qty) * 100) : 0}%
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 uppercase font-medium">Materials</div>
+                  <div className="text-lg font-bold text-amber-600">{detailMaterials.filter(m => m.issued).length}/{detailMaterials.length}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 uppercase font-medium">Total Cost</div>
+                  <div className="text-lg font-bold text-slate-800">${(costing.raw_material_cost + costing.labour_cost + costing.overhead_cost).toFixed(2)}</div>
                 </div>
               </div>
 
-              {selected.status === 'pending' && (
-                <button
-                  onClick={() => deleteOrder(selected)}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  Delete Order
-                </button>
-              )}
-            </div>
-
-            {/* Detail Tabs */}
-            <div className="border-b border-slate-200">
-              <div className="flex gap-4">
-                {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
+              {/* Workflow Actions Bar */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2 bg-white border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  {selected.status === 'pending' && (
+                    <button
+                      onClick={() => updateStatus('materials_issued')}
+                      disabled={saving || detailMaterials.length === 0 || !allIngredientsIssued()}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <Check className="w-4 h-4" />
+                      Approve/Issue
+                    </button>
+                  )}
+                  {selected.status === 'materials_issued' && (
+                    <button
+                      onClick={() => updateStatus('in_progress')}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                    >
+                      <Play className="w-4 h-4" />
+                      Start Production
+                    </button>
+                  )}
+                  {selected.status === 'in_progress' && (
+                    <button
+                      onClick={handleCompletionRequest}
+                      disabled={saving || output.actual_qty <= 0}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Complete
+                    </button>
+                  )}
+                  <span className="text-xs text-slate-400 ml-2">Pending → Materials Issued → In Progress → Completed</span>
+                </div>
+                {selected.status === 'pending' && (
                   <button
-                    key={t}
-                    onClick={() => setDetailTab(t)}
-                    className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-                      detailTab === t
-                        ? 'border-teal-600 text-teal-700'
-                        : 'border-transparent text-slate-600 hover:text-slate-800'
-                    }`}
-                    disabled={t === 'variance' && selected?.status !== 'completed'}
+                    onClick={() => deleteOrder(selected)}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
                   >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                    {t === 'variance' && selected?.status !== 'completed' && (
-                      <span className="ml-1 text-xs text-slate-400">(Completed)</span>
-                    )}
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Delete
                   </button>
-                ))}
+                )}
               </div>
-            </div>
+
+              {/* Tabs */}
+              <div className="border-b border-slate-200 bg-white px-4">
+                <div className="flex gap-1">
+                  {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setDetailTab(t)}
+                      className={`py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
+                        detailTab === t
+                          ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                          : 'border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                      }`}
+                      disabled={t === 'variance' && selected?.status !== 'completed'}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                      {t === 'variance' && selected?.status !== 'completed' && (
+                        <span className="ml-1 text-xs text-slate-400">(Done)</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-4">
 
             {/* Materials Tab */}
             {detailTab === 'materials' && (
@@ -2127,49 +2146,11 @@ export default function ProductionOrdersPage() {
                 </div>
               </div>
             )}
-
-            <div className="flex justify-between pt-4 border-t border-slate-200">
-              <div className="flex gap-2">
-                {selected.status === 'pending' && detailMaterials.length > 0 && (
-                  <button
-                    onClick={bulkIssueMaterials}
-                    disabled={saving || !allMaterialsAvailable()}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!allMaterialsAvailable() ? 'Insufficient stock for some materials' : 'Issue all materials and advance to Materials Issued'}
-                  >
-                    {saving ? 'Issuing...' : 'Approve/Issue Materials'}
-                  </button>
-                )}
-                {selected.status === 'materials_issued' && (
-                  <button
-                    onClick={() => updateStatus('in_progress')}
-                    disabled={saving}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {saving ? 'Starting...' : 'Start Production'}
-                  </button>
-                )}
-                {selected.status === 'in_progress' && (
-                  <button
-                    onClick={handleCompletionRequest}
-                    disabled={saving || output.actual_qty <= 0}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                    title={output.actual_qty <= 0 ? 'Enter actual output quantity first' : 'Complete production order'}
-                  >
-                    {saving ? 'Completing...' : 'Complete Order'}
-                  </button>
-                )}
               </div>
-              <button
-                onClick={() => setShowDetail(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Close
-              </button>
             </div>
-          </div>
-        )}
-      </Modal>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Packaging Declaration Modal */}
       <PackagingDeclarationModal
