@@ -264,6 +264,7 @@ export default function WeighBridgePage() {
               <WeighBridgeTicket
                 data={form as any}
                 onChange={handleFormChange}
+                hideHeader
               />
             </div>
             {/* Footer */}

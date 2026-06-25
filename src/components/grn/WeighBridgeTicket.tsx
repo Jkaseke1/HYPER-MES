@@ -22,6 +22,7 @@ interface WeighBridgeTicketProps {
   data: WeighBridgeData;
   onChange: (field: keyof WeighBridgeData, value: any) => void;
   receivedQty?: number;
+  hideHeader?: boolean;
 }
 
 const input =
@@ -49,8 +50,8 @@ function SectionHeader({ icon: Icon, children }: { icon: any; children: React.Re
   );
 }
 
-export default function WeighBridgeTicket({ data, onChange, receivedQty }: WeighBridgeTicketProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHeader }: WeighBridgeTicketProps) {
+  const [expanded, setExpanded] = useState(!!hideHeader);
 
   const handleMassChange = (field: 'wb_first_mass' | 'wb_second_mass', value: string) => {
     onChange(field, value);
@@ -75,39 +76,41 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty }: Weigh
       } overflow-hidden`}
     >
       {/* ── Header ── */}
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className={`w-full flex items-center justify-between px-5 py-3 transition-colors ${
-          expanded ? 'bg-slate-800' : 'bg-slate-800/50 hover:bg-slate-800'
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${expanded ? 'bg-teal-500' : 'bg-slate-700'}`}>
-            <Scale className={`w-4 h-4 ${expanded ? 'text-white' : 'text-slate-400'}`} />
+      {!hideHeader && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className={`w-full flex items-center justify-between px-5 py-3 transition-colors ${
+            expanded ? 'bg-slate-800' : 'bg-slate-800/50 hover:bg-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${expanded ? 'bg-teal-500' : 'bg-slate-700'}`}>
+              <Scale className={`w-4 h-4 ${expanded ? 'text-white' : 'text-slate-400'}`} />
+            </div>
+            <div className="text-left">
+              <p className={`text-sm font-semibold ${expanded ? 'text-white' : 'text-slate-300'}`}>
+                Weigh Bridge Ticket
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {hasWBData ? `Ref: ${data.wb_transaction_no}` : 'Optional — expand to capture weighing data'}
+              </p>
+            </div>
           </div>
-          <div className="text-left">
-            <p className={`text-sm font-semibold ${expanded ? 'text-white' : 'text-slate-300'}`}>
-              Weigh Bridge Ticket
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {hasWBData ? `Ref: ${data.wb_transaction_no}` : 'Optional — expand to capture weighing data'}
-            </p>
+          <div className="flex items-center gap-2">
+            {hasWBData && !expanded && (
+              <span className="px-2.5 py-0.5 text-xs font-semibold bg-teal-500/20 text-teal-400 rounded-full border border-teal-500/30">
+                Captured
+              </span>
+            )}
+            {expanded ? (
+              <ChevronUp className="w-4 h-4 text-teal-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-500" />
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasWBData && !expanded && (
-            <span className="px-2.5 py-0.5 text-xs font-semibold bg-teal-500/20 text-teal-400 rounded-full border border-teal-500/30">
-              Captured
-            </span>
-          )}
-          {expanded ? (
-            <ChevronUp className="w-4 h-4 text-teal-400" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-500" />
-          )}
-        </div>
-      </button>
+        </button>
+      )}
 
       {/* ── Body ── */}
       {expanded && (
