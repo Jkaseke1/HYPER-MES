@@ -44,6 +44,27 @@ export const APPROVAL_PERMISSIONS = {
   chick_booking: ['finance', 'accountant', 'admin'],
 } as const;
 
+// Two-step approval workflows
+export const TWO_STEP_APPROVALS = {
+  grn: {
+    step1: { roles: ['raw_material_manager', 'admin'], fromStatus: 'pending', toStatus: 'rm_approved', label: 'RM Manager Approval' },
+    step2: { roles: ['finance', 'accountant', 'admin'], fromStatus: 'rm_approved', toStatus: 'approved', label: 'Finance Approval' },
+  },
+} as const;
+
+export function canApproveStep(entityType: string, currentStatus: string, userRole: string): { canApprove: boolean; nextStatus: string; stepLabel: string } | null {
+  const workflow = TWO_STEP_APPROVALS[entityType as keyof typeof TWO_STEP_APPROVALS];
+  if (!workflow) return null;
+  
+  if (currentStatus === workflow.step1.fromStatus && workflow.step1.roles.includes(userRole as any)) {
+    return { canApprove: true, nextStatus: workflow.step1.toStatus, stepLabel: workflow.step1.label };
+  }
+  if (currentStatus === workflow.step2.fromStatus && workflow.step2.roles.includes(userRole as any)) {
+    return { canApprove: true, nextStatus: workflow.step2.toStatus, stepLabel: workflow.step2.label };
+  }
+  return { canApprove: false, nextStatus: '', stepLabel: '' };
+}
+
 export function canApprove(entityType: keyof typeof APPROVAL_PERMISSIONS, userRole: string): boolean {
   return APPROVAL_PERMISSIONS[entityType].includes(userRole as any);
 }
