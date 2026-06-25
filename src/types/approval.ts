@@ -32,7 +32,7 @@ export interface ApprovalHistoryWithUser extends ApprovalHistory {
 }
 
 export const APPROVAL_PERMISSIONS = {
-  grn: ['procurement', 'finance', 'accountant', 'admin'],
+  grn: ['finance', 'accountant', 'admin'],  // Single approver: Finance only
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
   production_order: ['production_manager', 'admin'],
   dispatch_order: ['warehouse_manager', 'admin'],
@@ -44,26 +44,7 @@ export const APPROVAL_PERMISSIONS = {
   chick_booking: ['finance', 'accountant', 'admin'],
 } as const;
 
-// Two-step approval workflows
-export const TWO_STEP_APPROVALS = {
-  grn: {
-    step1: { roles: ['procurement', 'admin'], fromStatus: 'pending', toStatus: 'rm_approved', label: 'Raw Materials/Procurement Approval' },
-    step2: { roles: ['finance', 'accountant', 'admin'], fromStatus: 'rm_approved', toStatus: 'approved', label: 'Finance Approval' },
-  },
-} as const;
-
-export function canApproveStep(entityType: string, currentStatus: string, userRole: string): { canApprove: boolean; nextStatus: string; stepLabel: string } | null {
-  const workflow = TWO_STEP_APPROVALS[entityType as keyof typeof TWO_STEP_APPROVALS];
-  if (!workflow) return null;
-  
-  if (currentStatus === workflow.step1.fromStatus && workflow.step1.roles.includes(userRole as any)) {
-    return { canApprove: true, nextStatus: workflow.step1.toStatus, stepLabel: workflow.step1.label };
-  }
-  if (currentStatus === workflow.step2.fromStatus && workflow.step2.roles.includes(userRole as any)) {
-    return { canApprove: true, nextStatus: workflow.step2.toStatus, stepLabel: workflow.step2.label };
-  }
-  return { canApprove: false, nextStatus: '', stepLabel: '' };
-}
+// GRN uses single-step approval: Finance approves directly (pending → approved)
 
 export function canApprove(entityType: keyof typeof APPROVAL_PERMISSIONS, userRole: string): boolean {
   return APPROVAL_PERMISSIONS[entityType].includes(userRole as any);

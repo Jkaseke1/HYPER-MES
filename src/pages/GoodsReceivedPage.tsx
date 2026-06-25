@@ -80,7 +80,7 @@ export default function GoodsReceivedPage() {
   async function fetchData() {
     setLoading(true);
     const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), rm_approver:profiles!rm_approved_by(full_name), accountant_approver:profiles!accountant_approved_by(full_name)').order('created_at', { ascending: false }),
+      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), approver:profiles!approved_by(full_name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
@@ -718,13 +718,11 @@ export default function GoodsReceivedPage() {
           </div>
 
           {/* Approval Actions */}
-          {viewing && (viewing.status === 'pending' || viewing.status === 'rm_approved') && (
+          {viewing && viewing.status === 'pending' && (
             <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
               <GRNApprovalButtons
                 grnId={viewing.id}
                 currentStatus={viewing.status}
-                rm_approved_at={(viewing as any).rm_approved_at}
-                accountant_approved_at={(viewing as any).accountant_approved_at}
                 onApproved={() => { setViewModalOpen(false); fetchData(); }}
                 onRejected={() => { setViewModalOpen(false); fetchData(); }}
               />

@@ -28,54 +28,41 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
     setLoading(true);
     try {
       // For GRN approvals, fetch the GRN and derive approval history from status fields
+      // Single-step approval: Finance approves directly (pending → approved)
       if (entityType === 'grn') {
         const { data: grn } = await supabase
           .from('goods_received_notes')
-          .select('*, rm_approved_by_user:profiles!rm_approved_by(full_name), accountant_approved_by_user:profiles!accountant_approved_by(full_name)')
+          .select('*, approved_by_user:profiles!approved_by(full_name)')
           .eq('id', entityId)
           .single();
 
         if (grn) {
           const entries: ApprovalEntry[] = [];
 
-          // Add RM approval if it exists
-          if (grn.rm_approved_at) {
+          // Add Finance approval if it exists
+          if (grn.approved_at && grn.status === 'approved') {
             entries.push({
-              id: `rm_${grn.id}`,
-              action: 'rm_manager_approved',
-              previous_status: 'pending',
-              new_status: 'rm_approved',
-              created_at: grn.rm_approved_at,
-              approver: grn.rm_approved_by_user
-            });
-          }
-
-          // Add Accountant/Finance approval if it exists
-          if (grn.accountant_approved_at) {
-            entries.push({
-              id: `accountant_${grn.id}`,
+              id: `approved_${grn.id}`,
               action: 'finance_approved',
-              previous_status: 'rm_approved',
+              previous_status: 'pending',
               new_status: 'approved',
-              created_at: grn.accountant_approved_at,
-              approver: grn.accountant_approved_by_user
+              created_at: grn.approved_at,
+              approver: grn.approved_by_user
             });
           }
 
           // Add rejection if it exists
-          if (grn.status === 'rejected' && grn.rm_approved_at) {
+          if (grn.status === 'rejected' && grn.approved_at) {
             entries.push({
               id: `rejected_${grn.id}`,
               action: 'rejected',
               previous_status: 'pending',
               new_status: 'rejected',
-              created_at: grn.rm_approved_at,
-              approver: grn.rm_approved_by_user
+              created_at: grn.approved_at,
+              approver: grn.approved_by_user
             });
           }
 
-          // Sort by date ascending (oldest first) - first approver on top
-          entries.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
           setHistory(entries);
         }
       }
