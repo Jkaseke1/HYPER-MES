@@ -39,7 +39,7 @@ export default function ProductionWarehousePage() {
     const { data, error } = await supabase
       .from('stock_movements')
       .select('id, raw_material_id, quantity, unit, movement_date, batch_number, notes, created_at, raw_materials(name, code, unit)')
-      .eq('movement_type', 'transfer')
+      .eq('movement_type', 'production_input')
       .order('created_at', { ascending: false });
     if (error) console.error('Failed to load production warehouse:', error);
     setTransfers((data as any) || []);
