@@ -26,7 +26,7 @@ interface WeighBridgeTicketProps {
 }
 
 const input =
-  'w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-400 transition-colors bg-slate-800 text-white placeholder:text-slate-500';
+  'w-full px-3 py-2 border border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-400 transition-colors bg-slate-800 text-white placeholder:text-slate-500 [color-scheme:dark]';
 const label = 'block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1';
 
 function Field({ title, children }: { title: string; children: React.ReactNode }) {
