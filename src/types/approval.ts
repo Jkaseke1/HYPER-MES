@@ -32,22 +32,22 @@ export interface ApprovalHistoryWithUser extends ApprovalHistory {
 }
 
 export const APPROVAL_PERMISSIONS = {
-  grn: ['raw_material_manager', 'accountant', 'admin'],
+  grn: ['procurement', 'finance', 'accountant', 'admin'],
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
   production_order: ['production_manager', 'admin'],
   dispatch_order: ['warehouse_manager', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
-  material_transfer: ['raw_material_manager', 'admin'],
-  weigh_bridge_ticket: ['warehouse_manager', 'raw_material_manager', 'admin'],
-  macropack_order: ['raw_material_manager', 'supervisor', 'production_manager', 'admin'],
+  material_transfer: ['procurement', 'admin'],
+  weigh_bridge_ticket: ['warehouse_manager', 'procurement', 'admin'],
+  macropack_order: ['procurement', 'supervisor', 'production_manager', 'admin'],
   chick_booking: ['finance', 'accountant', 'admin'],
 } as const;
 
 // Two-step approval workflows
 export const TWO_STEP_APPROVALS = {
   grn: {
-    step1: { roles: ['raw_material_manager', 'admin'], fromStatus: 'pending', toStatus: 'rm_approved', label: 'RM Manager Approval' },
+    step1: { roles: ['procurement', 'admin'], fromStatus: 'pending', toStatus: 'rm_approved', label: 'Raw Materials/Procurement Approval' },
     step2: { roles: ['finance', 'accountant', 'admin'], fromStatus: 'rm_approved', toStatus: 'approved', label: 'Finance Approval' },
   },
 } as const;

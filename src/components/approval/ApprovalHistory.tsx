@@ -146,7 +146,7 @@ function getActionLabel(action: string): string {
   const labels: Record<string, string> = {
     submitted: 'Submitted',
     approved: 'Approved',
-    rm_manager_approved: 'Raw Material Manager Approved',
+    rm_manager_approved: 'Raw/Procurement Approved',
     finance_approved: 'Finance Approved',
     rejected: 'Rejected',
     cancelled: 'Cancelled',
