@@ -33,11 +33,11 @@ export default function MaterialTransferApprovalButtons({
   // Normalize status to avoid TypeScript narrowing issues
   const status = String(currentStatus);
 
-  // Determine which step the user can approve
-  const canApproveStep1 = TWO_STEP_MATERIAL_TRANSFER.step1.roles.includes(userRole as any) && status === 'pending';
+  // Only Production acceptance step remains (Step 2).
+  // Buffer move is done automatically when the transfer is created.
   const canApproveStep2 = TWO_STEP_MATERIAL_TRANSFER.step2.roles.includes(userRole as any) && status === 'in_buffer';
 
-  if (!canApproveStep1 && !canApproveStep2) {
+  if (!canApproveStep2) {
     return null;
   }
 
@@ -70,112 +70,6 @@ export default function MaterialTransferApprovalButtons({
         </div>
       </div>
     );
-  }
-
-  async function handleStep1Approve() {
-    // Step 1: Release to Buffer Warehouse
-    // - Deduct stock from RM Warehouse
-    // - Add stock to Buffer Warehouse
-    // - Update status to 'in_buffer'
-    setProcessing(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) throw new Error('User not authenticated');
-
-      // Get Buffer Warehouse ID
-      const { data: bufferWarehouse } = await supabase
-        .from('warehouses')
-        .select('id')
-        .eq('code', 'BUFFER')
-        .single();
-
-      if (!bufferWarehouse) {
-        throw new Error('Buffer Warehouse not found. Please run the migration.');
-      }
-
-      // 1. Deduct stock from RM Warehouse balance
-      const { data: rmBalance } = await supabase
-        .from('warehouse_stock_balances')
-        .select('quantity')
-        .eq('raw_material_id', rawMaterialId)
-        .eq('warehouse_id', fromWarehouseId)
-        .single();
-
-      if (!rmBalance || (rmBalance.quantity || 0) < quantity) {
-        throw new Error('Insufficient stock in Raw Materials Warehouse');
-      }
-
-      await supabase.rpc('update_warehouse_balance', {
-        p_raw_material_id: rawMaterialId,
-        p_warehouse_id: fromWarehouseId,
-        p_quantity_delta: -quantity
-      });
-
-      // 2. Add stock to Buffer Warehouse balance
-      await supabase.rpc('update_warehouse_balance', {
-        p_raw_material_id: rawMaterialId,
-        p_warehouse_id: bufferWarehouse.id,
-        p_quantity_delta: quantity
-      });
-
-      // 3. Record stock movements
-      await supabase.from('stock_movements').insert({
-        raw_material_id: rawMaterialId,
-        movement_type: 'transfer',
-        quantity: -quantity,
-        warehouse_id: fromWarehouseId,
-        reference_type: 'material_transfer',
-        reference_id: transferId,
-        notes: 'Step 1: Transfer out of Raw Materials Warehouse to Buffer',
-        performed_by: user.id,
-      });
-
-      await supabase.from('stock_movements').insert({
-        raw_material_id: rawMaterialId,
-        movement_type: 'transfer',
-        quantity: quantity,
-        warehouse_id: bufferWarehouse.id,
-        reference_type: 'material_transfer',
-        reference_id: transferId,
-        notes: 'Step 1: Transfer into Buffer Warehouse',
-        performed_by: user.id,
-      });
-
-      // 4. Update transfer status
-      const { error: updateError } = await supabase
-        .from('material_transfers')
-        .update({
-          status: 'in_buffer',
-          buffer_approved_by: user.id,
-          buffer_approved_at: new Date().toISOString(),
-          buffer_warehouse_id: bufferWarehouse.id,
-        })
-        .eq('id', transferId);
-
-      if (updateError) throw updateError;
-
-      // Log approval
-      try {
-        await supabase.rpc('log_approval_action', {
-          p_entity_type: 'material_transfer',
-          p_entity_id: transferId,
-          p_action: 'buffer_approved',
-          p_previous_status: 'pending',
-          p_new_status: 'in_buffer',
-          p_approved_by: user.id,
-          p_comments: 'Released to Buffer Warehouse'
-        });
-      } catch (logError) {
-        console.warn('Failed to log approval:', logError);
-      }
-
-      onApproved();
-    } catch (error) {
-      console.error('Step 1 approval error:', error);
-      alert('Failed to release to buffer. Please try again.');
-    } finally {
-      setProcessing(false);
-    }
   }
 
   async function handleStep2Approve() {
@@ -385,17 +279,6 @@ export default function MaterialTransferApprovalButtons({
       {renderStepIndicator(status)}
 
       <div className="flex items-center gap-2">
-        {canApproveStep1 && (
-          <button
-            onClick={handleStep1Approve}
-            disabled={processing}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Release to Buffer
-          </button>
-        )}
-
         {canApproveStep2 && (
           <button
             onClick={handleStep2Approve}
@@ -423,7 +306,7 @@ export default function MaterialTransferApprovalButtons({
             <h3 className="text-lg font-bold text-slate-800 mb-4">Reject Transfer</h3>
             <p className="text-sm text-slate-600 mb-4">
               Please provide a reason for rejecting this material transfer:
-              {currentStatus === 'in_buffer' && (
+              {status === 'in_buffer' && (
                 <span className="block mt-2 text-amber-600 font-medium">
                   ⚠️ Stock will be returned to RM Warehouse
                 </span>

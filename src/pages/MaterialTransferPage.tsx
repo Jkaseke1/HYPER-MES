@@ -128,6 +128,13 @@ export default function MaterialTransferPage() {
   async function createTransfer() {
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        alert('User not authenticated');
+        setSaving(false);
+        return;
+      }
+
       // Find RM warehouse and Buffer warehouse
       const rmWarehouse = warehouses.find((w) => w.code === 'RM');
       const bufferWarehouse = warehouses.find((w) => w.code === 'BUFFER');
@@ -135,6 +142,11 @@ export default function MaterialTransferPage() {
 
       if (!fromWarehouseId) {
         alert('Raw Materials Warehouse not found. Please contact admin.');
+        setSaving(false);
+        return;
+      }
+      if (!bufferWarehouse) {
+        alert('Buffer Warehouse not found. Please run the migration.');
         setSaving(false);
         return;
       }
@@ -147,26 +159,69 @@ export default function MaterialTransferPage() {
         return;
       }
 
-      const { error } = await supabase.from('material_transfers').insert({
-        raw_material_id: form.raw_material_id,
-        from_warehouse_id: fromWarehouseId,
-        to_location: 'Production Floor',
-        buffer_warehouse_id: bufferWarehouse?.id || null,
-        quantity: form.quantity,
-        unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
-        transfer_date: form.transfer_date,
-        purpose: form.purpose,
-        production_order_id: form.production_order_id || null,
-        notes: form.notes,
-        status: 'pending',
-      });
+      // Create the transfer in in_buffer status (already moved to buffer)
+      const { data: transferData, error: insertError } = await supabase
+        .from('material_transfers')
+        .insert({
+          raw_material_id: form.raw_material_id,
+          from_warehouse_id: fromWarehouseId,
+          to_location: 'Production Floor',
+          buffer_warehouse_id: bufferWarehouse.id,
+          quantity: form.quantity,
+          unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
+          transfer_date: form.transfer_date,
+          purpose: form.purpose,
+          production_order_id: form.production_order_id || null,
+          notes: form.notes,
+          status: 'in_buffer',
+          buffer_approved_by: user.id,
+          buffer_approved_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-      if (error) {
-        console.error('Error creating transfer:', error);
-        alert(`Failed to create transfer: ${error.message}`);
+      if (insertError) {
+        console.error('Error creating transfer:', insertError);
+        alert(`Failed to create transfer: ${insertError.message}`);
         setSaving(false);
         return;
       }
+
+      // Move stock from RM Warehouse to Buffer Warehouse automatically
+      await supabase.rpc('update_warehouse_balance', {
+        p_raw_material_id: form.raw_material_id,
+        p_warehouse_id: fromWarehouseId,
+        p_quantity_delta: -form.quantity
+      });
+
+      await supabase.rpc('update_warehouse_balance', {
+        p_raw_material_id: form.raw_material_id,
+        p_warehouse_id: bufferWarehouse.id,
+        p_quantity_delta: form.quantity
+      });
+
+      // Record stock movements
+      await supabase.from('stock_movements').insert({
+        raw_material_id: form.raw_material_id,
+        movement_type: 'transfer',
+        quantity: -form.quantity,
+        warehouse_id: fromWarehouseId,
+        reference_type: 'material_transfer',
+        reference_id: transferData.id,
+        notes: 'Auto-transfer: RM Warehouse → Buffer Warehouse on creation',
+        performed_by: user.id,
+      });
+
+      await supabase.from('stock_movements').insert({
+        raw_material_id: form.raw_material_id,
+        movement_type: 'transfer',
+        quantity: form.quantity,
+        warehouse_id: bufferWarehouse.id,
+        reference_type: 'material_transfer',
+        reference_id: transferData.id,
+        notes: 'Auto-transfer: Buffer Warehouse receipt on creation',
+        performed_by: user.id,
+      });
 
       setShowCreate(false);
       setForm({
@@ -204,9 +259,9 @@ export default function MaterialTransferPage() {
 
   const statusCounts = {
     all: transfers.length,
-    pending: transfers.filter(t => t.status === 'pending').length,
     in_buffer: transfers.filter(t => t.status === 'in_buffer').length,
     received: transfers.filter(t => t.status === 'received').length,
+    rejected: transfers.filter(t => t.status === 'rejected').length,
   };
 
   if (loading) {
@@ -251,9 +306,9 @@ export default function MaterialTransferPage() {
           className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white min-w-[180px]"
         >
           <option value="all">All Status ({statusCounts.all})</option>
-          <option value="pending">Pending ({statusCounts.pending})</option>
           <option value="in_buffer">In Buffer ({statusCounts.in_buffer})</option>
           <option value="received">Received ({statusCounts.received})</option>
+          <option value="rejected">Rejected ({statusCounts.rejected})</option>
         </select>
       </div>
 
@@ -575,7 +630,7 @@ export default function MaterialTransferPage() {
               </div>
             )}
 
-            {(viewTransfer.status === 'pending' || viewTransfer.status === 'in_buffer') && (
+            {viewTransfer.status === 'in_buffer' && (
               <div className="border-t border-slate-200 pt-4">
                 <MaterialTransferApprovalButtons
                   transferId={viewTransfer.id}

@@ -6,7 +6,7 @@ import { RawMaterial, Warehouse, StockMovement } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 
-type Tab = 'stock' | 'movements';
+type Tab = 'stock' | 'buffer' | 'movements';
 const MOVE_TYPES = ['All', 'Receipt', 'Issue', 'Transfer', 'Production Input', 'Production Output', 'Dispatch'];
 const statusBarColor: Record<string, string> = { in_stock: 'bg-emerald-500', low_stock: 'bg-amber-500', out_of_stock: 'bg-red-500' };
 const mvBadge: Record<string, string> = {
@@ -24,6 +24,8 @@ export default function WarehousePage() {
   const [tab, setTab] = useState<Tab>('stock');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [bufferBalances, setBufferBalances] = useState<any[]>([]);
+  const [bufferSearchTerm, setBufferSearchTerm] = useState('');
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +40,7 @@ export default function WarehousePage() {
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (tab === 'movements') fetchMovements(); }, [tab, dateFrom, dateTo, moveType]);
+  useEffect(() => { if (tab === 'buffer') fetchBufferBalances(); }, [tab]);
 
   async function fetchData() {
     setLoading(true);
@@ -57,6 +60,16 @@ export default function WarehousePage() {
     if (moveType !== 'All') q = q.eq('movement_type', moveType.toLowerCase().replace(/ /g, '_'));
     const { data } = await q;
     setMovements(data || []);
+  }
+
+  async function fetchBufferBalances() {
+    const { data } = await supabase
+      .from('warehouse_stock_balances')
+      .select('*, raw_materials(*), warehouses(*)')
+      .eq('warehouses.code', 'BUFFER')
+      .gt('quantity', 0)
+      .order('updated_at', { ascending: false });
+    setBufferBalances(data || []);
   }
 
   const filtered = useMemo(() => {
@@ -142,9 +155,9 @@ export default function WarehousePage() {
         <p className="text-sm text-slate-500 mt-1">Monitor stock levels and track material movements</p>
       </div>
       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-fit">
-        {(['stock', 'movements'] as Tab[]).map((t) => (
+        {(['stock', 'buffer', 'movements'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === t ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'stock' ? 'Stock Overview' : 'Stock Movements'}
+            {t === 'stock' ? 'Stock Overview' : t === 'buffer' ? 'Buffer / Holding Bay' : 'Stock Movements'}
           </button>
         ))}
       </div>
@@ -251,6 +264,57 @@ export default function WarehousePage() {
                   })}
                   {filtered.length === 0 && (
                     <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">No materials found</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'buffer' && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StatCard title="Buffer Items" value={bufferBalances.length} icon={Package} color="teal" />
+            <StatCard title="Total Buffer Quantity" value={bufferBalances.reduce((s, b) => s + (b.quantity || 0), 0).toLocaleString()} icon={WarehouseIcon} color="amber" />
+            <StatCard title="Buffer Warehouse" value="BUFFER" icon={WarehouseIcon} color="emerald" />
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="text" placeholder="Search buffer materials..." value={bufferSearchTerm} onChange={(e) => setBufferSearchTerm(e.target.value)} className={`w-full max-w-md pl-10 pr-4 py-2 ${inputCls}`} />
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className={`text-left ${thCls}`}>Material</th>
+                    <th className={`text-left ${thCls}`}>Code</th>
+                    <th className={`text-left ${thCls}`}>Unit</th>
+                    <th className={`text-right ${thCls}`}>Quantity in Buffer</th>
+                    <th className={`text-left ${thCls}`}>Last Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bufferBalances
+                    .filter((b) => {
+                      if (!bufferSearchTerm) return true;
+                      const q = bufferSearchTerm.toLowerCase();
+                      const name = (b.raw_materials?.name || '').toLowerCase();
+                      const code = (b.raw_materials?.code || '').toLowerCase();
+                      return name.includes(q) || code.includes(q);
+                    })
+                    .map((b) => (
+                      <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{b.raw_materials?.name || 'Unknown'}</td>
+                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{b.raw_materials?.code || '-'}</td>
+                        <td className="px-4 py-3 text-slate-500">{b.raw_materials?.unit || 'kg'}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{(b.quantity || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-500">{b.updated_at ? format(new Date(b.updated_at), 'dd MMM yyyy HH:mm') : '-'}</td>
+                      </tr>
+                    ))}
+                  {bufferBalances.length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400">No materials currently in Buffer / Holding Bay</td></tr>
                   )}
                 </tbody>
               </table>

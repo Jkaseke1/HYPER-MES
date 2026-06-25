@@ -78,11 +78,11 @@ export default function ApprovalHistory({ entityType, entityId }: ApprovalHistor
         if (transfer) {
           const entries: ApprovalEntry[] = [];
 
-          // Add Step 1: RM → Buffer approval
+          // Add automatic buffer transfer (done on creation by requester)
           if (transfer.buffer_approved_at && transfer.buffer_approved_by) {
             entries.push({
               id: `buffer_${transfer.id}`,
-              action: 'rm_approved',
+              action: 'buffer_transferred',
               previous_status: 'pending',
               new_status: 'in_buffer',
               created_at: transfer.buffer_approved_at,
@@ -186,6 +186,7 @@ function getActionLabel(action: string): string {
     approved: 'Approved',
     rm_manager_approved: 'Raw/Procurement Approved',
     rm_approved: 'Released to Buffer',
+    buffer_transferred: 'Transferred to Buffer (Auto)',
     production_approved: 'Accepted to Production',
     finance_approved: 'Finance Approved',
     rejected: 'Rejected',
@@ -213,6 +214,7 @@ function getActionColor(action: string): string {
     approved: 'bg-emerald-100 text-emerald-600',
     rm_manager_approved: 'bg-teal-100 text-teal-600',
     rm_approved: 'bg-teal-100 text-teal-600',
+    buffer_transferred: 'bg-amber-100 text-amber-600',
     production_approved: 'bg-emerald-100 text-emerald-600',
     finance_approved: 'bg-emerald-100 text-emerald-600',
     rejected: 'bg-red-100 text-red-600',
@@ -228,6 +230,7 @@ function getActionIcon(action: string) {
     approved: <Clock className="w-3 h-3" />,
     rm_manager_approved: <Clock className="w-3 h-3" />,
     rm_approved: <Clock className="w-3 h-3" />,
+    buffer_transferred: <Clock className="w-3 h-3" />,
     production_approved: <Clock className="w-3 h-3" />,
     finance_approved: <Clock className="w-3 h-3" />,
     rejected: <Clock className="w-3 h-3" />,
