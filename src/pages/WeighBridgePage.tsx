@@ -237,24 +237,45 @@ export default function WeighBridgePage() {
       </div>
 
       {/* New Ticket Modal */}
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="New Weigh Bridge Ticket" size="xl">
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-xs text-teal-800">
-            <Scale className="w-4 h-4 inline-block mr-1 text-teal-600" />
-            Fill in the weighing details below. Once saved, go to <strong>Goods Received (GRN)</strong> and select this ticket when creating the GRN.
-          </div>
-          <WeighBridgeTicket
-            data={form as any}
-            onChange={handleFormChange}
-          />
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setNewOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save WB Ticket'}
+      <Dialog open={newOpen} onOpenChange={() => setNewOpen(false)}>
+        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] [&>button.absolute]:hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-6 py-4 flex-shrink-0 relative">
+            <button
+              onClick={() => setNewOpen(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
             </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center">
+                <Scale className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">New Weigh Bridge Ticket</h2>
+                <p className="text-slate-400 text-xs mt-0.5">Fill in weighing details — link to a GRN after saving</p>
+              </div>
+            </div>
           </div>
-        </form>
-      </Modal>
+          {/* Body */}
+          <form onSubmit={handleSave} className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              <WeighBridgeTicket
+                data={form as any}
+                onChange={handleFormChange}
+              />
+            </div>
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={() => setNewOpen(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors">Cancel</button>
+              <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 shadow-sm">
+                {saving ? 'Saving...' : 'Save WB Ticket'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* View Ticket Modal */}
       {viewTicket && (
