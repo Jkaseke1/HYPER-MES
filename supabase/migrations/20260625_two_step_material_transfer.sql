@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS warehouse_stock_balances (
 );
 
 ALTER TABLE warehouse_stock_balances ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated users can read warehouse_stock_balances" ON warehouse_stock_balances;
+DROP POLICY IF EXISTS "Authenticated users can insert warehouse_stock_balances" ON warehouse_stock_balances;
+DROP POLICY IF EXISTS "Authenticated users can update warehouse_stock_balances" ON warehouse_stock_balances;
+
 CREATE POLICY "Authenticated users can read warehouse_stock_balances"
   ON warehouse_stock_balances FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated users can insert warehouse_stock_balances"
