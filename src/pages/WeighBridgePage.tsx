@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon } from 'lucide-react';
+import { Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatCard from '../components/ui/StatCard';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 
@@ -256,57 +257,117 @@ export default function WeighBridgePage() {
       </Modal>
 
       {/* View Ticket Modal */}
-      <Modal open={!!viewTicket} onClose={() => setViewTicket(null)} title={`WB Ticket — ${viewTicket?.ticket_no || ''}`} size="lg">
-        {viewTicket && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {[
-                ['Ticket No', viewTicket.ticket_no],
-                ['Vehicle Reg', viewTicket.vehicle_reg],
-                ['Haulier', viewTicket.haulier_code],
-                ['Driver', viewTicket.driver_name],
-                ['Driver ID', viewTicket.driver_id],
-                ['Product Code', viewTicket.product_code],
-                ['Trailer No', viewTicket.trailer_number],
-                ['Comment', viewTicket.comment],
-              ].map(([label, value]) => (
-                <div key={label} className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">{label}</p>
-                  <p className="font-semibold text-slate-700">{value || '—'}</p>
+      {viewTicket && (
+        <Dialog open={!!viewTicket} onOpenChange={() => setViewTicket(null)}>
+          <DialogContent className="max-w-[640px] w-[95vw] p-0 overflow-hidden [&>button.absolute]:hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-teal-700 to-teal-600 text-white px-6 py-4 relative">
+              <button
+                onClick={() => setViewTicket(null)}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Scale className="w-6 h-6 text-white" />
                 </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div className="bg-slate-50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">Time In</p>
-                <p className="font-semibold text-slate-700">{viewTicket.time_in ? format(new Date(viewTicket.time_in), 'dd MMM yyyy HH:mm') : '—'}</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">Time Out</p>
-                <p className="font-semibold text-slate-700">{viewTicket.time_out ? format(new Date(viewTicket.time_out), 'dd MMM yyyy HH:mm') : '—'}</p>
-              </div>
-              <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
-                <p className="text-xs text-teal-500">Nett Mass (kg)</p>
-                <p className="text-xl font-bold text-teal-700">{viewTicket.nett_mass != null ? Number(viewTicket.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}</p>
+                <div>
+                  <h2 className="text-lg font-bold">WB Ticket #{viewTicket.ticket_no}</h2>
+                  <p className="text-teal-200 text-xs mt-0.5">Created {format(new Date(viewTicket.created_at), 'dd MMM yyyy HH:mm')}</p>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-slate-50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">1st Mass (kg)</p>
-                <p className="font-semibold text-slate-700">{viewTicket.first_mass != null ? Number(viewTicket.first_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}</p>
+
+            <div className="px-6 py-5 space-y-5">
+              {/* Nett Mass Hero */}
+              <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-8">
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">1st Mass</p>
+                    <p className="text-lg font-bold text-slate-700">{viewTicket.first_mass != null ? Number(viewTicket.first_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
+                  </div>
+                  <div className="text-slate-300 text-xl font-light">−</div>
+                  <div>
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">2nd Mass</p>
+                    <p className="text-lg font-bold text-slate-700">{viewTicket.second_mass != null ? Number(viewTicket.second_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
+                  </div>
+                  <div className="text-slate-300 text-xl font-light">=</div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-teal-600 font-semibold uppercase tracking-wider">Nett Mass</p>
+                  <p className="text-2xl font-extrabold text-teal-700">{viewTicket.nett_mass != null ? Number(viewTicket.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-sm font-normal text-teal-500">kg</span></p>
+                </div>
               </div>
-              <div className="bg-slate-50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">2nd Mass (kg)</p>
-                <p className="font-semibold text-slate-700">{viewTicket.second_mass != null ? Number(viewTicket.second_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}</p>
+
+              {/* Vehicle & Driver Info */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vehicle Details</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Registration</span>
+                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.vehicle_reg || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Haulier</span>
+                      <span className="text-sm font-semibold text-slate-800">{viewTicket.haulier_code || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Trailer No</span>
+                      <span className="text-sm font-semibold text-slate-800">{viewTicket.trailer_number || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Product Code</span>
+                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.product_code || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Driver & Timing</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Driver</span>
+                      <span className="text-sm font-semibold text-slate-800">{viewTicket.driver_name || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Driver ID</span>
+                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.driver_id || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Time In</span>
+                      <span className="text-sm font-semibold text-slate-800">{viewTicket.time_in ? format(new Date(viewTicket.time_in), 'dd MMM HH:mm') : '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Time Out</span>
+                      <span className="text-sm font-semibold text-slate-800">{viewTicket.time_out ? format(new Date(viewTicket.time_out), 'dd MMM HH:mm') : '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comment */}
+              {viewTicket.comment && (
+                <div className="bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Comment</p>
+                  <p className="text-sm text-slate-700">{viewTicket.comment}</p>
+                </div>
+              )}
+
+              {/* Footer: Status + GRN Link */}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_STYLES[viewTicket.status]}`}>
+                  {viewTicket.status === 'linked' ? (
+                    <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Linked{viewTicket.grn_number ? ` — ${viewTicket.grn_number}` : ''}</span>
+                  ) : viewTicket.status}
+                </span>
+                <span className="text-xs text-slate-400">{viewTicket.driver_signed ? '✓ Driver signed' : 'Not signed'}</span>
               </div>
             </div>
-            <div className="flex items-center justify-between pt-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_STYLES[viewTicket.status]}`}>{viewTicket.status}</span>
-              <span className="text-xs text-slate-400">Created {format(new Date(viewTicket.created_at), 'dd MMM yyyy HH:mm')}</span>
-            </div>
-          </div>
-        )}
-      </Modal>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
