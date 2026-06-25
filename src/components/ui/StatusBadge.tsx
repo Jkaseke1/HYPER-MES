@@ -16,6 +16,8 @@ const statusStyles: Record<string, string> = {
   loading: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
   dispatched: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',
   in_transit: 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100',
+  in_buffer: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
+  received: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
   delivered: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
   passed: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
   failed: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100',
