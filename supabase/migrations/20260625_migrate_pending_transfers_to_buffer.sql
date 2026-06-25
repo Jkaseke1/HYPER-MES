@@ -13,12 +13,11 @@ BEGIN
     RAISE EXCEPTION 'Buffer Warehouse not found. Please run 20260625_two_step_material_transfer.sql first.';
   END IF;
 
-  -- Process each pending transfer that doesn't already have buffer data
+  -- Process each pending transfer that still needs stock moved to buffer
   FOR transfer_record IN
     SELECT id, raw_material_id, from_warehouse_id, quantity, requested_by
     FROM material_transfers
     WHERE status = 'pending'
-      AND buffer_warehouse_id IS NULL
   LOOP
     -- Move stock from source warehouse to Buffer Warehouse
     PERFORM update_warehouse_balance(
@@ -51,7 +50,7 @@ BEGIN
 
   END LOOP;
 
-  -- Also make sure any pending transfers already have buffer_warehouse_id set to in_buffer
+  -- Also make sure any remaining pending transfers already have buffer_warehouse_id set to in_buffer
   UPDATE material_transfers
   SET status = 'in_buffer',
       buffer_approved_at = COALESCE(buffer_approved_at, now()),
