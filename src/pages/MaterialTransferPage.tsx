@@ -38,6 +38,7 @@ export default function MaterialTransferPage() {
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
+  const [bufferWarehouseBalances, setBufferWarehouseBalances] = useState<Record<string, number>>({});
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,7 @@ export default function MaterialTransferPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [transfersRes, materialsRes, warehousesRes, ordersRes, balancesRes] = await Promise.all([
+    const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
       supabase
         .from('material_transfers')
         .select('*, raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
@@ -107,6 +108,10 @@ export default function MaterialTransferPage() {
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
         .eq('warehouses.code', 'RM'),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'BUFFER'),
     ]);
 
     if (transfersRes.data) {
@@ -115,12 +120,19 @@ export default function MaterialTransferPage() {
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);
-    if (balancesRes.data) {
+    if (rmBalancesRes.data) {
       const balances: Record<string, number> = {};
-      balancesRes.data.forEach((b: any) => {
+      rmBalancesRes.data.forEach((b: any) => {
         balances[b.raw_material_id] = Number(b.quantity || 0);
       });
       setRmWarehouseBalances(balances);
+    }
+    if (bufferBalancesRes.data) {
+      const balances: Record<string, number> = {};
+      bufferBalancesRes.data.forEach((b: any) => {
+        balances[b.raw_material_id] = Number(b.quantity || 0);
+      });
+      setBufferWarehouseBalances(balances);
     }
     setLoading(false);
   }
@@ -317,8 +329,8 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Purpose', 'Status', 'Actions'].map((header) => (
-                  <th key={header} className="px-4 py-3 text-left text-xs font-medium text-slate-600">
+                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
+                  <th key={header} className={`px-4 py-3 text-xs font-medium text-slate-600 ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
                 ))}
@@ -327,7 +339,7 @@ export default function MaterialTransferPage() {
             <tbody className="divide-y divide-slate-100">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-slate-500">
                     No material transfers found
                   </td>
                 </tr>
@@ -335,6 +347,8 @@ export default function MaterialTransferPage() {
                 filteredTransfers.map((transfer) => {
                   const transferDate = transfer.transfer_date || transfer.created_at;
                   const quantity = Math.abs(transfer.quantity || 0);
+                  const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
+                  const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
                   return (
                     <tr key={transfer.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setViewTransfer(transfer)}>
                       <td className="px-4 py-3">
@@ -356,6 +370,12 @@ export default function MaterialTransferPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
                         {quantity.toLocaleString()} {transfer.unit || 'kg'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
+                        {rmBalance.toLocaleString()} {transfer.unit || 'kg'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">
+                        {bufferBalance.toLocaleString()} {transfer.unit || 'kg'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{transfer.purpose || '-'}</td>
                       <td className="px-4 py-3">
