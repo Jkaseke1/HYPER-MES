@@ -36,6 +36,7 @@ import {
   History,
   Search,
   Calendar,
+  Gauge,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -85,6 +86,7 @@ const navGroups: NavGroup[] = [
       // Reporting
       { to: '/shift-reports', icon: ClipboardType, label: 'Shift Reports' },
       { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
+      { to: '/production-efficiency', icon: Gauge, label: 'Efficiency Dashboard' },
     ],
   },
   {

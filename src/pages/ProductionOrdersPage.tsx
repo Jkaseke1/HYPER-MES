@@ -150,7 +150,7 @@ export default function ProductionOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size), machines(name, code), profiles!operator_id(full_name, email)').order('created_at', { ascending: false });
+    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size, nominal_speed), machines(name, code), profiles!operator_id(full_name, email)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     if (search) q = q.ilike('batch_number', `%${search}%`);
     const { data, error } = await q;
@@ -1776,7 +1776,7 @@ export default function ProductionOrdersPage() {
 
                 {/* Yield & Process Loss Summary */}
                 {(output.actual_qty > 0 || selected.actual_qty > 0) && (
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
                       <p className="text-xs text-emerald-600 uppercase font-medium">Yield %</p>
                       <p className="text-xl font-bold text-emerald-800">
@@ -1802,6 +1802,17 @@ export default function ProductionOrdersPage() {
                       </p>
                       <p className="text-xs text-red-600 mt-1">
                         {(output.rejected_qty || selected.rejected_qty || 0)} rejected + {(output.wastage_qty || selected.wastage_qty || 0)} wastage
+                      </p>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                      <p className="text-xs text-blue-600 uppercase font-medium">Efficiency vs Nominal</p>
+                      <p className="text-xl font-bold text-blue-800">
+                        {(selected.formulations?.nominal_speed || 0) > 0 && Number(output.average_throughput || selected.average_throughput || 0) > 0
+                          ? Math.round((Number(output.average_throughput || selected.average_throughput || 0) / (selected.formulations?.nominal_speed || 1)) * 1000) / 10
+                          : 0}%
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Nominal: {(selected.formulations?.nominal_speed || 0).toFixed(2)} mt/hr
                       </p>
                     </div>
                   </div>
