@@ -98,6 +98,7 @@ export default function ProductionOrdersPage() {
   const [form, setForm] = useState(emptyForm);
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
+  const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ProductionLog[]>([]);
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs' | 'operations'>('materials');
   const [operations, setOperations] = useState<any[]>([]);
@@ -330,6 +331,39 @@ export default function ProductionOrdersPage() {
     }
   };
 
+  const loadProductionFloorStock = async (materialIds: string[]) => {
+    if (!materialIds.length) {
+      setProductionFloorStock({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .select('raw_material_id, quantity')
+      .eq('movement_type', 'production_input')
+      .in('raw_material_id', materialIds);
+
+    if (error) {
+      console.error('Error loading production floor stock:', error);
+      return;
+    }
+
+    const stockMap: Record<string, number> = {};
+    for (const row of data || []) {
+      const materialId = (row as any).raw_material_id;
+      const quantity = Number((row as any).quantity || 0);
+      stockMap[materialId] = (stockMap[materialId] || 0) + quantity;
+    }
+
+    setProductionFloorStock(stockMap);
+  };
+
+  const getAvailableStock = (material: OrderMaterial) => {
+    const floorQty = productionFloorStock[material.raw_material_id];
+    if (typeof floorQty === 'number') return Math.max(0, floorQty);
+    return Number(material.raw_materials?.current_stock || 0);
+  };
+
   const openDetail = async (order: ProductionOrder) => {
     setSelected(order);
     setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
@@ -358,6 +392,7 @@ export default function ProductionOrdersPage() {
     
     const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
+    await loadProductionFloorStock(mats.map((m) => m.raw_material_id).filter(Boolean));
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
     
@@ -491,8 +526,8 @@ export default function ProductionOrdersPage() {
     setSaving(true);
     try {
       // Check if material has sufficient stock before issuing
-      if (!material.raw_materials?.current_stock || material.raw_materials.current_stock < material.planned_qty) {
-        const availableStock = material.raw_materials?.current_stock || 0;
+      const availableStock = getAvailableStock(material);
+      if (availableStock < material.planned_qty) {
         throw new Error(
           `Insufficient stock for ${material.raw_materials?.name}. ` +
           `Required: ${material.planned_qty} ${material.unit}, ` +
@@ -583,6 +618,7 @@ export default function ProductionOrdersPage() {
       const refreshed = normalizeRawMaterials((refreshedData as any[]) || []);
       console.log('DEBUG: Refreshed materials after issue', refreshed);
       setDetailMaterials(refreshed);
+      await loadProductionFloorStock(refreshed.map((m) => m.raw_material_id).filter(Boolean));
       setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(refreshed) }));
       
       setSaving(false);
@@ -601,14 +637,14 @@ export default function ProductionOrdersPage() {
   // Check if all materials have sufficient stock available
   const allMaterialsAvailable = () => {
     return detailMaterials.length > 0 && detailMaterials.every(m => 
-      m.raw_materials?.current_stock && m.raw_materials.current_stock >= m.planned_qty
+      getAvailableStock(m) >= m.planned_qty
     );
   };
 
   // Get list of materials with insufficient stock
   const getInsufficientMaterials = () => {
     return detailMaterials.filter(m => 
-      !m.raw_materials?.current_stock || m.raw_materials.current_stock < m.planned_qty
+      getAvailableStock(m) < m.planned_qty
     );
   };
 
@@ -624,7 +660,7 @@ export default function ProductionOrdersPage() {
       if (!allMaterialsAvailable()) {
         const insufficient = getInsufficientMaterials();
         const insufficientList = insufficient.map(m => 
-          `${m.raw_materials?.name} (need ${m.planned_qty}${m.unit}, have ${m.raw_materials?.current_stock || 0}${m.unit})`
+          `${m.raw_materials?.name} (need ${m.planned_qty}${m.unit}, have ${getAvailableStock(m)}${m.unit})`
         ).join(', ');
         throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
       }
@@ -1407,7 +1443,7 @@ export default function ProductionOrdersPage() {
                         <p className="text-sm text-red-700 mb-2">The following materials do not have sufficient stock available:</p>
                         <ul className="text-sm text-red-700 space-y-1">
                           {getInsufficientMaterials().map((m) => (
-                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> - Need {m.planned_qty}{m.unit}, have {m.raw_materials?.current_stock || 0}{m.unit}</li>
+                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> - Need {m.planned_qty}{m.unit}, have {getAvailableStock(m)}{m.unit}</li>
                           ))}
                         </ul>
                         <p className="text-sm text-red-700 mt-2">Please restock these materials before issuing materials to production.</p>
@@ -1436,7 +1472,10 @@ export default function ProductionOrdersPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {detailMaterials.map((material) => (
+                        {detailMaterials.map((material) => {
+                          const availableStock = getAvailableStock(material);
+                          const isOutOfStock = availableStock < material.planned_qty;
+                          return (
                           <tr key={material.id}>
                             <td className="px-3 py-2">
                               <div className="font-medium">{material.raw_materials?.name}</div>
@@ -1466,7 +1505,7 @@ export default function ProductionOrdersPage() {
                             <td className="px-3 py-2 text-center">
                               {!material.issued && selected.status === 'pending' && (
                                 <div className="flex flex-col gap-1">
-                                  {material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty && (
+                                  {isOutOfStock && (
                                     <div className="text-xs text-red-600 font-medium flex items-center gap-1">
                                       <AlertTriangle className="w-3 h-3" />
                                       Out of stock
@@ -1474,13 +1513,13 @@ export default function ProductionOrdersPage() {
                                   )}
                                   <button
                                     onClick={() => issueIndividualIngredient(material)}
-                                    disabled={saving || !material.raw_materials?.current_stock || material.raw_materials.current_stock < material.planned_qty}
+                                    disabled={saving || isOutOfStock}
                                     className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-                                      material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty
+                                      isOutOfStock
                                         ? 'bg-red-200 text-red-700 cursor-not-allowed opacity-50'
                                         : 'bg-teal-600 hover:bg-teal-700 text-white'
                                     }`}
-                                    title={material.raw_materials?.current_stock && material.raw_materials.current_stock < material.planned_qty ? 'Insufficient stock - cannot issue' : 'Issue this material to production'}
+                                    title={isOutOfStock ? 'Insufficient stock - cannot issue' : 'Issue this material to production'}
                                   >
                                     <Check className="w-3 h-3" />
                                     Issue
@@ -1489,7 +1528,7 @@ export default function ProductionOrdersPage() {
                               )}
                             </td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>

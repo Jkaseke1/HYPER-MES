@@ -123,22 +123,7 @@ export default function MaterialTransferApprovalButtons({
         performed_by: user.id,
       });
 
-      // 3. Decrease global raw_materials current_stock (stock consumed by production)
-      const { data: currentRM } = await supabase
-        .from('raw_materials')
-        .select('current_stock')
-        .eq('id', rawMaterialId)
-        .single();
-
-      if (currentRM) {
-        const newStock = Math.max(0, (currentRM.current_stock || 0) - quantity);
-        await supabase
-          .from('raw_materials')
-          .update({ current_stock: newStock })
-          .eq('id', rawMaterialId);
-      }
-
-      // 4. Update transfer status
+      // 3. Update transfer status
       const { error: updateError } = await supabase
         .from('material_transfers')
         .update({

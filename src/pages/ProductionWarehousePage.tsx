@@ -21,7 +21,7 @@ interface AggregatedMaterial {
   name: string;
   code: string;
   unit: string;
-  total_transferred: number;
+  net_available: number;
   last_transfer: string;
   transfer_count: number;
   transfers: TransferRow[];
@@ -59,13 +59,13 @@ export default function ProductionWarehousePage() {
           name: (t.raw_materials as any)?.name || 'Unknown',
           code: (t.raw_materials as any)?.code || '',
           unit: (t.raw_materials as any)?.unit || t.unit,
-          total_transferred: 0,
+          net_available: 0,
           last_transfer: t.movement_date || t.created_at,
           transfer_count: 0,
           transfers: [],
         };
       }
-      map[id].total_transferred += Math.abs(t.quantity);
+      map[id].net_available += Number(t.quantity || 0);
       map[id].transfer_count += 1;
       map[id].transfers.push(t);
       if ((t.movement_date || t.created_at) > map[id].last_transfer) {
@@ -82,7 +82,7 @@ export default function ProductionWarehousePage() {
   }, [aggregated, search]);
 
   const totalMaterials = aggregated.length;
-  const totalQty = aggregated.reduce((s, m) => s + m.total_transferred, 0);
+  const totalQty = aggregated.reduce((s, m) => s + Math.max(0, m.net_available), 0);
   const recentCount = aggregated.filter(m => {
     const d = new Date(m.last_transfer);
     const diff = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
@@ -107,15 +107,15 @@ export default function ProductionWarehousePage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Materials on Floor" value={totalMaterials} icon={Boxes} color="teal" />
-        <StatCard title="Total Qty Transferred" value={`${totalQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
+        <StatCard title="Net Qty on Floor" value={`${totalQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
         <StatCard title="Transfers (last 7 days)" value={recentCount} icon={TrendingDown} color="emerald" />
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
         <p className="text-xs text-amber-800">
-          This view shows <strong>cumulative transfers</strong> to the production floor from Material Transfer records. 
-          Production orders that issue ingredients will reduce the available quantity. For exact current stock per lot, use <strong>RM Warehouse / Inventory</strong>.
+          This view shows <strong>net available quantity</strong> on the production floor from `production_input` movements 
+          (transfers in minus issues out). For exact lot-level stock, use <strong>RM Warehouse / Inventory</strong>.
         </p>
       </div>
 
@@ -165,8 +165,8 @@ export default function ProductionWarehousePage() {
                   </div>
                   <div className="flex items-center gap-6 text-sm mr-4">
                     <div className="text-right">
-                      <p className="font-semibold text-slate-800">{m.total_transferred.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
-                      <p className="text-xs text-slate-400">Total transferred</p>
+                      <p className="font-semibold text-slate-800">{Math.max(0, m.net_available).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
+                      <p className="text-xs text-slate-400">Net on floor</p>
                     </div>
                     <div className="text-right hidden sm:block">
                       <p className="text-slate-600 flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(m.last_transfer), 'dd MMM yyyy')}</p>
@@ -196,7 +196,7 @@ export default function ProductionWarehousePage() {
                           <tr key={t.id} className="hover:bg-white">
                             <td className="py-2 px-3 text-slate-600">{t.movement_date ? format(new Date(t.movement_date), 'dd MMM yyyy') : '-'}</td>
                             <td className="py-2 px-3 font-mono text-slate-600">{t.batch_number || '-'}</td>
-                            <td className="py-2 px-3 text-right font-medium text-slate-700">{Math.abs(t.quantity).toLocaleString()} {t.unit}</td>
+                            <td className="py-2 px-3 text-right font-medium text-slate-700">{Number(t.quantity).toLocaleString()} {t.unit}</td>
                             <td className="py-2 px-3 text-slate-500 truncate max-w-xs">{t.notes || '-'}</td>
                           </tr>
                         ))}
