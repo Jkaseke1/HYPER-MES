@@ -783,7 +783,11 @@ export default function ProductionOrdersPage() {
           ...costing,
           production_line_cost: 0,
           machine_cost: 0,
-          ...output,
+          actual_qty: output.actual_qty,
+          rejected_qty: output.rejected_qty,
+          wastage_qty: output.wastage_qty,
+          actual_hours: output.actual_hours === '' ? null : Number(output.actual_hours),
+          average_throughput: output.average_throughput === '' ? null : Number(output.average_throughput),
           total_cost: Math.round(total * 100) / 100,
           cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
           actual_end: new Date().toISOString()
