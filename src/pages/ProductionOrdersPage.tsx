@@ -645,15 +645,15 @@ export default function ProductionOrdersPage() {
 
   // Check if all materials have sufficient stock available
   const allMaterialsAvailable = () => {
-    return detailMaterials.length > 0 && detailMaterials.every(m => 
-      hasSufficientStock(m)
-    );
+    const pendingMaterials = detailMaterials.filter((m) => !m.issued);
+    if (pendingMaterials.length === 0) return true;
+    return pendingMaterials.every((m) => hasSufficientStock(m));
   };
 
   // Get list of materials with insufficient stock
   const getInsufficientMaterials = () => {
     return detailMaterials.filter(m => 
-      !hasSufficientStock(m)
+      !m.issued && !hasSufficientStock(m)
     );
   };
 
