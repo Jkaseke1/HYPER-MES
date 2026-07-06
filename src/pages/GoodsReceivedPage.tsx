@@ -375,217 +375,238 @@ export default function GoodsReceivedPage() {
 
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-3xl flex flex-col max-h-[90vh]">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>Create New GRN</DialogTitle>
-            <DialogDescription>Add a new goods received note for incoming materials</DialogDescription>
+        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
+          <DialogHeader className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold tracking-tight">Create New GRN</DialogTitle>
+                  <DialogDescription className="text-slate-400 text-xs">
+                    Add a new goods received note and optionally link a weigh bridge ticket
+                  </DialogDescription>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-xs px-2.5 py-0.5 bg-white/15 text-white border border-white/20 hover:bg-white/20">
+                Draft
+              </Badge>
+            </div>
+            <button
+              onClick={() => setModalOpen(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
           </DialogHeader>
 
-          <div className="overflow-y-auto flex-1 pr-1">
-          <div className="space-y-4 py-2">
-            {/* Header Section */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="supplier">Supplier *</Label>
-                <Select value={supplierId} onValueChange={setSupplierId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {suppliers.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                <div className="xl:col-span-8 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                  <div className="text-sm font-semibold text-slate-700">GRN Header</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier">Supplier *</Label>
+                      <Select value={supplierId} onValueChange={setSupplierId}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Select supplier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {suppliers.map((supplier) => (
+                            <SelectItem key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="received_date">Received Date *</Label>
-                <Input
-                  id="received_date"
-                  type="date"
-                  value={receivedDate}
-                  onChange={(e) => setReceivedDate(e.target.value)}
-                />
-              </div>
-            </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="received_date">Received Date *</Label>
+                      <Input
+                        id="received_date"
+                        type="date"
+                        value={receivedDate}
+                        onChange={(e) => setReceivedDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-            {/* Weigh Bridge Ticket Section */}
-            <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <Scale className="w-4 h-4 text-teal-600" />
-                <h3 className="text-sm font-semibold text-slate-700">Weigh Bridge Ticket</h3>
-                <span className="text-xs text-slate-400">(optional — pick existing or fill manually)</span>
-              </div>
-
-              {/* Ticket Picker */}
-              <div className="flex items-center gap-2">
-                <Select
-                  value={weighBridgeTicketId}
-                  onValueChange={(val) => {
-                    setWeighBridgeTicketId(val);
-                    const ticket = wbTickets.find((t: any) => t.id === val);
-                    if (ticket) {
-                      setWbForm({
-                        transaction_no: ticket.ticket_no || '',
-                        vehicle_reg: ticket.vehicle_reg || '',
-                        haulier_code: ticket.haulier_code || 'HYPER',
-                        product_code: ticket.product_code || '',
-                        comment: ticket.comment || '',
-                        trailer_number: ticket.trailer_number || '',
-                        driver_name: ticket.driver_name || '',
-                        driver_id: ticket.driver_id || '',
-                        time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
-                        first_mass: ticket.first_mass != null ? String(ticket.first_mass) : '',
-                        time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
-                        second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
-                        nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
-                        driver_signed: ticket.driver_signed || false,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="flex-1 bg-white">
-                    <SelectValue placeholder="Select an existing ticket..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {wbTickets.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {weighBridgeTicketId && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setWeighBridgeTicketId('');
-                      setWbForm({
-                        transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
-                        comment: '', trailer_number: '', driver_name: '', driver_id: '',
-                        time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', driver_signed: false,
-                      });
-                    }}
-                    className="text-slate-500 hover:text-red-600 shrink-0"
-                  >
-                    Clear
-                  </Button>
-                )}
-              </div>
-              {wbTickets.length === 0 && (
-                <p className="text-xs text-slate-400">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
-              )}
-
-              {/* Manual WB Fields */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Ticket No</Label>
-                  <Input value={wbForm.transaction_no} onChange={(e) => setWbForm({ ...wbForm, transaction_no: e.target.value })} placeholder="WB-001" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Vehicle Reg</Label>
-                  <Input value={wbForm.vehicle_reg} onChange={(e) => setWbForm({ ...wbForm, vehicle_reg: e.target.value })} placeholder="ABC-1234" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Haulier</Label>
-                  <Input value={wbForm.haulier_code} onChange={(e) => setWbForm({ ...wbForm, haulier_code: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Product Code</Label>
-                  <Input value={wbForm.product_code} onChange={(e) => setWbForm({ ...wbForm, product_code: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Trailer No</Label>
-                  <Input value={wbForm.trailer_number} onChange={(e) => setWbForm({ ...wbForm, trailer_number: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Driver Name</Label>
-                  <Input value={wbForm.driver_name} onChange={(e) => setWbForm({ ...wbForm, driver_name: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Time In</Label>
-                  <Input type="datetime-local" value={wbForm.time_in} onChange={(e) => setWbForm({ ...wbForm, time_in: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">First Mass (kg)</Label>
-                  <Input type="number" value={wbForm.first_mass} onChange={(e) => setWbForm({ ...wbForm, first_mass: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Time Out</Label>
-                  <Input type="datetime-local" value={wbForm.time_out} onChange={(e) => setWbForm({ ...wbForm, time_out: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Second Mass (kg)</Label>
-                  <Input type="number" value={wbForm.second_mass} onChange={(e) => setWbForm({ ...wbForm, second_mass: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Nett Mass (kg)</Label>
-                  <Input type="number" value={wbForm.nett_mass} onChange={(e) => setWbForm({ ...wbForm, nett_mass: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Driver ID</Label>
-                  <Input value={wbForm.driver_id} onChange={(e) => setWbForm({ ...wbForm, driver_id: e.target.value })} />
-                </div>
-                <div className="flex items-center gap-2 pt-5">
-                  <input
-                    type="checkbox"
-                    id="wb_driver_signed"
-                    checked={wbForm.driver_signed}
-                    onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
-                    className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                <div className="xl:col-span-4 rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-1.5">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Additional notes or comments..."
+                    rows={4}
+                    className="bg-white"
                   />
-                  <Label htmlFor="wb_driver_signed" className="text-xs">Driver Signed</Label>
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Comment</Label>
-                <Input value={wbForm.comment} onChange={(e) => setWbForm({ ...wbForm, comment: e.target.value })} placeholder="Optional comment..." />
+
+              <div className="rounded-lg border border-teal-300 bg-teal-50/40 p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-teal-700" />
+                  <h3 className="text-sm font-semibold text-slate-800">Weigh Bridge Ticket</h3>
+                  <span className="text-xs text-slate-500">optional — pick existing or fill manually</span>
+                </div>
+
+                <div className="flex flex-col md:flex-row md:items-center gap-2">
+                  <Select
+                    value={weighBridgeTicketId}
+                    onValueChange={(val) => {
+                      setWeighBridgeTicketId(val);
+                      const ticket = wbTickets.find((t: any) => t.id === val);
+                      if (ticket) {
+                        setWbForm({
+                          transaction_no: ticket.ticket_no || '',
+                          vehicle_reg: ticket.vehicle_reg || '',
+                          haulier_code: ticket.haulier_code || 'HYPER',
+                          product_code: ticket.product_code || '',
+                          comment: ticket.comment || '',
+                          trailer_number: ticket.trailer_number || '',
+                          driver_name: ticket.driver_name || '',
+                          driver_id: ticket.driver_id || '',
+                          time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
+                          first_mass: ticket.first_mass != null ? String(ticket.first_mass) : '',
+                          time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
+                          second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
+                          nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
+                          driver_signed: ticket.driver_signed || false,
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="md:flex-1 bg-white">
+                      <SelectValue placeholder="Select an existing ticket..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wbTickets.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {weighBridgeTicketId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setWeighBridgeTicketId('');
+                        setWbForm({
+                          transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
+                          comment: '', trailer_number: '', driver_name: '', driver_id: '',
+                          time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', driver_signed: false,
+                        });
+                      }}
+                      className="text-slate-600 hover:text-red-600 shrink-0"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {wbTickets.length === 0 && (
+                  <p className="text-xs text-slate-500">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Ticket No</Label>
+                    <Input value={wbForm.transaction_no} onChange={(e) => setWbForm({ ...wbForm, transaction_no: e.target.value })} placeholder="WB-001" className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Vehicle Reg</Label>
+                    <Input value={wbForm.vehicle_reg} onChange={(e) => setWbForm({ ...wbForm, vehicle_reg: e.target.value })} placeholder="ABC-1234" className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Haulier</Label>
+                    <Input value={wbForm.haulier_code} onChange={(e) => setWbForm({ ...wbForm, haulier_code: e.target.value })} className="bg-white" />
+                  </div>
+
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Product Code</Label>
+                    <Input value={wbForm.product_code} onChange={(e) => setWbForm({ ...wbForm, product_code: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Trailer No</Label>
+                    <Input value={wbForm.trailer_number} onChange={(e) => setWbForm({ ...wbForm, trailer_number: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Driver Name</Label>
+                    <Input value={wbForm.driver_name} onChange={(e) => setWbForm({ ...wbForm, driver_name: e.target.value })} className="bg-white" />
+                  </div>
+
+                  <div className="lg:col-span-3 space-y-1.5">
+                    <Label className="text-xs">Time In</Label>
+                    <Input type="datetime-local" value={wbForm.time_in} onChange={(e) => setWbForm({ ...wbForm, time_in: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-3 space-y-1.5">
+                    <Label className="text-xs">First Mass (kg)</Label>
+                    <Input type="number" value={wbForm.first_mass} onChange={(e) => setWbForm({ ...wbForm, first_mass: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-3 space-y-1.5">
+                    <Label className="text-xs">Time Out</Label>
+                    <Input type="datetime-local" value={wbForm.time_out} onChange={(e) => setWbForm({ ...wbForm, time_out: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-3 space-y-1.5">
+                    <Label className="text-xs">Second Mass (kg)</Label>
+                    <Input type="number" value={wbForm.second_mass} onChange={(e) => setWbForm({ ...wbForm, second_mass: e.target.value })} className="bg-white" />
+                  </div>
+
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Nett Mass (kg)</Label>
+                    <Input type="number" value={wbForm.nett_mass} onChange={(e) => setWbForm({ ...wbForm, nett_mass: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 space-y-1.5">
+                    <Label className="text-xs">Driver ID</Label>
+                    <Input value={wbForm.driver_id} onChange={(e) => setWbForm({ ...wbForm, driver_id: e.target.value })} className="bg-white" />
+                  </div>
+                  <div className="lg:col-span-4 flex items-end pb-1">
+                    <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-slate-300 bg-white">
+                      <input
+                        type="checkbox"
+                        id="wb_driver_signed"
+                        checked={wbForm.driver_signed}
+                        onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <Label htmlFor="wb_driver_signed" className="text-xs">Driver Signed</Label>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-12 space-y-1.5">
+                    <Label className="text-xs">Comment</Label>
+                    <Input value={wbForm.comment} onChange={(e) => setWbForm({ ...wbForm, comment: e.target.value })} placeholder="Optional comment..." className="bg-white" />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Additional notes or comments..."
-                rows={3}
-              />
-            </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Line Items</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Item
+                  </Button>
+                </div>
 
-            {/* Items Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">Line Items</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Item
-                </Button>
-              </div>
-
-              {items.map((item, index) => (
-                <Card key={index}>
-                  <CardContent className="pt-4">
-                    <div className="space-y-3">
+                {items.map((item, index) => (
+                  <Card key={index} className="border-slate-200">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="space-y-2">
                         <Label>Raw Material *</Label>
                         <Select
                           value={item.raw_material_id}
                           onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="bg-white">
                             <SelectValue placeholder="Select material" />
                           </SelectTrigger>
                           <SelectContent>
@@ -598,7 +619,7 @@ export default function GoodsReceivedPage() {
                         </Select>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-1.5">
                           <Label className="text-xs">Ordered Qty</Label>
                           <Input
@@ -606,6 +627,7 @@ export default function GoodsReceivedPage() {
                             value={item.ordered_qty}
                             onChange={(e) => updateItem(index, 'ordered_qty', Number(e.target.value))}
                             step="0.01"
+                            className="bg-white"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -615,6 +637,7 @@ export default function GoodsReceivedPage() {
                             value={item.received_qty}
                             onChange={(e) => updateItem(index, 'received_qty', Number(e.target.value))}
                             step="0.01"
+                            className="bg-white"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -624,16 +647,18 @@ export default function GoodsReceivedPage() {
                             value={item.unit_cost}
                             onChange={(e) => updateItem(index, 'unit_cost', Number(e.target.value))}
                             step="0.01"
+                            className="bg-white"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                           <Label className="text-xs">Batch Number</Label>
                           <Input
                             value={item.batch_number}
                             onChange={(e) => updateItem(index, 'batch_number', e.target.value)}
+                            className="bg-white"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -642,6 +667,7 @@ export default function GoodsReceivedPage() {
                             type="date"
                             value={item.expiry_date}
                             onChange={(e) => updateItem(index, 'expiry_date', e.target.value)}
+                            className="bg-white"
                           />
                         </div>
                       </div>
@@ -658,16 +684,14 @@ export default function GoodsReceivedPage() {
                           </Button>
                         </div>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
-
-          </div>
           </div>
 
-          <div className="shrink-0 flex justify-end space-x-2 pt-4 border-t">
+          <div className="shrink-0 flex justify-end gap-2 border-t bg-white px-5 py-3">
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
