@@ -22,18 +22,18 @@ import toast from 'react-hot-toast';
 
 interface GRNItem {
   raw_material_id: string;
-  ordered_qty: number;
-  received_qty: number;
-  unit_cost: number;
+  ordered_qty: number | '';
+  received_qty: number | '';
+  unit_cost: number | '';
   batch_number: string;
   expiry_date: string;
 }
 
 const emptyItem: GRNItem = {
   raw_material_id: '',
-  ordered_qty: 0,
-  received_qty: 0,
-  unit_cost: 0,
+  ordered_qty: '',
+  received_qty: '',
+  unit_cost: '',
   batch_number: '',
   expiry_date: '',
 };
@@ -179,9 +179,9 @@ export default function GoodsReceivedPage() {
       const grnItems = items.map(item => ({
         grn_id: grn.id,
         raw_material_id: item.raw_material_id,
-        ordered_qty: item.ordered_qty,
-        received_qty: item.received_qty,
-        unit_cost: item.unit_cost,
+        ordered_qty: Number(item.ordered_qty) || 0,
+        received_qty: Number(item.received_qty) || 0,
+        unit_cost: Number(item.unit_cost) || 0,
         batch_number: item.batch_number || null,
         expiry_date: item.expiry_date || null,
       }));
@@ -239,6 +239,12 @@ export default function GoodsReceivedPage() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
+  };
+
+  const parseLineItemNumber = (value: string): number | '' => {
+    if (value === '') return '';
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? '' : parsed;
   };
 
   const getStatusBadge = (status: string) => {
@@ -714,7 +720,7 @@ export default function GoodsReceivedPage() {
                           <Input
                             type="number"
                             value={item.ordered_qty}
-                            onChange={(e) => updateItem(index, 'ordered_qty', Number(e.target.value))}
+                            onChange={(e) => updateItem(index, 'ordered_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
                             className="bg-white"
                           />
@@ -724,7 +730,7 @@ export default function GoodsReceivedPage() {
                           <Input
                             type="number"
                             value={item.received_qty}
-                            onChange={(e) => updateItem(index, 'received_qty', Number(e.target.value))}
+                            onChange={(e) => updateItem(index, 'received_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
                             className="bg-white"
                           />
@@ -734,7 +740,7 @@ export default function GoodsReceivedPage() {
                           <Input
                             type="number"
                             value={item.unit_cost}
-                            onChange={(e) => updateItem(index, 'unit_cost', Number(e.target.value))}
+                            onChange={(e) => updateItem(index, 'unit_cost', parseLineItemNumber(e.target.value))}
                             step="0.01"
                             className="bg-white"
                           />
