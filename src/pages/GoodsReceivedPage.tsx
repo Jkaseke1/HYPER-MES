@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Truck, Warehouse, User, Hash, DollarSign, Scale, X } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -268,6 +268,10 @@ export default function GoodsReceivedPage() {
 
   const totalOrderedQty = items.reduce((sum, item) => sum + (Number(item.ordered_qty) || 0), 0);
   const totalReceivedQty = items.reduce((sum, item) => sum + (Number(item.received_qty) || 0), 0);
+  const totalReceivedValue = items.reduce(
+    (sum, item) => sum + (Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0),
+    0
+  );
   const wbNettMassValue = Number(wbForm.nett_mass || 0);
   const wbVariancePct = wbNettMassValue > 0 ? Math.abs((totalReceivedQty - wbNettMassValue) / wbNettMassValue) * 100 : 0;
 
@@ -407,10 +411,10 @@ export default function GoodsReceivedPage() {
             </button>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4 bg-slate-50/70">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-                <div className="xl:col-span-8 rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-slate-50 via-slate-50 to-emerald-50/40">
+            <div className="space-y-3 [&_input]:h-9 [&_[role='combobox']]:h-9 [&_textarea]:min-h-[84px]">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
+                <div className="xl:col-span-8 rounded-xl border border-slate-200 bg-white shadow-sm p-3 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-blue-600" />
@@ -418,7 +422,7 @@ export default function GoodsReceivedPage() {
                     </div>
                     <Badge variant="outline" className="text-[11px]">Core Details</Badge>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     <div className="space-y-1.5">
                       <Label htmlFor="supplier">Supplier *</Label>
                       <Select value={supplierId} onValueChange={setSupplierId}>
@@ -448,7 +452,7 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
 
-                <div className="xl:col-span-4 rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+                <div className="xl:col-span-4 rounded-xl border border-slate-200 bg-white shadow-sm p-3 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-slate-600" />
@@ -457,7 +461,7 @@ export default function GoodsReceivedPage() {
                     <Badge variant="secondary" className="text-[11px]">Auto</Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
                     <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                       <p className="text-slate-500">Ordered Qty</p>
                       <p className="font-semibold text-slate-800">{totalOrderedQty.toLocaleString()} kg</p>
@@ -492,8 +496,8 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-teal-200 bg-white shadow-sm p-4 space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-teal-100 pb-3">
+              <div className="rounded-xl border border-teal-200 bg-white shadow-sm p-3 space-y-3">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-teal-100 pb-2">
                   <div className="flex items-center gap-2">
                     <Scale className="w-4 h-4 text-teal-700" />
                     <h3 className="text-sm font-semibold text-slate-800">Weigh Bridge Ticket</h3>
@@ -502,7 +506,7 @@ export default function GoodsReceivedPage() {
                   <Badge variant="outline" className="text-[11px] border-teal-300 text-teal-700">Inbound Logistics</Badge>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1.5">
                   <Label className="text-xs text-slate-500">Link Existing Ticket</Label>
                   <div className="flex flex-col md:flex-row md:items-center gap-2">
                     <Select
@@ -565,10 +569,10 @@ export default function GoodsReceivedPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
+                  <div className="rounded-lg border border-slate-200 p-2.5 space-y-2.5">
                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Vehicle & Driver</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Ticket No</Label>
                         <Input value={wbForm.transaction_no} onChange={(e) => setWbForm({ ...wbForm, transaction_no: e.target.value })} placeholder="WB-001" className="bg-white" />
@@ -596,9 +600,9 @@ export default function GoodsReceivedPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                  <div className="rounded-lg border border-slate-200 p-2.5 space-y-2.5">
                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Weighing</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Product Code</Label>
                         <Input value={wbForm.product_code} onChange={(e) => setWbForm({ ...wbForm, product_code: e.target.value })} className="bg-white" />
@@ -644,23 +648,23 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-sm p-3 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
                   <div className="flex items-center gap-2">
                     <Warehouse className="w-4 h-4 text-indigo-600" />
                     <Label className="text-base font-semibold">Line Items</Label>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="bg-white border-indigo-200 hover:bg-indigo-50">
                     <Plus className="h-4 w-4 mr-1" />
                     Add Item
                   </Button>
                 </div>
 
                 {items.map((item, index) => (
-                  <Card key={index} className="border-slate-200 shadow-none">
-                    <CardContent className="pt-4 space-y-3">
+                  <Card key={index} className="border-indigo-100 bg-white/90 shadow-sm">
+                    <CardContent className="pt-3 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="text-[11px]">Item {index + 1}</Badge>
+                        <Badge variant="outline" className="text-[11px] border-indigo-200 text-indigo-700 bg-indigo-50">Item {index + 1}</Badge>
                         {items.length > 1 && (
                           <Button
                             type="button"
@@ -673,26 +677,38 @@ export default function GoodsReceivedPage() {
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Raw Material *</Label>
-                        <Select
-                          value={item.raw_material_id}
-                          onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
-                        >
-                          <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="Select material" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {materials.map((material) => (
-                              <SelectItem key={material.id} value={material.id}>
-                                {material.code} - {material.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
+                        <div className="lg:col-span-8 space-y-2">
+                          <Label>Raw Material *</Label>
+                          <Select
+                            value={item.raw_material_id}
+                            onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
+                          >
+                            <SelectTrigger className="bg-white">
+                              <SelectValue placeholder="Select material" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {materials.map((material) => (
+                                <SelectItem key={material.id} value={material.id}>
+                                  {material.code} - {material.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="lg:col-span-4 grid grid-cols-2 gap-1.5 text-xs">
+                          <div className="rounded-md border border-indigo-100 bg-indigo-50/60 px-2.5 py-2">
+                            <p className="text-slate-500">Received</p>
+                            <p className="font-semibold text-slate-800">{Number(item.received_qty || 0).toLocaleString()} kg</p>
+                          </div>
+                          <div className="rounded-md border border-indigo-100 bg-indigo-50/60 px-2.5 py-2">
+                            <p className="text-slate-500">Line Value</p>
+                            <p className="font-semibold text-slate-800">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</p>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
                         <div className="lg:col-span-3 space-y-1.5">
                           <Label className="text-xs">Ordered Qty</Label>
                           <Input
@@ -744,11 +760,19 @@ export default function GoodsReceivedPage() {
                     </CardContent>
                   </Card>
                 ))}
+
+                <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5 text-xs">
+                    <div className="text-slate-600">Total Ordered: <span className="font-semibold text-slate-800">{totalOrderedQty.toLocaleString()} kg</span></div>
+                    <div className="text-slate-600">Total Received: <span className="font-semibold text-slate-800">{totalReceivedQty.toLocaleString()} kg</span></div>
+                    <div className="text-slate-600">Estimated Value: <span className="font-semibold text-slate-800">${totalReceivedValue.toFixed(2)}</span></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="shrink-0 flex justify-end gap-2 border-t bg-white px-5 py-3">
+          <div className="shrink-0 flex justify-end gap-2 border-t bg-white px-4 py-2.5">
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
