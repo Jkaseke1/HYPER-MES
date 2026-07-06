@@ -411,10 +411,10 @@ export default function GoodsReceivedPage() {
             </button>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-slate-50 via-slate-50 to-emerald-50/40">
+          <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
             <div className="space-y-3 [&_input]:h-9 [&_[role='combobox']]:h-9 [&_textarea]:min-h-[84px]">
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-                <div className="xl:col-span-8 rounded-xl border border-slate-200 bg-white shadow-sm p-3 space-y-2.5">
+                <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-blue-600" />
@@ -452,7 +452,7 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
 
-                <div className="xl:col-span-4 rounded-xl border border-slate-200 bg-white shadow-sm p-3 space-y-2.5">
+                <div className="xl:col-span-4 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-slate-600" />
@@ -496,7 +496,7 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-teal-200 bg-white shadow-sm p-3 space-y-3">
+              <div className="rounded-xl border border-teal-300/60 bg-slate-50/95 shadow-sm p-3 space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-teal-100 pb-2">
                   <div className="flex items-center gap-2">
                     <Scale className="w-4 h-4 text-teal-700" />
@@ -661,7 +661,7 @@ export default function GoodsReceivedPage() {
                 </div>
 
                 {items.map((item, index) => (
-                  <Card key={index} className="border-indigo-100 bg-white/90 shadow-sm">
+                  <Card key={index} className="border-indigo-200/70 bg-slate-50/95 shadow-sm">
                     <CardContent className="pt-3 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <Badge variant="outline" className="text-[11px] border-indigo-200 text-indigo-700 bg-indigo-50">Item {index + 1}</Badge>
