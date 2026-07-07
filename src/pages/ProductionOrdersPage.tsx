@@ -384,67 +384,67 @@ export default function ProductionOrdersPage() {
     });
     setDetailTab('materials');
 
-    // Load job cards / operations
-    const { data: opsData } = await supabase
-      .from('production_operations')
-      .select('*, profiles!operator_id(full_name), machines(name)')
-      .eq('production_order_id', order.id)
-      .order('seq_no', { ascending: true });
+    // Fire all independent queries in parallel instead of sequentially awaiting each one
+    const [
+      { data: opsData },
+      { data },
+      { data: logData },
+      { data: downtimeData },
+      { data: rateRows },
+      { data: ohRow },
+      { data: fxRow },
+    ] = await Promise.all([
+      supabase
+        .from('production_operations')
+        .select('*, profiles!operator_id(full_name), machines(name)')
+        .eq('production_order_id', order.id)
+        .order('seq_no', { ascending: true }),
+      supabase
+        .from('production_order_materials')
+        .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
+        .eq('production_order_id', order.id),
+      supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true }),
+      supabase.from('production_order_downtime').select('*').eq('production_order_id', order.id).order('created_at', { ascending: true }),
+      order.formulation_id
+        ? supabase
+            .from('labour_rates')
+            .select('rate_per_tonne_usd')
+            .eq('formulation_id', order.formulation_id)
+            .order('effective_date', { ascending: false })
+            .limit(1)
+        : Promise.resolve({ data: null } as any),
+      supabase.from('cost_settings').select('value').eq('key', 'overhead_rate_percent').maybeSingle(),
+      supabase.from('usd_zig_rate_history').select('rate').order('effective_date', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
     setOperations(opsData || []);
-    
-    // Load materials with issuance status
-    const { data } = await supabase
-      .from('production_order_materials')
-      .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
-      .eq('production_order_id', order.id);
-    
+
     const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
-    await loadProductionFloorStock(mats.map((m) => m.raw_material_id).filter(Boolean));
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
-    
-    // Load BOM variances for completed orders
-    if (order.status === 'completed') {
-      await loadBomVariances(order.id);
-    }
-    
-    const { data: logData } = await supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true });
+
     setLogs((logData as ProductionLog[]) || []);
 
-    const { data: downtimeData } = await supabase.from('production_order_downtime').select('*').eq('production_order_id', order.id).order('created_at', { ascending: true });
     setDowntimeEntries(downtimeData || []);
     setDowntimeForm({ downtime_hours: '', category: 'Mechanical', reason: '' });
 
     // Resolve labour rate per tonne for this formulation (latest effective_date) + overhead %
     let ratePerTonne = 5.00;
-    if (order.formulation_id) {
-      const { data: rateRows } = await supabase
-        .from('labour_rates')
-        .select('rate_per_tonne_usd')
-        .eq('formulation_id', order.formulation_id)
-        .order('effective_date', { ascending: false })
-        .limit(1);
-      if (rateRows && rateRows.length > 0) ratePerTonne = Number(rateRows[0].rate_per_tonne_usd) || 5.00;
-    }
+    if (rateRows && rateRows.length > 0) ratePerTonne = Number(rateRows[0].rate_per_tonne_usd) || 5.00;
     setLabourRatePerTonne(ratePerTonne);
 
-    const { data: ohRow } = await supabase
-      .from('cost_settings')
-      .select('value')
-      .eq('key', 'overhead_rate_percent')
-      .maybeSingle();
     const ohPct = ohRow?.value != null ? Number(ohRow.value) : 5;
     setOverheadPct(ohPct);
 
     // Latest USD:ZiG FX rate for dual-currency display
-    const { data: fxRow } = await supabase
-      .from('usd_zig_rate_history')
-      .select('rate')
-      .order('effective_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
     setUsdZigRate(fxRow?.rate ? Number(fxRow.rate) : null);
+
+    // These depend on the materials list resolved above, so run after
+    await Promise.all([
+      loadProductionFloorStock(mats.map((m) => m.raw_material_id).filter(Boolean)),
+      order.status === 'completed' ? loadBomVariances(order.id) : Promise.resolve(),
+    ]);
 
     // Auto-seed Labour/Overhead if the order hasn't stored values yet (treat 0/null as unset)
     const actualTonnes = (order.actual_qty || 0) / 1000;

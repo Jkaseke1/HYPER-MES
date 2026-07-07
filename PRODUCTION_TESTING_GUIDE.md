@@ -82,14 +82,20 @@
 1. **Create Production Order**
    - Click "+ New Order"
    - Enter Batch Number (e.g., "BATCH-001")
-   - Select Production Plan (optional)
    - Select Formulation
-   - Select Machine
+   - Select Production Line (required)
    - Enter Planned Quantity (e.g., 1000 kg)
+   - Select Unit & Unit Size (Bag)
    - Set Priority
-   - Set Planned Start & End times
    - Select Operator
-   - Materials auto-populate from formulation
+   - Set Planned Start & End dates
+   - Select Production Plan (optional)
+   - Select Shift (Day/Night)
+   - Enter Operators (names, optional)
+   - Enter Labour Force (optional)
+   - Enter Week Number (optional)
+   - Add Notes (optional)
+   - Materials auto-populate from formulation (BOM Preview)
 
 2. **Issue Materials**
    - Find order in list (Status: PENDING)
