@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, DollarSign, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
 import type { DispatchOrder, DispatchItem, Branch, Warehouse, Formulation } from '../types/database';
 import Modal from '../components/ui/Modal';
+import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
@@ -301,111 +303,195 @@ export default function DispatchPage() {
         </table>
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Dispatch Order" size="xl">
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Dispatch #</label>
-              <input type="text" value={dispatchNumber || 'Auto-generated'} disabled className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500 cursor-not-allowed" />
-              <p className="text-xs text-slate-500 mt-1">System generated - cannot be edited</p>
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-[1200px] w-[98vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-[1200px] flex flex-col [&>button.absolute]:hidden">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Truck className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">Create Dispatch Order</h2>
+                  <p className="text-slate-400 text-xs">Schedule finished goods delivery and assign branch, vehicle and driver</p>
+                </div>
+              </div>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">Pending</span>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
-              <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-                <option value="">Select branch</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Warehouse</label>
-              <select value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-                <option value="">Select warehouse</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Dispatch Date</label>
-              <input type="date" value={form.dispatch_date} onChange={(e) => setForm({ ...form, dispatch_date: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            </div>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle Number</label>
-              <input value={form.vehicle_number} onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center shrink-0">
+                  <Scale className="w-4 h-4 text-teal-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Total Weight</p>
+                  <p className="mt-0.5 text-xl font-bold text-teal-900">{totalWeight.toLocaleString()} kg</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <DollarSign className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total Value</p>
+                  <p className="mt-0.5 text-xl font-bold text-blue-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-slate-500/10 flex items-center justify-center shrink-0">
+                  <Hash className="w-4 h-4 text-slate-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Items</p>
+                  <p className="mt-0.5 text-xl font-bold text-slate-900">{items.filter(i => i.formulation_id).length}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Driver Name</label>
-              <input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+
+            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-sm font-semibold text-slate-800">Dispatch Details</h3>
+                </div>
+                <Badge variant="outline" className="text-[11px]">Destination</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Dispatch #</label>
+                  <input type="text" value={dispatchNumber || 'Auto-generated'} disabled className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-100 text-slate-500 cursor-not-allowed" />
+                  <p className="text-[11px] text-slate-500 mt-0.5">System generated</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Branch *</label>
+                  <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                    <option value="">Select branch</option>
+                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Warehouse</label>
+                  <select value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Dispatch Date</label>
+                  <input type="date" value={form.dispatch_date} onChange={(e) => setForm({ ...form, dispatch_date: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Delivery Notes</label>
-              <input value={form.delivery_notes} onChange={(e) => setForm({ ...form, delivery_notes: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+
+            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-amber-600" />
+                  <h3 className="text-sm font-semibold text-slate-800">Transport Details</h3>
+                </div>
+                <Badge variant="outline" className="text-[11px]">Logistics</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Vehicle Number</label>
+                  <input value={form.vehicle_number} onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="e.g. ABC 1234" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Driver Name</label>
+                  <input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="e.g. John Doe" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Delivery Notes</label>
+                  <input value={form.delivery_notes} onChange={(e) => setForm({ ...form, delivery_notes: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="Special instructions..." />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-slate-800">Dispatch Items</h3>
+                </div>
+                <Badge variant="outline" className="text-[11px]">Finished Goods</Badge>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total'].map((h) => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold text-slate-600 text-xs">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-2 min-w-[220px]">
+                          <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                            <option value="">Select product</option>
+                            {formulations.map((f) => <option key={f.id} value={f.id}>{f.sage_code} — {f.name}</option>)}
+                          </select>
+                          {item.formulation_id && (
+                            <p className={`text-xs mt-1 font-semibold ${(stockBalances[item.formulation_id] ?? 0) > 0 ? 'text-teal-600' : 'text-amber-600'}`}>
+                              Available: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 min-w-[180px]">
+                          {batchNumbers[item.formulation_id]?.length ? (
+                            <select value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                              <option value="">Select batch</option>
+                              {batchNumbers[item.formulation_id].map((bn) => <option key={bn} value={bn}>{bn}</option>)}
+                            </select>
+                          ) : (
+                            <input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} placeholder="e.g. BATCH-2026-103" className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2"><input type="number" value={item.quantity || ''} onChange={(e) => updateItem(idx, 'quantity', +e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" /></td>
+                        <td className="px-3 py-2">
+                          <select value={item.unit} onChange={(e) => updateItem(idx, 'unit', e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                            {['kg', 'bags', 'tons'].map((u) => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-28 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" /></td>
+                        <td className="px-3 py-2 text-slate-700 font-medium">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-between items-center">
+                <button onClick={() => setItems([...items, { ...EMPTY_ITEM }])} className="flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </button>
+                <div className="flex gap-6 text-sm">
+                  <span className="text-slate-600">Total Weight: <strong className="text-slate-900">{totalWeight.toLocaleString()} kg</strong></span>
+                  <span className="text-slate-600">Total Value: <strong className="text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold text-slate-700">Dispatch Items</h4>
-              <button onClick={() => setItems([...items, { ...EMPTY_ITEM }])} className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"><Plus className="w-3.5 h-3.5" /> Add Item</button>
-            </div>
-            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-              <thead className="bg-slate-50">
-                <tr>
-                  {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total'].map((h) => (
-                    <th key={h} className="text-left px-3 py-2 font-medium text-slate-600 text-xs">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="px-3 py-1.5">
-                      <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
-                        <option value="">Select product</option>
-                        {formulations.map((f) => <option key={f.id} value={f.id}>{f.sage_code} — {f.name}</option>)}
-                      </select>
-                      {item.formulation_id && (
-                        <p className={`text-xs mt-0.5 font-semibold ${(stockBalances[item.formulation_id] ?? 0) > 0 ? 'text-teal-600' : 'text-amber-600'}`}>
-                          Available: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {batchNumbers[item.formulation_id]?.length ? (
-                        <select value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
-                          <option value="">Select batch</option>
-                          {batchNumbers[item.formulation_id].map((bn) => <option key={bn} value={bn}>{bn}</option>)}
-                        </select>
-                      ) : (
-                        <input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} placeholder="e.g. BATCH-2026-103" className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" />
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5"><input type="number" value={item.quantity || ''} onChange={(e) => updateItem(idx, 'quantity', +e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" /></td>
-                    <td className="px-3 py-1.5">
-                      <select value={item.unit} onChange={(e) => updateItem(idx, 'unit', e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500">
-                        {['kg', 'bags', 'tons'].map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-3 py-1.5"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" /></td>
-                    <td className="px-3 py-1.5 text-slate-600">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex justify-end gap-6 mt-3 text-sm">
-              <span className="text-slate-600">Total Weight: <strong className="text-slate-800">{totalWeight.toLocaleString()} kg</strong></span>
-              <span className="text-slate-600">Total Value: <strong className="text-slate-800">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
-            <button onClick={handleCreate} disabled={saving || !form.branch_id} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 rounded-b-lg flex justify-end gap-3">
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={handleCreate} disabled={saving || !form.branch_id} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+              <Truck className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save Dispatch'}
             </button>
           </div>
-        </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       <Modal open={!!viewOrder} onClose={() => setViewOrder(null)} title="Dispatch Details" size="xl">
         {viewOrder && (
