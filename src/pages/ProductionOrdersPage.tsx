@@ -1454,8 +1454,8 @@ export default function ProductionOrdersPage() {
                 <div className="flex items-center gap-2">
                   {selected.status === 'pending' && (
                     <button
-                      onClick={() => updateStatus('materials_issued')}
-                      disabled={saving || detailMaterials.length === 0 || !allIngredientsIssued()}
+                      onClick={() => (allIngredientsIssued() ? updateStatus('materials_issued') : bulkIssueMaterials())}
+                      disabled={saving || detailMaterials.length === 0 || (!allIngredientsIssued() && !allMaterialsAvailable())}
                       className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                       <Check className="w-4 h-4" />
