@@ -986,214 +986,251 @@ export default function ProductionOrdersPage() {
       </div>
 
       {/* Create Order Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Production Order" size="lg">
-        <div className="space-y-4">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Production Order" size="xl">
+        <div className="space-y-5">
           {workflowError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
               <div className="flex items-center gap-2 text-red-800">
                 <AlertCircle className="w-4 h-4" />
                 <span className="text-sm font-medium">{workflowError}</span>
               </div>
             </div>
           )}
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Batch Number</label>
-              <input
-                type="text"
-                value={form.batch_number}
-                onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
-                className={inputCls}
-                required
-              />
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Planned Output</p>
+              <p className="mt-1 text-xl font-bold text-teal-900">{Number(form.planned_qty || 0).toFixed(2)} kg</p>
             </div>
-            <div>
-              <label className={labelCls}>Formulation</label>
-              <select
-                value={form.formulation_id}
-                onChange={(e) => onFormulationChange(e.target.value)}
-                className={inputCls}
-                required
-              >
-                <option value="">Select formulation</option>
-                {formulations.map((f) => (
-                  <option key={f.id} value={f.id}>{f.code} - {f.name}</option>
-                ))}
-              </select>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Estimated Bags</p>
+              <p className="mt-1 text-xl font-bold text-blue-900">
+                {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 25) || 0)}
+              </p>
             </div>
-            <div>
-              <label className={labelCls}>Production Line *</label>
-              <select
-                value={form.machine_id}
-                onChange={(e) => setForm({ ...form, machine_id: e.target.value })}
-                className={`${inputCls} ${!form.machine_id ? 'border-red-300' : ''}`}
-                required
-              >
-                <option value="">Select production line (required)</option>
-                {productionLines.map((m) => (
-                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Planned Quantity</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.planned_qty}
-                onChange={(e) => setForm({ ...form, planned_qty: parseFloat(e.target.value) || 0 })}
-                className={inputCls}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Unit</label>
-              <select
-                value={form.unit}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                className={inputCls}
-              >
-                <option value="kg">Kilograms (kg)</option>
-                <option value="ton">Tonnes (ton)</option>
-                <option value="bags">Bags</option>
-                <option value="liters">Liters</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Unit Size (Bag)</label>
-              <select
-                value={form.unit_size}
-                onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
-                className={inputCls}
-              >
-                <option value="5">5 kg</option>
-                <option value="8">8 kg</option>
-                <option value="10">10 kg</option>
-                <option value="20">20 kg</option>
-                <option value="25">25 kg</option>
-                <option value="40">40 kg</option>
-                <option value="50">50 kg</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Priority</label>
-              <select
-                value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value as any })}
-                className={inputCls}
-              >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Planned Start Date</label>
-              <input
-                type="date"
-                value={form.planned_start}
-                onChange={(e) => setForm({ ...form, planned_start: e.target.value })}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Planned End Date</label>
-              <input
-                type="date"
-                value={form.planned_end}
-                onChange={(e) => setForm({ ...form, planned_end: e.target.value })}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Operator</label>
-              <select
-                value={form.operator_id}
-                onChange={(e) => setForm({ ...form, operator_id: e.target.value })}
-                className={inputCls}
-              >
-                <option value="">Select operator</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>{p.full_name || p.email}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Production Plan (Optional)</label>
-              <select
-                value={form.plan_id}
-                onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
-                className={inputCls}
-              >
-                <option value="">Select production plan</option>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>{plan.plan_number}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Shift</label>
-              <select
-                value={form.shift}
-                onChange={(e) => setForm({ ...form, shift: e.target.value })}
-                className={inputCls}
-              >
-                <option value="Day Shift">Day Shift</option>
-                <option value="Night Shift">Night Shift</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Operators</label>
-              <input
-                type="text"
-                value={form.operators}
-                onChange={(e) => setForm({ ...form, operators: e.target.value })}
-                className={inputCls}
-                placeholder="e.g. A. Muza / K. Saini"
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Labour Force</label>
-              <input
-                type="number"
-                min="0"
-                value={form.labour_force}
-                onChange={(e) => setForm({ ...form, labour_force: e.target.value })}
-                className={inputCls}
-                placeholder="e.g. 5"
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Week Number</label>
-              <input
-                type="number"
-                min="1"
-                max="53"
-                value={form.week_number}
-                onChange={(e) => setForm({ ...form, week_number: e.target.value })}
-                className={inputCls}
-                placeholder="e.g. 15"
-              />
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">BOM Ingredients</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">{bomPreview.length}</p>
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Notes</label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className={inputCls}
-              rows={3}
-              placeholder="Add any notes or special instructions..."
-            />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">Order Setup</h3>
+              <span className="text-xs text-slate-500">Core batch details</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Batch Number</label>
+                <input
+                  type="text"
+                  value={form.batch_number}
+                  onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
+                  className={inputCls}
+                  required
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Formulation</label>
+                <select
+                  value={form.formulation_id}
+                  onChange={(e) => onFormulationChange(e.target.value)}
+                  className={inputCls}
+                  required
+                >
+                  <option value="">Select formulation</option>
+                  {formulations.map((f) => (
+                    <option key={f.id} value={f.id}>{f.code} - {f.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Production Line *</label>
+                <select
+                  value={form.machine_id}
+                  onChange={(e) => setForm({ ...form, machine_id: e.target.value })}
+                  className={`${inputCls} ${!form.machine_id ? 'border-red-300' : ''}`}
+                  required
+                >
+                  <option value="">Select production line (required)</option>
+                  {productionLines.map((m) => (
+                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Planned Quantity</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.planned_qty}
+                  onChange={(e) => setForm({ ...form, planned_qty: parseFloat(e.target.value) || 0 })}
+                  className={inputCls}
+                  required
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Unit</label>
+                <select
+                  value={form.unit}
+                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="kg">Kilograms (kg)</option>
+                  <option value="ton">Tonnes (ton)</option>
+                  <option value="bags">Bags</option>
+                  <option value="liters">Liters</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Unit Size (Bag)</label>
+                <select
+                  value={form.unit_size}
+                  onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="5">5 kg</option>
+                  <option value="8">8 kg</option>
+                  <option value="10">10 kg</option>
+                  <option value="20">20 kg</option>
+                  <option value="25">25 kg</option>
+                  <option value="40">40 kg</option>
+                  <option value="50">50 kg</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">Scheduling & Workforce</h3>
+              <span className="text-xs text-slate-500">Dates, shift and team</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Priority</label>
+                <select
+                  value={form.priority}
+                  onChange={(e) => setForm({ ...form, priority: e.target.value as any })}
+                  className={inputCls}
+                >
+                  <option value="low">Low</option>
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Operator</label>
+                <select
+                  value={form.operator_id}
+                  onChange={(e) => setForm({ ...form, operator_id: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Select operator</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.full_name || p.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Planned Start Date</label>
+                <input
+                  type="date"
+                  value={form.planned_start}
+                  onChange={(e) => setForm({ ...form, planned_start: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Planned End Date</label>
+                <input
+                  type="date"
+                  value={form.planned_end}
+                  onChange={(e) => setForm({ ...form, planned_end: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Production Plan (Optional)</label>
+                <select
+                  value={form.plan_id}
+                  onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Select production plan</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>{plan.plan_number}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Shift</label>
+                <select
+                  value={form.shift}
+                  onChange={(e) => setForm({ ...form, shift: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="Day Shift">Day Shift</option>
+                  <option value="Night Shift">Night Shift</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Operators</label>
+                <input
+                  type="text"
+                  value={form.operators}
+                  onChange={(e) => setForm({ ...form, operators: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. A. Muza / K. Saini"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Labour Force</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.labour_force}
+                  onChange={(e) => setForm({ ...form, labour_force: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. 5"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Week Number</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="53"
+                  value={form.week_number}
+                  onChange={(e) => setForm({ ...form, week_number: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. 15"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelCls}>Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                className={inputCls}
+                rows={3}
+                placeholder="Add any notes or special instructions..."
+              />
+            </div>
           </div>
 
           {bomPreview.length > 0 && selectedFormulation && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">BOM Preview — Scaled to Planned Quantity</h3>
-              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
+                <span className="text-xs text-slate-500">{selectedFormulation.code} · {selectedFormulation.name}</span>
+              </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                 <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-teal-50 sticky top-0">
@@ -1240,7 +1277,7 @@ export default function ProductionOrdersPage() {
               </div>
               
               {/* Summary Stats */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {(() => {
                   const totalCost = bomPreview.reduce((sum: number, ing: any) => {
                     const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;

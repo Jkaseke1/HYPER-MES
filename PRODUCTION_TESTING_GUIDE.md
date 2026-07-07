@@ -1,25 +1,11 @@
 # Production & Manufacturing Testing Guide
-
-**Production URL:** https://jkaseke1.github.io/HYPER-MES/
-
-## Test User Credentials
-
-| Role | Username | Password | Responsibilities |
-|------|----------|----------|------------------|
-| Production Manager | `prod_mgr@hyperfeeds.com` | `Test123!` | Create plans, formulations, approve orders |
-| Supervisor | `supervisor@hyperfeeds.com` | `Test123!` | Monitor production, approve batches |
-| Warehouse Manager | `warehouse_mgr@hyperfeeds.com` | `Test123!` | Issue materials, receive finished goods |
-| Operator | `operator@hyperfeeds.com` | `Test123!` | Execute production, record outputs |
-
----
-
 ## Module 1: Formulations (Bill of Materials)
 
 **Who:** Production Manager  
 **Navigate to:** Formulations
 
 ### Test Steps:
-1. **Create New Formulation**
+1. **Create New Formulation** SKIP TO PRODUCTION PLAN IF THERE ARE EXISTING FORMULAS
    - Click "+ New Formulation"
    - Enter Name (e.g., "Broiler Starter 22%")
    - Enter Code (e.g., "FORM-BS-001")
