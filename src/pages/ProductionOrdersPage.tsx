@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
-import Modal from '../components/ui/Modal';
 import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
@@ -185,8 +185,8 @@ export default function ProductionOrdersPage() {
     setWorkflowError(null);
     setShowCreate(true); 
   };
-  const inputCls = 'w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500';
-  const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
+  const inputCls = 'w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
+  const labelCls = 'block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5';
 
   // Load BOM ingredients when formulation changes (Issue 1)
   const onFormulationChange = async (fid: string) => {
@@ -1021,26 +1021,44 @@ export default function ProductionOrdersPage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Planned Output</p>
-              <p className="mt-1 text-xl font-bold text-teal-900">{Number(form.planned_qty || 0).toFixed(2)} kg</p>
+            <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center shrink-0">
+                <Package className="w-4 h-4 text-teal-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Planned Output</p>
+                <p className="mt-0.5 text-xl font-bold text-teal-900">{Number(form.planned_qty || 0).toFixed(2)} kg</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Estimated Bags</p>
-              <p className="mt-1 text-xl font-bold text-blue-900">
-                {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 25) || 0)}
-              </p>
+            <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                <Layers className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Estimated Bags</p>
+                <p className="mt-0.5 text-xl font-bold text-blue-900">
+                  {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 25) || 0)}
+                </p>
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">BOM Ingredients</p>
-              <p className="mt-1 text-xl font-bold text-slate-900">{bomPreview.length}</p>
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-slate-500/10 flex items-center justify-center shrink-0">
+                <ClipboardList className="w-4 h-4 text-slate-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">BOM Ingredients</p>
+                <p className="mt-0.5 text-xl font-bold text-slate-900">{bomPreview.length}</p>
+              </div>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-800">Order Setup</h3>
-              <span className="text-xs text-slate-500">Core batch details</span>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-semibold text-slate-800">Order Setup</h3>
+              </div>
+              <Badge variant="outline" className="text-[11px]">Core Details</Badge>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1126,9 +1144,12 @@ export default function ProductionOrdersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-800">Scheduling & Workforce</h3>
-              <span className="text-xs text-slate-500">Dates, shift and team</span>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-slate-800">Scheduling & Workforce</h3>
+              </div>
+              <Badge variant="outline" className="text-[11px]">Dates, Shift & Team</Badge>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1249,9 +1270,12 @@ export default function ProductionOrdersPage() {
 
           {bomPreview.length > 0 && selectedFormulation && (
             <div className="space-y-3 rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
-                <span className="text-xs text-slate-500">{selectedFormulation.code} · {selectedFormulation.name}</span>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
+                </div>
+                <Badge variant="outline" className="text-[11px] border-teal-300 text-teal-700">{selectedFormulation.code} · {selectedFormulation.name}</Badge>
               </div>
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                 <div className="overflow-x-auto max-h-96 overflow-y-auto">
