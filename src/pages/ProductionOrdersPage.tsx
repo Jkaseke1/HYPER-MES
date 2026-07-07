@@ -986,8 +986,31 @@ export default function ProductionOrdersPage() {
       </div>
 
       {/* Create Order Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Production Order" size="xl">
-        <div className="space-y-5">
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Factory className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">Create Production Order</h2>
+                  <p className="text-slate-400 text-xs">Set up batch details, scheduling and review the BOM before submitting</p>
+                </div>
+              </div>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">Draft</span>
+            </div>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 space-y-4">
           {workflowError && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
               <div className="flex items-center gap-2 text-red-800">
@@ -1014,13 +1037,13 @@ export default function ProductionOrdersPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+          <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-800">Order Setup</h3>
               <span className="text-xs text-slate-500">Core batch details</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className={labelCls}>Batch Number</label>
                 <input
@@ -1102,13 +1125,13 @@ export default function ProductionOrdersPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+          <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-800">Scheduling & Workforce</h3>
               <span className="text-xs text-slate-500">Dates, shift and team</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className={labelCls}>Priority</label>
                 <select
@@ -1225,7 +1248,7 @@ export default function ProductionOrdersPage() {
           </div>
 
           {bomPreview.length > 0 && selectedFormulation && (
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="space-y-3 rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
                 <span className="text-xs text-slate-500">{selectedFormulation.code} · {selectedFormulation.name}</span>
@@ -1309,8 +1332,9 @@ export default function ProductionOrdersPage() {
               </div>
             </div>
           )}
+          </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+          <div className="shrink-0 flex justify-end gap-2 border-t bg-white px-5 py-3">
             <button
               onClick={() => setShowCreate(false)}
               className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -1325,8 +1349,8 @@ export default function ProductionOrdersPage() {
               {saving ? 'Creating...' : 'Create Order'}
             </button>
           </div>
-        </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Order Detail Modal - Redesigned wider layout */}
       <Dialog open={showDetail} onOpenChange={() => setShowDetail(false)}>
