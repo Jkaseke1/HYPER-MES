@@ -38,7 +38,7 @@ CREATE POLICY "Finance can create price approvals"
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-      AND profiles.role = 'finance'
+      AND (profiles.role = 'finance' OR profiles.role = 'admin')
     )
   );
 
@@ -50,7 +50,7 @@ CREATE POLICY "Finance can update price approvals"
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-      AND profiles.role = 'finance'
+      AND (profiles.role = 'finance' OR profiles.role = 'admin')
     )
   );
 
