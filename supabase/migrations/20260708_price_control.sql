@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS price_approvals (
 -- Add RLS policies
 ALTER TABLE price_approvals ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Authenticated users can view price approvals" ON price_approvals;
+DROP POLICY IF EXISTS "Finance can create price approvals" ON price_approvals;
+DROP POLICY IF EXISTS "Finance can update price approvals" ON price_approvals;
+
 -- Allow authenticated users to read price approvals
 CREATE POLICY "Authenticated users can view price approvals"
   ON price_approvals FOR SELECT
@@ -88,14 +93,14 @@ SELECT
   pb.actual_qty,
   pb.actual_end AS completion_date,
   pb.price_approval_status,
-  pb.cost_per_unit,
   pa.id AS price_approval_id,
   pa.unit_price_usd,
   pa.unit_price_zig,
   pa.status AS approval_status,
   pa.approved_by,
   pa.approved_at,
-  pa.notes
+  pa.notes,
+  pb.cost_per_unit
 FROM production_orders pb
 JOIN formulations f ON pb.formulation_id = f.id
 LEFT JOIN price_approvals pa ON pa.batch_id = pb.id
