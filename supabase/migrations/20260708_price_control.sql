@@ -79,7 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_price_approvals_formulation_id ON price_approvals
 
 -- View: Completed batches pending price approval
 CREATE OR REPLACE VIEW completed_batches_pending_price_approval AS
-SELECT 
+SELECT
   pb.id,
   pb.batch_number,
   pb.formulation_id,
@@ -88,6 +88,7 @@ SELECT
   pb.actual_qty,
   pb.actual_end AS completion_date,
   pb.price_approval_status,
+  pb.cost_per_unit,
   pa.id AS price_approval_id,
   pa.unit_price_usd,
   pa.unit_price_zig,

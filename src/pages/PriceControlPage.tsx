@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, Check, X, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
 
 type Tab = 'pending' | 'approved' | 'rejected';
@@ -51,21 +51,7 @@ export default function PriceControlPage() {
       return;
     }
 
-    // Fetch production orders to get cost per unit
-    const batchIds = data?.map(b => b.id) || [];
-    const { data: productionOrders } = await supabase
-      .from('production_orders')
-      .select('id, cost_per_unit')
-      .in('id', batchIds);
-
-    const costMap = new Map(productionOrders?.map(po => [po.id, po.cost_per_unit]) || []);
-
-    const enrichedData = (data || []).map(b => ({
-      ...b,
-      cost_per_unit: costMap.get(b.id) || 0,
-    })) as BatchWithPriceApproval[];
-
-    setBatches(enrichedData);
+    setBatches(data as BatchWithPriceApproval[]);
   }, []);
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
@@ -345,6 +331,10 @@ export default function PriceControlPage() {
 
       <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
         <DialogContent className="max-w-2xl">
+          <DialogTitle>Price Approval</DialogTitle>
+          <DialogDescription>
+            Set and approve unit prices for {selectedBatch?.batch_number} - {selectedBatch?.formulation_name}
+          </DialogDescription>
           {selectedBatch && (
             <div className="space-y-6">
               <div>
