@@ -101,6 +101,22 @@ export default function DispatchPage() {
   const handleCreate = async () => {
     setSaving(true);
     try {
+      // Validate that all batches have approved prices
+      const batchNumbers = items.filter((i) => i.batch_number).map((i) => i.batch_number);
+      if (batchNumbers.length > 0) {
+        const { data: batches } = await supabase
+          .from('production_orders')
+          .select('id, batch_number, price_approval_status')
+          .in('batch_number', batchNumbers);
+
+        const unapprovedBatches = batches?.filter(b => b.price_approval_status !== 'approved') || [];
+        if (unapprovedBatches.length > 0) {
+          alert(`Cannot create dispatch: The following batches do not have approved prices:\n${unapprovedBatches.map(b => b.batch_number).join(', ')}\n\nPlease approve prices in Price Control before dispatching.`);
+          setSaving(false);
+          return;
+        }
+      }
+
       const generatedNumber = await generateDispatchNumber();
       const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: totalValue }).select().single();
       if (!error && data) {

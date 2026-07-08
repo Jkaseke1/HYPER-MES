@@ -59,6 +59,7 @@ const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
 const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
 const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
 const PaymentHistoryPage = lazy(() => import('./pages/payroll/PaymentHistoryPage'));
+const PriceControlPage = lazy(() => import('./pages/PriceControlPage'));
 
 function PageLoader() {
   return (
@@ -139,6 +140,7 @@ function AppRoutes() {
           <Route path="/macropack" element={<MacropackManufacturingPage />} />
           <Route path="/warehouse" element={<WarehousePage />} />
           <Route path="/dispatch" element={<DispatchPage />} />
+          <Route path="/price-control" element={<PriceControlPage />} />
           <Route path="/reconciliation" element={<ReconciliationPage />} />
           <Route path="/reports/rm-reconciliation" element={<MonthlyRMReconciliationPage />} />
           <Route path="/admin/sync-log" element={<SyncLogPage />} />

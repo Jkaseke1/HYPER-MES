@@ -345,3 +345,17 @@ export interface DispatchItem {
   created_at: string;
   formulations?: Formulation;
 }
+
+export interface PriceApproval {
+  id: string;
+  batch_id: string;
+  formulation_id: string;
+  unit_price_usd: number;
+  unit_price_zig: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}

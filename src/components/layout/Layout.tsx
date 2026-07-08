@@ -19,6 +19,7 @@ const pageTitles: Record<string, string> = {
   '/macropack': 'Macropack Manufacturing',
   '/warehouse': 'Warehouse Management',
   '/dispatch': 'Dispatch Management',
+  '/price-control': 'Price Control',
   '/reconciliation': 'Material Reconciliation',
   '/reports/rm-reconciliation': 'Monthly RM Reconciliation',
   '/reports/gross-margin': 'Gross Margin Report',
