@@ -63,6 +63,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_price_approvals_updated_at ON price_approvals;
+
 CREATE TRIGGER update_price_approvals_updated_at
   BEFORE UPDATE ON price_approvals
   FOR EACH ROW
