@@ -285,17 +285,17 @@ export default function PriceControlPage() {
                     {batch.actual_qty.toLocaleString()} kg
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${batch.cost_per_unit.toFixed(2)}
+                    ${batch.cost_per_unit ? batch.cost_per_unit.toFixed(2) : '-'}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${batch.unit_price_usd.toFixed(2)}
+                    ${batch.unit_price_usd ? batch.unit_price_usd.toFixed(2) : '-'}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                    Z${batch.unit_price_zig.toFixed(2)}
+                    Z${batch.unit_price_zig ? batch.unit_price_zig.toFixed(2) : '-'}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      {batch.unit_price_usd > 0 ? (
+                      {batch.unit_price_usd && batch.cost_per_unit ? (
                         <span className={`text-sm font-medium ${
                           calculateMargin(batch.unit_price_usd, batch.cost_per_unit) >= 0
                             ? 'text-green-600'
@@ -357,7 +357,7 @@ export default function PriceControlPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="text-sm text-gray-600">Production Cost</div>
-                  <div className="text-2xl font-bold text-gray-900">${selectedBatch.cost_per_unit.toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-gray-900">${selectedBatch.cost_per_unit ? selectedBatch.cost_per_unit.toFixed(2) : '-'}</div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="text-sm text-gray-600">Quantity</div>
