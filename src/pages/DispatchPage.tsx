@@ -101,22 +101,6 @@ export default function DispatchPage() {
   const handleCreate = async () => {
     setSaving(true);
     try {
-      // Validate that all batches have approved prices
-      const batchNumbers = items.filter((i) => i.batch_number).map((i) => i.batch_number);
-      if (batchNumbers.length > 0) {
-        const { data: batches } = await supabase
-          .from('production_orders')
-          .select('id, batch_number, price_approval_status')
-          .in('batch_number', batchNumbers);
-
-        const unapprovedBatches = batches?.filter(b => b.price_approval_status !== 'approved') || [];
-        if (unapprovedBatches.length > 0) {
-          alert(`Cannot create dispatch: The following batches do not have approved prices:\n${unapprovedBatches.map(b => b.batch_number).join(', ')}\n\nPlease approve prices in Price Control before dispatching.`);
-          setSaving(false);
-          return;
-        }
-      }
-
       const generatedNumber = await generateDispatchNumber();
       const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: totalValue }).select().single();
       if (!error && data) {
@@ -445,7 +429,7 @@ export default function DispatchPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-100">
                     <tr>
-                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total'].map((h) => (
+                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total', 'Stock Movement'].map((h) => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-slate-600 text-xs">{h}</th>
                       ))}
                     </tr>
@@ -482,6 +466,14 @@ export default function DispatchPage() {
                         </td>
                         <td className="px-3 py-2"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-28 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" /></td>
                         <td className="px-3 py-2 text-slate-700 font-medium">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 min-w-[150px]">
+                          {item.formulation_id && item.quantity > 0 && (
+                            <div className="text-xs">
+                              <div className="text-slate-600">Current: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}</div>
+                              <div className="text-amber-600">After: {stockBalances[item.formulation_id] !== undefined ? `${(stockBalances[item.formulation_id] - item.quantity).toLocaleString()} kg` : '…'}</div>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
