@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useAuth } from '../context/AuthContext';
 
 type Tab = 'pending' | 'approved' | 'rejected';
 const TABS: { key: Tab; label: string }[] = [
@@ -32,6 +33,7 @@ interface BatchWithPriceApproval {
 }
 
 export default function PriceControlPage() {
+  const { profile } = useAuth();
   const [batches, setBatches] = useState<BatchWithPriceApproval[]>([]);
   const [tab, setTab] = useState<Tab>('pending');
   const [search, setSearch] = useState('');
@@ -68,6 +70,13 @@ export default function PriceControlPage() {
 
   const handleApprove = async () => {
     if (!selectedBatch) return;
+
+    // Check if user has finance role
+    if (profile?.role !== 'finance' && profile?.role !== 'admin') {
+      alert('Only finance users can approve prices.');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -106,9 +115,9 @@ export default function PriceControlPage() {
 
         if (approvalError) throw approvalError;
 
-        // Update production batch
+        // Update production order
         const { error: batchError } = await supabase
-          .from('production_batches')
+          .from('production_orders')
           .update({
             price_approval_status: 'approved',
             price_approval_id: approvalData.id,
@@ -130,6 +139,13 @@ export default function PriceControlPage() {
 
   const handleReject = async () => {
     if (!selectedBatch) return;
+
+    // Check if user has finance role
+    if (profile?.role !== 'finance' && profile?.role !== 'admin') {
+      alert('Only finance users can reject prices.');
+      return;
+    }
+
     setSaving(true);
 
     try {
