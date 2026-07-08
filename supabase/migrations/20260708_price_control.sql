@@ -84,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_price_approvals_batch_id ON price_approvals(batch
 CREATE INDEX IF NOT EXISTS idx_price_approvals_status ON price_approvals(status);
 CREATE INDEX IF NOT EXISTS idx_price_approvals_formulation_id ON price_approvals(formulation_id);
 
--- View: Completed batches pending price approval
+-- View: Completed batches for price approval (all statuses)
 CREATE OR REPLACE VIEW completed_batches_pending_price_approval AS
 SELECT
   pb.id,
@@ -107,7 +107,6 @@ FROM production_orders pb
 JOIN formulations f ON pb.formulation_id = f.id
 LEFT JOIN price_approvals pa ON pa.batch_id = pb.id
 WHERE pb.status = 'completed'
-AND (pb.price_approval_status = 'pending' OR pb.price_approval_status IS NULL)
 ORDER BY pb.actual_end DESC;
 
 -- Grant access to the view
