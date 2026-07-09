@@ -830,6 +830,13 @@ export default function ProductionOrdersPage() {
     setShowEditQty(true);
   };
 
+  // Refresh Sage stock balances for current order
+  const refreshSageStock = async () => {
+    if (!selected || detailMaterials.length === 0) return;
+    const materialIds = detailMaterials.map(m => m.raw_material_id);
+    await loadSageStockBalances(materialIds);
+  };
+
   /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {
     if (!selected) return;
@@ -1663,24 +1670,39 @@ export default function ProductionOrdersPage() {
 
               {/* Tabs */}
               <div className="border-b border-slate-200 bg-white px-4">
-                <div className="flex gap-1">
-                  {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-1">
+                    {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          setDetailTab(t);
+                          if (t === 'materials') refreshSageStock();
+                        }}
+                        className={`py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
+                          detailTab === t
+                            ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                            : 'border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                        disabled={t === 'variance' && selected?.status !== 'completed'}
+                      >
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                        {t === 'variance' && selected?.status !== 'completed' && (
+                          <span className="ml-1 text-xs text-slate-400">(Done)</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {detailTab === 'materials' && (
                     <button
-                      key={t}
-                      onClick={() => setDetailTab(t)}
-                      className={`py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
-                        detailTab === t
-                          ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                          : 'border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-                      }`}
-                      disabled={t === 'variance' && selected?.status !== 'completed'}
+                      onClick={refreshSageStock}
+                      disabled={saving}
+                      className="text-xs font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
                     >
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                      {t === 'variance' && selected?.status !== 'completed' && (
-                        <span className="ml-1 text-xs text-slate-400">(Done)</span>
-                      )}
+                      <Clock className="w-3 h-3" />
+                      Refresh Sage Stock
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
 
