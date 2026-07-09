@@ -791,6 +791,25 @@ export default function ProductionOrdersPage() {
 
       await Promise.all(updatePromises);
       
+      // Reload the order detail to show updated BOM quantities
+      const { data: updatedOrder } = await supabase
+        .from('production_orders')
+        .select('*, formulations(*), machines(*), profiles(*)')
+        .eq('id', selected.id)
+        .single();
+      
+      if (updatedOrder) {
+        setSelected(updatedOrder);
+        // Reload materials with updated quantities
+        const { data: updatedMaterials } = await supabase
+          .from('production_order_materials')
+          .select('*, raw_materials(*)')
+          .eq('production_order_id', selected.id);
+        if (updatedMaterials) {
+          setDetailMaterials(normalizeRawMaterials(updatedMaterials));
+        }
+      }
+      
       setShowEditQty(false);
       await fetchOrders();
       setSaving(false);
