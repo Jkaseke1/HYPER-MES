@@ -703,7 +703,11 @@ export default function ProductionOrdersPage() {
     
     setSaving(true);
     try {
-      // Check stock availability first
+      // Refresh Sage stock balances in real-time before checking availability
+      const materialIds = detailMaterials.map(m => m.raw_material_id);
+      await loadSageStockBalances(materialIds);
+
+      // Check stock availability first with fresh Sage data
       if (!allMaterialsAvailable()) {
         const insufficient = getInsufficientMaterials();
         const insufficientList = insufficient.map(m => 
