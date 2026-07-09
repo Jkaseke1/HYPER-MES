@@ -81,7 +81,32 @@ export default function WeighBridgePage() {
     setLoading(false);
   }
 
+  async function generateNextTicketNo() {
+    const year = new Date().getFullYear();
+    const { data, error } = await supabase
+      .from('weigh_bridge_tickets')
+      .select('ticket_no')
+      .like('ticket_no', `WB-${year}-%`)
+      .order('ticket_no', { ascending: false })
+      .limit(1);
+    
+    if (error || !data || data.length === 0) {
+      return `WB-${year}-001`;
+    }
+    
+    const lastTicketNo = data[0].ticket_no;
+    const lastSeq = parseInt(lastTicketNo.split('-')[2] || '0');
+    const nextSeq = String(lastSeq + 1).padStart(3, '0');
+    return `WB-${year}-${nextSeq}`;
+  }
+
   useEffect(() => { fetchTickets(); }, []);
+
+  async function openNewTicketModal() {
+    const nextTicketNo = await generateNextTicketNo();
+    setForm({ ...emptyWBForm, wb_transaction_no: nextTicketNo });
+    setNewOpen(true);
+  }
 
   function handleFormChange(field: string, value: any) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -154,7 +179,7 @@ export default function WeighBridgePage() {
           <p className="text-sm text-slate-500 mt-1">Record vehicle weighing before creating a GRN</p>
         </div>
         <button
-          onClick={() => { setForm(emptyWBForm); setNewOpen(true); }}
+          onClick={openNewTicketModal}
           className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
