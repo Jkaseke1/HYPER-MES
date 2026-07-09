@@ -94,10 +94,12 @@ export default function ProductionOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [showEditQty, setShowEditQty] = useState(false);
   const [selected, setSelected] = useState<ProductionOrder | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
+  const [editQtyForm, setEditQtyForm] = useState({ planned_qty: 0 });
   const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ProductionLog[]>([]);
@@ -748,6 +750,61 @@ export default function ProductionOrdersPage() {
       setWorkflowError(`Failed to issue materials: ${error.message}`);
       setSaving(false);
     }
+  };
+
+  // Edit production quantity and recalculate BOM
+  const handleEditQuantity = async () => {
+    if (!selected) return;
+    const newQty = editQtyForm.planned_qty;
+    if (newQty <= 0) {
+      setWorkflowError('Quantity must be greater than 0');
+      return;
+    }
+    if (newQty === selected.planned_qty) {
+      setShowEditQty(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const ratio = newQty / selected.planned_qty;
+      
+      // Update production order
+      const { error: orderError } = await supabase
+        .from('production_orders')
+        .update({ planned_qty: newQty })
+        .eq('id', selected.id);
+      
+      if (orderError) throw orderError;
+
+      // Recalculate BOM quantities proportionally
+      const updatePromises = detailMaterials.map(material => {
+        const newPlannedQty = Math.round(material.planned_qty * ratio * 100) / 100;
+        return supabase
+          .from('production_order_materials')
+          .update({ 
+            planned_qty: newPlannedQty,
+            total_cost: newPlannedQty * (material.unit_cost || 0)
+          })
+          .eq('id', material.id);
+      });
+
+      await Promise.all(updatePromises);
+      
+      setShowEditQty(false);
+      await fetchOrders();
+      setSaving(false);
+    } catch (error: any) {
+      console.error('Error editing quantity:', error);
+      setWorkflowError(`Failed to update quantity: ${error.message}`);
+      setSaving(false);
+    }
+  };
+
+  const openEditQtyModal = () => {
+    if (!selected) return;
+    setEditQtyForm({ planned_qty: selected.planned_qty });
+    setShowEditQty(true);
   };
 
   /* ── Production completion with packaging ── */
@@ -1412,6 +1469,45 @@ export default function ProductionOrdersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Quantity Modal */}
+      <Dialog open={showEditQty} onOpenChange={setShowEditQty}>
+        <DialogContent className="max-w-md">
+          <h3 className="text-lg font-semibold mb-4">Edit Production Quantity</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Current Quantity</label>
+              <div className="text-lg font-bold text-slate-800">{selected?.planned_qty?.toLocaleString()} kg</div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">New Quantity (kg)</label>
+              <input
+                type="number"
+                value={editQtyForm.planned_qty}
+                onChange={(e) => setEditQtyForm({ planned_qty: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                min="1"
+              />
+              <p className="text-xs text-slate-500 mt-1">BOM quantities will be recalculated proportionally</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <button
+              onClick={() => setShowEditQty(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleEditQuantity}
+              disabled={saving}
+              className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50"
+            >
+              {saving ? 'Updating...' : 'Update Quantity'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Order Detail Modal - Redesigned wider layout */}
       <Dialog open={showDetail} onOpenChange={() => setShowDetail(false)}>
         <DialogContent className="max-w-[1200px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1200px] [&>button.absolute]:hidden">
@@ -1521,14 +1617,24 @@ export default function ProductionOrdersPage() {
                   <span className="text-xs text-slate-400 ml-2">Pending → Materials Issued → In Progress → Completed</span>
                 </div>
                 {selected.status === 'pending' && (
-                  <button
-                    onClick={() => deleteOrder(selected)}
-                    disabled={saving}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
+                  <>
+                    <button
+                      onClick={openEditQtyModal}
+                      disabled={saving}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Edit Qty
+                    </button>
+                    <button
+                      onClick={() => deleteOrder(selected)}
+                      disabled={saving}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  </>
                 )}
               </div>
 
