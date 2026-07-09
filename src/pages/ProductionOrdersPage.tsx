@@ -99,6 +99,7 @@ export default function ProductionOrdersPage() {
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
+  const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ProductionLog[]>([]);
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs' | 'operations'>('materials');
   const [operations, setOperations] = useState<any[]>([]);
@@ -358,7 +359,38 @@ export default function ProductionOrdersPage() {
     setProductionFloorStock(stockMap);
   };
 
+  const loadSageStockBalances = async (materialIds: string[]) => {
+    if (!materialIds.length) {
+      setSageStockBalances({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('sage_stock_balances')
+      .select('raw_material_id, quantity')
+      .eq('warehouse_id', 18) // Raw Materials warehouse in Sage
+      .in('raw_material_id', materialIds);
+
+    if (error) {
+      console.error('Error loading Sage stock balances:', error);
+      return;
+    }
+
+    const stockMap: Record<string, number> = {};
+    for (const row of data || []) {
+      const materialId = (row as any).raw_material_id;
+      const quantity = Number((row as any).quantity || 0);
+      stockMap[materialId] = quantity;
+    }
+
+    setSageStockBalances(stockMap);
+  };
+
   const getAvailableStock = (material: OrderMaterial) => {
+    // Use Sage stock balances for validation (source of truth)
+    const sageQty = sageStockBalances[material.raw_material_id];
+    if (typeof sageQty === 'number') return Math.max(0, sageQty);
+    // Fallback to MES stock if Sage stock not available
     const floorQty = productionFloorStock[material.raw_material_id];
     if (typeof floorQty === 'number') return Math.max(0, floorQty);
     return Number(material.raw_materials?.current_stock || 0);
@@ -443,6 +475,7 @@ export default function ProductionOrdersPage() {
     // These depend on the materials list resolved above, so run after
     await Promise.all([
       loadProductionFloorStock(mats.map((m) => m.raw_material_id).filter(Boolean)),
+      loadSageStockBalances(mats.map((m) => m.raw_material_id).filter(Boolean)),
       order.status === 'completed' ? loadBomVariances(order.id) : Promise.resolve(),
     ]);
 
@@ -627,7 +660,10 @@ export default function ProductionOrdersPage() {
       const refreshed = normalizeRawMaterials((refreshedData as any[]) || []);
       console.log('DEBUG: Refreshed materials after issue', refreshed);
       setDetailMaterials(refreshed);
-      await loadProductionFloorStock(refreshed.map((m) => m.raw_material_id).filter(Boolean));
+      await Promise.all([
+        loadProductionFloorStock(refreshed.map((m) => m.raw_material_id).filter(Boolean)),
+        loadSageStockBalances(refreshed.map((m) => m.raw_material_id).filter(Boolean)),
+      ]);
       setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(refreshed) }));
       
       setSaving(false);

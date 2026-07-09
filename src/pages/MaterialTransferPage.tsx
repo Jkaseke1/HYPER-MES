@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import Modal from '../components/ui/Modal';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
 import MaterialTransferApprovalButtons from '../components/approval/MaterialTransferApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
@@ -301,45 +301,81 @@ export default function MaterialTransferPage() {
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by material name, code, or destination..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
-          />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+            <Factory className="w-4 h-4 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">In Buffer</p>
+            <p className="mt-0.5 text-xl font-bold text-amber-900">{statusCounts.in_buffer}</p>
+          </div>
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white min-w-[180px]"
-        >
-          <option value="all">All Status ({statusCounts.all})</option>
-          <option value="in_buffer">In Buffer ({statusCounts.in_buffer})</option>
-          <option value="received">Received ({statusCounts.received})</option>
-          <option value="rejected">Rejected ({statusCounts.rejected})</option>
-        </select>
+        <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Received</p>
+            <p className="mt-0.5 text-xl font-bold text-green-900">{statusCounts.received}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+            <Eye className="w-4 h-4 text-red-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Rejected</p>
+            <p className="mt-0.5 text-xl font-bold text-red-900">{statusCounts.rejected}</p>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-teal-600" />
+            <h3 className="text-sm font-semibold text-slate-800">Material Transfers</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search by material name, code, or destination..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white w-64"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+            >
+              <option value="all">All Status ({statusCounts.all})</option>
+              <option value="in_buffer">In Buffer ({statusCounts.in_buffer})</option>
+              <option value="received">Received ({statusCounts.received})</option>
+              <option value="rejected">Rejected ({statusCounts.rejected})</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-slate-100">
               <tr>
                 {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
-                  <th key={header} className={`px-4 py-3 text-xs font-medium text-slate-600 ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
+                  <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
@@ -350,38 +386,38 @@ export default function MaterialTransferPage() {
                   const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
                   const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
                   return (
-                    <tr key={transfer.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setViewTransfer(transfer)}>
-                      <td className="px-4 py-3">
+                    <tr key={transfer.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setViewTransfer(transfer)}>
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5 text-sm text-slate-600">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
                           {transferDate ? format(new Date(transferDate), 'dd MMM yyyy') : '-'}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <p className="text-sm font-medium text-slate-800">{transfer.raw_materials?.name || '-'}</p>
                         <p className="text-xs text-slate-500">{transfer.raw_materials?.code || ''}</p>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{transfer.warehouses?.name || '-'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 text-sm text-slate-600">{transfer.warehouses?.name || '-'}</td>
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5 text-sm text-slate-700">
                           <Factory className="w-3.5 h-3.5 text-slate-400" />
                           {transfer.to_location || 'Production Floor'}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
+                      <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
                         {quantity.toLocaleString()} {transfer.unit || 'kg'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-slate-700">
+                      <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
                         {rmBalance.toLocaleString()} {transfer.unit || 'kg'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700">
+                      <td className="px-3 py-2 text-sm text-right font-medium text-emerald-700">
                         {bufferBalance.toLocaleString()} {transfer.unit || 'kg'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{transfer.purpose || '-'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 text-sm text-slate-600">{transfer.purpose || '-'}</td>
+                      <td className="px-3 py-2">
                         <StatusBadge status={transfer.status || 'pending'} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); setViewTransfer(transfer); }}
                           className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
@@ -400,177 +436,229 @@ export default function MaterialTransferPage() {
       </div>
 
       {/* Create Transfer Modal */}
-      <Modal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        title="New Material Transfer"
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Raw Material *</label>
-              <select
-                value={form.raw_material_id}
-                onChange={(e) => setForm({ ...form, raw_material_id: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                required
-              >
-                <option value="">Select material</option>
-                {rawMaterials.map((material) => {
-                  const rmBalance = rmWarehouseBalances[material.id] ?? 0;
-                  return (
-                    <option key={material.id} value={material.id}>
-                      {material.name} ({material.code}) - RM Stock: {rmBalance.toLocaleString()} {material.unit}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">From Warehouse</label>
-              <div className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 font-medium">
-                Raw Materials Warehouse
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-4xl p-0">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Truck className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">New Material Transfer</h2>
+                  <p className="text-slate-400 text-xs">Transfer raw materials from warehouse to production</p>
+                </div>
               </div>
-              <p className="text-xs text-slate-500 mt-1">All transfers originate from Raw Materials Warehouse</p>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">
+                Draft
+              </span>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">To Location</label>
-              <div className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 font-medium">
-                Production Floor (via Buffer)
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Two-step: RM → Buffer → Production</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
-              <input
-                type="number"
-                value={form.quantity || ''}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value ? parseFloat(e.target.value) : 0 })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                placeholder="0.00"
-                step="0.01"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Transfer Date *</label>
-              <input
-                type="date"
-                value={form.transfer_date}
-                onChange={(e) => setForm({ ...form, transfer_date: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Source Batch / GRN Lot {availableLots.length > 0 && <span className="text-xs text-slate-400">(FIFO — oldest first)</span>}
-              </label>
-              <select
-                value={form.source_lot_id}
-                onChange={(e) => {
-                  const lot = availableLots.find(l => l.lot_id === e.target.value);
-                  setForm({
-                    ...form,
-                    source_lot_id: e.target.value,
-                    quantity: lot ? Math.min(form.quantity || lot.qty_remaining, lot.qty_remaining) : form.quantity,
-                  });
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                disabled={!form.raw_material_id}
-              >
-                <option value="">
-                  {!form.raw_material_id ? 'Select a raw material first' : availableLots.length === 0 ? 'No available lots — check GRN approvals' : 'Select source batch (optional)'}
-                </option>
-                {availableLots.map((lot) => (
-                  <option key={lot.lot_id} value={lot.lot_id}>
-                    {lot.batch_number} · {Number(lot.qty_remaining).toLocaleString()} {lot.unit} available {lot.grn_number ? `· GRN ${lot.grn_number}` : lot.source === 'opening_balance' ? '· Opening' : ''} · {new Date(lot.received_date).toLocaleDateString()}
-                  </option>
-                ))}
-              </select>
-              {form.source_lot_id && (() => {
-                const lot = availableLots.find(l => l.lot_id === form.source_lot_id);
-                if (!lot) return null;
-                const over = form.quantity > Number(lot.qty_remaining);
-                return (
-                  <p className={`text-[11px] mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
-                    {over
-                      ? `⚠ Transfer quantity exceeds lot balance (${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}).`
-                      : `Lot balance: ${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}.`}
-                  </p>
-                );
-              })()}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Production Order (Optional)</label>
-              <select
-                value={form.production_order_id}
-                onChange={(e) => setForm({ ...form, production_order_id: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              >
-                <option value="">Select order (optional)</option>
-                {productionOrders.map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.batch_number} - {order.status}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Purpose *</label>
-            <input
-              type="text"
-              value={form.purpose}
-              onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              placeholder="e.g., For Batch BATCH-2026-123"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              rows={3}
-              placeholder="Additional notes..."
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t">
             <button
               onClick={() => setShowCreate(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
             >
-              Cancel
-            </button>
-            <button
-              onClick={createTransfer}
-              disabled={
-                saving ||
-                !form.raw_material_id ||
-                !form.from_warehouse_id ||
-                !form.quantity ||
-                !form.purpose ||
-                (form.quantity > (rmWarehouseBalances[form.raw_material_id] || 0))
-              }
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Creating...' : 'Create Transfer'}
+              <Eye className="w-4 h-4 text-white" />
             </button>
           </div>
-        </div>
-      </Modal>
+
+          <div className="p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
+              <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <p className="text-sm font-semibold text-slate-800">Transfer Details</p>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Core</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Raw Material *</label>
+                    <select
+                      value={form.raw_material_id}
+                      onChange={(e) => setForm({ ...form, raw_material_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      required
+                    >
+                      <option value="">Select material</option>
+                      {rawMaterials.map((material) => {
+                        const rmBalance = rmWarehouseBalances[material.id] ?? 0;
+                        return (
+                          <option key={material.id} value={material.id}>
+                            {material.name} ({material.code}) - RM Stock: {rmBalance.toLocaleString()} {material.unit}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Quantity *</label>
+                    <input
+                      type="number"
+                      value={form.quantity || ''}
+                      onChange={(e) => setForm({ ...form, quantity: e.target.value ? parseFloat(e.target.value) : 0 })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      placeholder="0.00"
+                      step="0.01"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Transfer Date *</label>
+                    <input
+                      type="date"
+                      value={form.transfer_date}
+                      onChange={(e) => setForm({ ...form, transfer_date: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Purpose *</label>
+                    <input
+                      type="text"
+                      value={form.purpose}
+                      onChange={(e) => setForm({ ...form, purpose: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      placeholder="e.g., For Batch BATCH-2026-123"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="xl:col-span-4 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4 text-slate-600" />
+                    <p className="text-sm font-semibold text-slate-800">Transfer Route</p>
+                  </div>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">Auto</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <p className="text-xs text-slate-500 mb-1">From Warehouse</p>
+                    <p className="text-sm font-semibold text-slate-800">Raw Materials Warehouse</p>
+                  </div>
+                  <div className="flex justify-center">
+                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <p className="text-xs text-slate-500 mb-1">To Location</p>
+                    <p className="text-sm font-semibold text-slate-800">Production Floor (via Buffer)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-sm p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <Factory className="w-4 h-4 text-indigo-600" />
+                  <p className="text-sm font-semibold text-slate-800">Additional Details</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Source Batch / GRN Lot {availableLots.length > 0 && <span className="text-[10px] text-slate-400">(FIFO — oldest first)</span>}
+                  </label>
+                  <select
+                    value={form.source_lot_id}
+                    onChange={(e) => {
+                      const lot = availableLots.find(l => l.lot_id === e.target.value);
+                      setForm({
+                        ...form,
+                        source_lot_id: e.target.value,
+                        quantity: lot ? Math.min(form.quantity || lot.qty_remaining, lot.qty_remaining) : form.quantity,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                    disabled={!form.raw_material_id}
+                  >
+                    <option value="">
+                      {!form.raw_material_id ? 'Select a raw material first' : availableLots.length === 0 ? 'No available lots — check GRN approvals' : 'Select source batch (optional)'}
+                    </option>
+                    {availableLots.map((lot) => (
+                      <option key={lot.lot_id} value={lot.lot_id}>
+                        {lot.batch_number} · {Number(lot.qty_remaining).toLocaleString()} {lot.unit} available {lot.grn_number ? `· GRN ${lot.grn_number}` : lot.source === 'opening_balance' ? '· Opening' : ''} · {new Date(lot.received_date).toLocaleDateString()}
+                      </option>
+                    ))}
+                  </select>
+                  {form.source_lot_id && (() => {
+                    const lot = availableLots.find(l => l.lot_id === form.source_lot_id);
+                    if (!lot) return null;
+                    const over = form.quantity > Number(lot.qty_remaining);
+                    return (
+                      <p className={`text-[11px] mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
+                        {over
+                          ? `⚠ Transfer quantity exceeds lot balance (${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}).`
+                          : `Lot balance: ${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}.`}
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-600">Production Order (Optional)</label>
+                  <select
+                    value={form.production_order_id}
+                    onChange={(e) => setForm({ ...form, production_order_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  >
+                    <option value="">Select order (optional)</option>
+                    {productionOrders.map((order) => (
+                      <option key={order.id} value={order.id}>
+                        {order.batch_number} - {order.status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-600">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                  rows={3}
+                  placeholder="Additional notes..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createTransfer}
+                disabled={
+                  saving ||
+                  !form.raw_material_id ||
+                  !form.from_warehouse_id ||
+                  !form.quantity ||
+                  !form.purpose ||
+                  (form.quantity > (rmWarehouseBalances[form.raw_material_id] || 0))
+                }
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center text-sm font-medium"
+              >
+                {saving ? 'Creating...' : 'Create Transfer'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Success Message */}
       {successMessage && (
@@ -581,112 +669,140 @@ export default function MaterialTransferPage() {
       )}
 
       {/* View Transfer Modal */}
-      <Modal
-        open={viewTransfer !== null}
-        onClose={async () => {
-          // Fetch the latest data from database before closing
-          if (viewTransfer) {
-            const { data } = await supabase
-              .from('material_transfers')
-              .select('*, raw_materials(name, code), warehouses:from_warehouse_id(name)')
-              .eq('id', viewTransfer.id)
-              .single();
-            if (data) {
-              setViewTransfer(data);
-            }
-          }
-          setViewTransfer(null);
-          fetchData();
-        }}
-        title="Transfer Details"
-      >
-        {viewTransfer && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">Material</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.raw_materials?.name || '-'}</p>
-                <p className="text-xs text-slate-500">{viewTransfer.raw_materials?.code || ''}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">Quantity</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">
-                  {Math.abs(viewTransfer.quantity || 0).toLocaleString()} {viewTransfer.unit || 'kg'}
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">From</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.warehouses?.name || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">To</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">{viewTransfer.to_location || 'Production Floor'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">Transfer Date</label>
-                <p className="text-sm font-medium text-slate-800 mt-1">
-                  {viewTransfer.transfer_date || viewTransfer.created_at ? format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy') : '-'}
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase">Status</label>
-                <div className="mt-1">
-                  <StatusBadge status={viewTransfer.status || 'pending'} />
+      <Dialog open={viewTransfer !== null} onOpenChange={() => setViewTransfer(null)}>
+        <DialogContent className="max-w-4xl p-0">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+            <div className="flex items-center justify-between pr-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg">
+                  <Eye className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">Transfer Details</h2>
+                  <p className="text-slate-400 text-xs">View material transfer information</p>
                 </div>
               </div>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">
+                {viewTransfer?.status || 'pending'}
+              </span>
             </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase">Purpose</label>
-              <p className="text-sm text-slate-700 mt-1">{viewTransfer.purpose || '-'}</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase">Notes</label>
-              <p className="text-sm text-slate-700 mt-1">{viewTransfer.notes || 'No additional notes'}</p>
-            </div>
-            {viewTransfer.rejection_reason && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
-                <p className="text-sm text-red-700">{viewTransfer.rejection_reason}</p>
-              </div>
-            )}
-
-            {viewTransfer.status === 'in_buffer' && (
-              <div className="border-t border-slate-200 pt-4">
-                <MaterialTransferApprovalButtons
-                  transferId={viewTransfer.id}
-                  currentStatus={viewTransfer.status}
-                  quantity={viewTransfer.quantity}
-                  rawMaterialId={viewTransfer.raw_material_id}
-                  fromWarehouseId={viewTransfer.from_warehouse_id}
-                  onApproved={() => {
-                    // Refresh the viewed transfer and list
-                    fetchData();
-                    setViewTransfer(null);
-                  }}
-                  onRejected={() => {
-                    // Refresh the viewed transfer and list
-                    fetchData();
-                    setViewTransfer(null);
-                  }}
-                />
-              </div>
-            )}
-
-            <div className="border-t border-slate-200 pt-4">
-              <ApprovalHistory entityType="material_transfer" entityId={viewTransfer.id} />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <button
-                onClick={() => setViewTransfer(null)}
-                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors"
-              >
-                Close
-              </button>
-            </div>
+            <button
+              onClick={() => setViewTransfer(null)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <Eye className="w-4 h-4 text-white" />
+            </button>
           </div>
-        )}
-      </Modal>
+
+          <div className="p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
+            {viewTransfer && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Material</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{viewTransfer.raw_materials?.name || '-'}</p>
+                    <p className="text-xs text-slate-500">{viewTransfer.raw_materials?.code || ''}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Quantity</p>
+                    <p className="mt-1 text-xl font-bold text-slate-900">
+                      {Math.abs(viewTransfer.quantity || 0).toLocaleString()} {viewTransfer.unit || 'kg'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Status</p>
+                    <div className="mt-1">
+                      <StatusBadge status={viewTransfer.status || 'pending'} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <ArrowRight className="w-4 h-4 text-teal-600" />
+                    <h3 className="text-sm font-semibold text-slate-800">Transfer Route</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-600">From Warehouse</label>
+                      <p className="text-sm text-slate-800">{viewTransfer.warehouses?.name || '-'}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-600">To Location</label>
+                      <p className="text-sm text-slate-800">{viewTransfer.to_location || 'Production Floor'}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-600">Transfer Date</label>
+                      <p className="text-sm text-slate-800">
+                        {viewTransfer.transfer_date || viewTransfer.created_at ? format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-600">Purpose</label>
+                      <p className="text-sm text-slate-800">{viewTransfer.purpose || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <Factory className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-sm font-semibold text-slate-800">Additional Information</h3>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Notes</label>
+                    <p className="text-sm text-slate-800">{viewTransfer.notes || 'No additional notes'}</p>
+                  </div>
+                  {viewTransfer.rejection_reason && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
+                      <p className="text-sm text-red-700">{viewTransfer.rejection_reason}</p>
+                    </div>
+                  )}
+                </div>
+
+                {viewTransfer.status === 'in_buffer' && (
+                  <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm p-3">
+                    <MaterialTransferApprovalButtons
+                      transferId={viewTransfer.id}
+                      currentStatus={viewTransfer.status}
+                      quantity={viewTransfer.quantity}
+                      rawMaterialId={viewTransfer.raw_material_id}
+                      fromWarehouseId={viewTransfer.from_warehouse_id}
+                      onApproved={() => {
+                        fetchData();
+                        setViewTransfer(null);
+                      }}
+                      onRejected={() => {
+                        fetchData();
+                        setViewTransfer(null);
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <Calendar className="w-4 h-4 text-slate-600" />
+                    <h3 className="text-sm font-semibold text-slate-800">Approval History</h3>
+                  </div>
+                  <ApprovalHistory entityType="material_transfer" entityId={viewTransfer.id} />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setViewTransfer(null)}
+                    className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
