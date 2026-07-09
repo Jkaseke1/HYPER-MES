@@ -837,6 +837,24 @@ export default function ProductionOrdersPage() {
     await loadSageStockBalances(materialIds);
   };
 
+  // Auto-refresh Sage stock when order detail loads
+  useEffect(() => {
+    if (selected && detailMaterials.length > 0) {
+      refreshSageStock();
+    }
+  }, [selected?.id, detailMaterials.length]);
+
+  // Auto-refresh Sage stock every 30 seconds
+  useEffect(() => {
+    if (!selected || detailMaterials.length === 0) return;
+    
+    const interval = setInterval(() => {
+      refreshSageStock();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [selected?.id, detailMaterials.length]);
+
   /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {
     if (!selected) return;
