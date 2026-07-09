@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Scale, AlertTriangle, CheckCircle, Truck, User } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface WeighBridgeData {
   wb_transaction_no: string;
   wb_vehicle_reg: string;
   wb_haulier_code: string;
   wb_product_code: string;
+  wb_product_name: string;
+  wb_supplier_id: string;
   wb_comment: string;
   wb_trailer_number: string;
   wb_driver_name: string;
@@ -52,6 +55,26 @@ function SectionHeader({ icon: Icon, children }: { icon: any; children: React.Re
 
 export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHeader }: WeighBridgeTicketProps) {
   const [expanded, setExpanded] = useState(!!hideHeader);
+  const [rawMaterials, setRawMaterials] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Fetch raw materials (Sage-linked products)
+    supabase
+      .from('raw_materials')
+      .select('id, name, code, sage_code')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setRawMaterials(data || []));
+
+    // Fetch suppliers
+    supabase
+      .from('suppliers')
+      .select('id, name, code')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setSuppliers(data || []));
+  }, []);
 
   const handleMassChange = (field: 'wb_first_mass' | 'wb_second_mass', value: string) => {
     onChange(field, value);
@@ -165,14 +188,37 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       <option value="External">External</option>
                     </select>
                   </Field>
-                  <Field title="Product Code">
-                    <input
-                      type="text"
+                  <Field title="Product (Sage)">
+                    <select
                       value={data.wb_product_code}
-                      onChange={(e) => onChange('wb_product_code', e.target.value)}
-                      placeholder="From line item"
+                      onChange={(e) => {
+                        const selected = rawMaterials.find(rm => rm.code === e.target.value);
+                        onChange('wb_product_code', e.target.value);
+                        onChange('wb_product_name', selected?.name || '');
+                      }}
                       className={input}
-                    />
+                    >
+                      <option value="">Select product…</option>
+                      {rawMaterials.map(rm => (
+                        <option key={rm.id} value={rm.code}>
+                          {rm.name} ({rm.sage_code || rm.code})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field title="Supplier">
+                    <select
+                      value={data.wb_supplier_id}
+                      onChange={(e) => onChange('wb_supplier_id', e.target.value)}
+                      className={input}
+                    >
+                      <option value="">Select supplier…</option>
+                      {suppliers.map(sup => (
+                        <option key={sup.id} value={sup.id}>
+                          {sup.name} ({sup.code})
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field title="Trailer No">
                     <input

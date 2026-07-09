@@ -3,7 +3,6 @@ import { Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X } fro
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Modal from '../components/ui/Modal';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatCard from '../components/ui/StatCard';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
@@ -16,6 +15,9 @@ interface WBTicket {
   driver_name: string;
   driver_id: string;
   product_code: string;
+  product_name: string;
+  supplier_id: string;
+  supplier_name?: string;
   trailer_number: string;
   time_in: string;
   time_out: string;
@@ -34,6 +36,8 @@ const emptyWBForm = {
   wb_vehicle_reg: '',
   wb_haulier_code: 'HYPER',
   wb_product_code: '',
+  wb_product_name: '',
+  wb_supplier_id: '',
   wb_comment: '',
   wb_trailer_number: '',
   wb_driver_name: '',
@@ -66,7 +70,7 @@ export default function WeighBridgePage() {
     setLoading(true);
     const { data, error } = await supabase
       .from('weigh_bridge_tickets')
-      .select('*')
+      .select('*, suppliers(name, code)')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('Error loading WB tickets:', error);
@@ -98,6 +102,8 @@ export default function WeighBridgePage() {
         driver_name: form.wb_driver_name,
         driver_id: form.wb_driver_id,
         product_code: form.wb_product_code,
+        product_name: form.wb_product_name,
+        supplier_id: form.wb_supplier_id || null,
         trailer_number: form.wb_trailer_number,
         time_in: form.wb_time_in || null,
         time_out: form.wb_time_out || null,
@@ -191,7 +197,7 @@ export default function WeighBridgePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/50">
-                  {['Ticket No', 'Vehicle Reg', 'Driver', 'Product', 'Nett Mass (kg)', 'Time In', 'Status', 'Actions'].map(h => (
+                  {['Ticket No', 'Vehicle Reg', 'Driver', 'Product', 'Supplier', 'Nett Mass (kg)', 'Time In', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{h}</th>
                   ))}
                 </tr>
@@ -202,7 +208,11 @@ export default function WeighBridgePage() {
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-teal-700">{t.ticket_no}</td>
                     <td className="px-4 py-3 font-medium text-slate-800">{t.vehicle_reg || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{t.driver_name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{t.product_code || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <div className="font-medium">{t.product_name || '—'}</div>
+                      <div className="text-xs text-slate-400 font-mono">{t.product_code || ''}</div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{(t as any).suppliers?.name || '—'}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800 tabular-nums">
                       {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
                     </td>
