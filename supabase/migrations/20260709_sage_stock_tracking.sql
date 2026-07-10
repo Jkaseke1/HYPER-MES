@@ -41,6 +41,7 @@ WHERE rm.is_active = true;
 ALTER TABLE sage_stock_balances ENABLE ROW LEVEL SECURITY;
 
 -- Policies: service role can read/write, authenticated can read
+DROP POLICY IF EXISTS "Service role can manage sage stock" ON sage_stock_balances;
 CREATE POLICY "Service role can manage sage stock"
   ON sage_stock_balances
   FOR ALL
@@ -48,6 +49,7 @@ CREATE POLICY "Service role can manage sage stock"
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Authenticated users can read sage stock" ON sage_stock_balances;
 CREATE POLICY "Authenticated users can read sage stock"
   ON sage_stock_balances
   FOR SELECT
