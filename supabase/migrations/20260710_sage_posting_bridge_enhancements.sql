@@ -64,7 +64,7 @@ BEGIN
   SELECT id INTO v_rm_id FROM raw_materials WHERE sage_code = p_sage_code AND is_active = true LIMIT 1;
 
   IF v_rm_id IS NULL THEN
-    SELECT id INTO v_form_id FROM formulations WHERE sage_code = p_sage_code AND is_active = true LIMIT 1;
+    SELECT id INTO v_form_id FROM formulations WHERE sage_code = p_sage_code AND status = 'active' LIMIT 1;
   END IF;
 
   IF v_rm_id IS NULL AND v_form_id IS NULL THEN
@@ -111,7 +111,7 @@ BEGIN
   SELECT id INTO v_rm_id FROM raw_materials WHERE sage_code = p_sage_code AND is_active = true LIMIT 1;
 
   IF v_rm_id IS NULL THEN
-    SELECT id INTO v_form_id FROM formulations WHERE sage_code = p_sage_code AND is_active = true LIMIT 1;
+    SELECT id INTO v_form_id FROM formulations WHERE sage_code = p_sage_code AND status = 'active' LIMIT 1;
   END IF;
 
   IF v_rm_id IS NULL AND v_form_id IS NULL THEN
@@ -198,7 +198,7 @@ SELECT
   ssb.last_synced_at
 FROM formulations f
 LEFT JOIN sage_stock_balances ssb ON f.id = ssb.formulation_id
-WHERE f.is_active = true;
+WHERE f.status = 'active';
 
 -- ============================================================
 -- 4. Add missing bridge triggers for macropack and reconciliation

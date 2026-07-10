@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS sync_log (
 
 ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read sync_log" ON sync_log;
+DROP POLICY IF EXISTS "Authenticated users can insert sync_log" ON sync_log;
+DROP POLICY IF EXISTS "Authenticated users can update sync_log" ON sync_log;
 CREATE POLICY "Authenticated users can read sync_log"
   ON sync_log FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated users can insert sync_log"
@@ -45,6 +48,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
 
 ALTER TABLE purchase_orders ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read purchase_orders" ON purchase_orders;
+DROP POLICY IF EXISTS "Authenticated users can insert purchase_orders" ON purchase_orders;
+DROP POLICY IF EXISTS "Authenticated users can update purchase_orders" ON purchase_orders;
 CREATE POLICY "Authenticated users can read purchase_orders"
   ON purchase_orders FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated users can insert purchase_orders"
@@ -68,12 +74,23 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
 
 ALTER TABLE purchase_order_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read purchase_order_items" ON purchase_order_items;
+DROP POLICY IF EXISTS "Authenticated users can insert purchase_order_items" ON purchase_order_items;
+DROP POLICY IF EXISTS "Authenticated users can update purchase_order_items" ON purchase_order_items;
 CREATE POLICY "Authenticated users can read purchase_order_items"
   ON purchase_order_items FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated users can insert purchase_order_items"
   ON purchase_order_items FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated users can update purchase_order_items"
   ON purchase_order_items FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL);
+
+-- Ensure purchase_orders columns exist before creating indexes
+ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_id uuid REFERENCES suppliers(id);
+ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS warehouse_id uuid REFERENCES warehouses(id);
+
+-- Ensure purchase_order_items columns exist
+ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS purchase_order_id uuid REFERENCES purchase_orders(id) ON DELETE CASCADE;
+ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS raw_material_id uuid REFERENCES raw_materials(id);
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sync_log_event_type ON sync_log(event_type);
