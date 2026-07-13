@@ -26,6 +26,15 @@ interface OrderMaterial {
   raw_materials?: any;
 }
 
+interface ConfirmDialogState {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  onConfirm: (() => Promise<void> | void) | null;
+}
+
 // Helper to normalize raw_materials from array to object
 const normalizeRawMaterials = (materials: any[]): OrderMaterial[] => {
   return materials.map(m => ({
@@ -120,6 +129,40 @@ export default function ProductionOrdersPage() {
   const [selectedFormulation, setSelectedFormulation] = useState<Formulation | null>(null);
   const [showPkgModal, setShowPkgModal] = useState(false);
   const [pkgBomItems, setPkgBomItems] = useState<any[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    destructive: false,
+    onConfirm: null,
+  });
+  const [confirmingAction, setConfirmingAction] = useState(false);
+
+  const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
+    setConfirmDialog({
+      open: true,
+      ...config,
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    if (confirmingAction) return;
+    setConfirmDialog((prev) => ({ ...prev, open: false, onConfirm: null }));
+  };
+
+  const handleConfirmDialog = async () => {
+    if (!confirmDialog.onConfirm) return;
+    setConfirmingAction(true);
+    try {
+      await confirmDialog.onConfirm();
+      setConfirmDialog((prev) => ({ ...prev, open: false, onConfirm: null }));
+    } catch (error: any) {
+      setWorkflowError(error?.message || 'Action failed. Please try again.');
+    } finally {
+      setConfirmingAction(false);
+    }
+  };
 
   // Delete production order with status and admin protection
   const deleteOrder = async (order: ProductionOrder) => {
@@ -134,21 +177,25 @@ export default function ProductionOrdersPage() {
       return;
     }
 
-    if (!window.confirm(`Delete production order ${order.batch_number}? This action cannot be undone.`)) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('production_orders').delete().eq('id', order.id);
-      if (error) throw error;
-      setShowDetail(false);
-      fetchOrders();
-    } catch (error: any) {
-      console.error('Error deleting order:', error);
-      setWorkflowError(`Failed to delete order: ${error.message}`);
-      setSaving(false);
-    }
+    openConfirmDialog({
+      title: 'Delete Production Order',
+      message: `Delete production order ${order.batch_number}? This action cannot be undone.`,
+      confirmLabel: 'Delete Order',
+      destructive: true,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          const { error } = await supabase.from('production_orders').delete().eq('id', order.id);
+          if (error) throw error;
+          setShowDetail(false);
+          fetchOrders();
+        } catch (error: any) {
+          console.error('Error deleting order:', error);
+          setWorkflowError(`Failed to delete order: ${error.message}`);
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const fetchOrders = useCallback(async () => {
@@ -698,62 +745,67 @@ export default function ProductionOrdersPage() {
   // Bulk issue all materials at once
   const bulkIssueMaterials = async () => {
     if (!selected) return;
-    const confirmed = confirm(`Issue all ${detailMaterials.length} materials for this production order? This cannot be undone.`);
-    if (!confirmed) return;
-    
-    setSaving(true);
-    try {
-      // Refresh Sage stock balances in real-time before checking availability
-      const materialIds = detailMaterials.map(m => m.raw_material_id);
-      await loadSageStockBalances(materialIds);
+    openConfirmDialog({
+      title: 'Issue All Materials',
+      message: `Issue all ${detailMaterials.length} materials for this production order? This cannot be undone.`,
+      confirmLabel: 'Issue Materials',
+      destructive: false,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          // Refresh Sage stock balances in real-time before checking availability
+          const materialIds = detailMaterials.map(m => m.raw_material_id);
+          await loadSageStockBalances(materialIds);
 
-      // Check stock availability first with fresh Sage data
-      if (!allMaterialsAvailable()) {
-        const insufficient = getInsufficientMaterials();
-        const insufficientList = insufficient.map(m => 
-          `${m.raw_materials?.name} (need ${formatQty(m.planned_qty)}${m.unit}, have ${formatQty(getAvailableStock(m))}${m.unit})`
-        ).join(', ');
-        throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
-      }
+          // Check stock availability first with fresh Sage data
+          if (!allMaterialsAvailable()) {
+            const insufficient = getInsufficientMaterials();
+            const insufficientList = insufficient.map(m => 
+              `${m.raw_materials?.name} (need ${formatQty(m.planned_qty)}${m.unit}, have ${formatQty(getAvailableStock(m))}${m.unit})`
+            ).join(', ');
+            throw new Error(`Cannot issue materials — insufficient stock available. Unavailable materials: ${insufficientList}. Please restock these materials before proceeding.`);
+          }
 
-      // Issue all materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
-      const issuePromises = detailMaterials.map(material =>
-        supabase.rpc('issue_individual_ingredient', {
-          p_material_id: material.id,
-          p_actual_qty: material.planned_qty,
-          p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
-        })
-      );
+          // Issue all materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
+          const issuePromises = detailMaterials.map(material =>
+            supabase.rpc('issue_individual_ingredient', {
+              p_material_id: material.id,
+              p_actual_qty: material.planned_qty,
+              p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
+            })
+          );
 
-      const results = await Promise.all(issuePromises);
-      
-      // Check for errors
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) {
-        const errorMessages = errors.map((r, i) => `Item ${i + 1}: ${r.error?.message}`).join('; ');
-        throw new Error(`Failed to issue ${errors.length} of ${results.length} ingredients: ${errorMessages}`);
-      }
+          const results = await Promise.all(issuePromises);
+          
+          // Check for errors
+          const errors = results.filter(r => r.error);
+          if (errors.length > 0) {
+            const errorMessages = errors.map((r, i) => `Item ${i + 1}: ${r.error?.message}`).join('; ');
+            throw new Error(`Failed to issue ${errors.length} of ${results.length} ingredients: ${errorMessages}`);
+          }
 
-      // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
+          // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
 
-      // Now update order status to materials_issued
-      await updateStatus('materials_issued');
+          // Now update order status to materials_issued
+          await updateStatus('materials_issued');
 
-      // Auto-link to DRS issues
-      const issueEntries = detailMaterials.map((m) => ({
-        issue_date: new Date().toISOString().split('T')[0],
-        raw_material_name: m.raw_materials?.name || 'Unknown',
-        quantity_kg: m.planned_qty,
-        production_order_ref: selected.batch_number,
-      }));
-      await supabase.from('rm_daily_issues').insert(issueEntries);
+          // Auto-link to DRS issues
+          const issueEntries = detailMaterials.map((m) => ({
+            issue_date: new Date().toISOString().split('T')[0],
+            raw_material_name: m.raw_materials?.name || 'Unknown',
+            quantity_kg: m.planned_qty,
+            production_order_ref: selected.batch_number,
+          }));
+          await supabase.from('rm_daily_issues').insert(issueEntries);
 
-      setSaving(false);
-    } catch (error: any) {
-      console.error('Error bulk issuing materials:', error);
-      setWorkflowError(`Failed to issue materials: ${error.message}`);
-      setSaving(false);
-    }
+          setSaving(false);
+        } catch (error: any) {
+          console.error('Error bulk issuing materials:', error);
+          setWorkflowError(`Failed to issue materials: ${error.message}`);
+          setSaving(false);
+        }
+      },
+    });
   };
 
   // Edit production quantity and recalculate BOM
@@ -2443,10 +2495,17 @@ export default function ProductionOrdersPage() {
                             <td className="px-3 py-2 text-center">
                               {(selected.status === 'in_progress' || selected.status === 'completed') && (
                                 <button
-                                  onClick={async () => {
-                                    if (!confirm('Delete this downtime entry?')) return;
-                                    await supabase.from('production_order_downtime').delete().eq('id', d.id);
-                                    setDowntimeEntries(prev => prev.filter(x => x.id !== d.id));
+                                  onClick={() => {
+                                    openConfirmDialog({
+                                      title: 'Delete Downtime Entry',
+                                      message: 'Delete this downtime entry?',
+                                      confirmLabel: 'Delete Entry',
+                                      destructive: true,
+                                      onConfirm: async () => {
+                                        await supabase.from('production_order_downtime').delete().eq('id', d.id);
+                                        setDowntimeEntries(prev => prev.filter(x => x.id !== d.id));
+                                      },
+                                    });
                                   }}
                                   className="text-xs text-red-600 hover:text-red-700 font-medium"
                                 >
@@ -2515,6 +2574,35 @@ export default function ProductionOrdersPage() {
         rateLabel={selected ? `${(selected.actual_qty / 1000).toFixed(3)} t actual output` : ''}
         saving={saving}
       />
+
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => { if (!open) closeConfirmDialog(); }}>
+        <DialogContent className="max-w-md p-0">
+          <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white rounded-t-lg">
+            <h3 className="text-lg font-semibold text-slate-800">{confirmDialog.title}</h3>
+            <p className="text-sm text-slate-600 mt-1">{confirmDialog.message}</p>
+          </div>
+          <div className="p-4 flex justify-end gap-2">
+            <button
+              onClick={closeConfirmDialog}
+              disabled={confirmingAction}
+              className="px-3 py-2 text-sm font-medium border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDialog}
+              disabled={confirmingAction}
+              className={`px-3 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 ${
+                confirmDialog.destructive
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-teal-600 hover:bg-teal-700'
+              }`}
+            >
+              {confirmingAction ? 'Processing...' : confirmDialog.confirmLabel}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

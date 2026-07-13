@@ -32,8 +32,7 @@ BEGIN
         actual_qty = p_actual_qty,
         issued = true,
         issued_at = NOW(),
-        issued_by = p_issued_by,
-        updated_at = NOW()
+        issued_by = p_issued_by
     WHERE id = p_material_id;
     
     -- Log the individual ingredient issuance for Sage integration
