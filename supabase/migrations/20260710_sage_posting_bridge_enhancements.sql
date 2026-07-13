@@ -46,13 +46,23 @@ BEGIN
 END $$;
 
 -- Ensure only one source reference is populated
-ALTER TABLE sage_stock_balances
-  ADD CONSTRAINT sage_stock_balances_source_check
-  CHECK (
-    (raw_material_id IS NOT NULL AND formulation_id IS NULL AND macropack_bom_id IS NULL) OR
-    (raw_material_id IS NULL AND formulation_id IS NOT NULL AND macropack_bom_id IS NULL) OR
-    (raw_material_id IS NULL AND formulation_id IS NULL AND macropack_bom_id IS NOT NULL)
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'sage_stock_balances_source_check'
+      AND conrelid = 'public.sage_stock_balances'::regclass
+  ) THEN
+    ALTER TABLE public.sage_stock_balances
+      ADD CONSTRAINT sage_stock_balances_source_check
+      CHECK (
+        (raw_material_id IS NOT NULL AND formulation_id IS NULL AND macropack_bom_id IS NULL) OR
+        (raw_material_id IS NULL AND formulation_id IS NOT NULL AND macropack_bom_id IS NULL) OR
+        (raw_material_id IS NULL AND formulation_id IS NULL AND macropack_bom_id IS NOT NULL)
+      );
+  END IF;
+END $$;
 
 -- ============================================================
 -- 2. Update helper functions to resolve sage_code from any source

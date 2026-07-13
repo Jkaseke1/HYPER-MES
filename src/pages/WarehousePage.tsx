@@ -25,11 +25,14 @@ export default function WarehousePage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [bufferBalances, setBufferBalances] = useState<any[]>([]);
+  const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
+  const [productionWarehouseBalances, setProductionWarehouseBalances] = useState<Record<string, number>>({});
+  const [productionTransferTotals, setProductionTransferTotals] = useState<Record<string, number>>({});
+  const [productionTransferMtd, setProductionTransferMtd] = useState<Record<string, number>>({});
   const [bufferSearchTerm, setBufferSearchTerm] = useState('');
   const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [selectedWarehouse, setSelectedWarehouse] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<'name' | 'current_stock' | 'cost_per_unit'>('name');
+  const [sortField, setSortField] = useState<'name' | 'rm_balance' | 'sent_mtd'>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -44,12 +47,66 @@ export default function WarehousePage() {
 
   async function fetchData() {
     setLoading(true);
-    const [{ data: w }, { data: m }] = await Promise.all([
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [
+      { data: w },
+      { data: m },
+      { data: rmBalances },
+      { data: prodBalances },
+      { data: transferOutMovements }
+    ] = await Promise.all([
       supabase.from('warehouses').select('*').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'RM'),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .in('warehouses.code', ['PROD', 'PRODUCTION']),
+      supabase
+        .from('stock_movements')
+        .select('raw_material_id, quantity, movement_date, warehouses!inner(code)')
+        .eq('movement_type', 'transfer')
+        .eq('reference_type', 'material_transfer')
+        .lt('quantity', 0)
+        .eq('warehouses.code', 'RM')
+        .limit(5000),
     ]);
+
     setWarehouses(w || []);
     setMaterials(m || []);
+
+    const rmMap: Record<string, number> = {};
+    (rmBalances || []).forEach((b: any) => {
+      rmMap[b.raw_material_id] = Number(b.quantity || 0);
+    });
+    setRmWarehouseBalances(rmMap);
+
+    const prodMap: Record<string, number> = {};
+    (prodBalances || []).forEach((b: any) => {
+      prodMap[b.raw_material_id] = Number(b.quantity || 0);
+    });
+    setProductionWarehouseBalances(prodMap);
+
+    const totalMap: Record<string, number> = {};
+    const mtdMap: Record<string, number> = {};
+    (transferOutMovements || []).forEach((mv: any) => {
+      if (!mv.raw_material_id) return;
+      const qty = Math.abs(Number(mv.quantity || 0));
+      totalMap[mv.raw_material_id] = (totalMap[mv.raw_material_id] || 0) + qty;
+
+      if (mv.movement_date && new Date(mv.movement_date) >= startOfMonth) {
+        mtdMap[mv.raw_material_id] = (mtdMap[mv.raw_material_id] || 0) + qty;
+      }
+    });
+    setProductionTransferTotals(totalMap);
+    setProductionTransferMtd(mtdMap);
+
     setLoading(false);
   }
 
@@ -72,39 +129,50 @@ export default function WarehousePage() {
     setBufferBalances(data || []);
   }
 
-  const filtered = useMemo(() => {
-    let list = materials;
-    if (selectedWarehouse !== 'all') list = list.filter((m) => m.warehouse_id === selectedWarehouse);
+  const rmRows = useMemo(() => {
+    let list = materials.map((m) => ({
+      ...m,
+      rm_balance: rmWarehouseBalances[m.id] ?? 0,
+      prod_balance: productionWarehouseBalances[m.id] ?? 0,
+      sent_total: productionTransferTotals[m.id] ?? 0,
+      sent_mtd: productionTransferMtd[m.id] ?? 0,
+    }));
+
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       list = list.filter((m) => m.name.toLowerCase().includes(q) || m.code.toLowerCase().includes(q));
     }
+
     return [...list].sort((a, b) => {
       const av = a[sortField], bv = b[sortField];
       if (typeof av === 'string') return sortAsc ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
-  }, [materials, selectedWarehouse, searchTerm, sortField, sortAsc]);
+  }, [materials, rmWarehouseBalances, productionWarehouseBalances, productionTransferTotals, productionTransferMtd, searchTerm, sortField, sortAsc]);
 
   const stats = useMemo(() => ({
-    rawValue: materials.reduce((s, m) => s + m.current_stock * m.cost_per_unit, 0),
-    lowCount: materials.filter((m) => m.current_stock > 0 && m.current_stock <= m.reorder_level).length,
+    rmValue: materials.reduce((s, m) => s + ((rmWarehouseBalances[m.id] || 0) * m.cost_per_unit), 0),
+    sentMtd: materials.reduce((s, m) => s + (productionTransferMtd[m.id] || 0), 0),
+    lowCount: materials.filter((m) => {
+      const rm = rmWarehouseBalances[m.id] || 0;
+      return rm > 0 && rm <= m.reorder_level;
+    }).length,
+    stockedCount: materials.filter((m) => (rmWarehouseBalances[m.id] || 0) > 0).length,
     total: materials.length,
-    whCount: warehouses.length,
-  }), [materials, warehouses]);
+  }), [materials, rmWarehouseBalances, productionTransferMtd]);
 
-  function toggleSort(f: typeof sortField) {
+  function toggleSort(f: 'name' | 'rm_balance' | 'sent_mtd') {
     if (sortField === f) setSortAsc(!sortAsc);
     else { setSortField(f); setSortAsc(true); }
   }
 
-  function getStatus(m: RawMaterial) {
-    if (m.current_stock === 0) return 'out_of_stock';
-    return (m.current_stock <= m.reorder_level && m.reorder_level > 0) ? 'low_stock' : 'in_stock';
+  function getStatus(rmBalance: number, reorderLevel: number) {
+    if (rmBalance === 0) return 'out_of_stock';
+    return (rmBalance <= reorderLevel && reorderLevel > 0) ? 'low_stock' : 'in_stock';
   }
 
-  function stockPct(m: RawMaterial) {
-    return m.reorder_level === 0 ? 100 : Math.min(100, Math.round((m.current_stock / (m.reorder_level * 2)) * 100));
+  function stockPct(rmBalance: number, reorderLevel: number) {
+    return reorderLevel === 0 ? 100 : Math.min(100, Math.round((rmBalance / (reorderLevel * 2)) * 100));
   }
 
   // Handle reorder level editing
@@ -165,20 +233,20 @@ export default function WarehousePage() {
       {tab === 'stock' && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Total Raw Materials Value" value={`$ ${stats.rawValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
-            <StatCard title="Total Finished Goods" value={stats.total} icon={WarehouseIcon} color="emerald" />
-            <StatCard title="Low Stock Items" value={stats.lowCount} icon={AlertTriangle} color="amber" />
-            <StatCard title="Warehouses" value={stats.whCount} icon={WarehouseIcon} color="teal" />
+            <StatCard title="RM On Hand Value" value={`$ ${stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
+            <StatCard title="Sent to Production (MTD)" value={`${stats.sentMtd.toLocaleString()} kg`} icon={ArrowUpDown} color="amber" />
+            <StatCard title="Low RM Stock Items" value={stats.lowCount} icon={AlertTriangle} color="red" />
+            <StatCard title="Materials with RM Stock" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
+          </div>
+          <div className="rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3">
+            <p className="text-sm font-medium text-teal-900">RM Warehouse Control View</p>
+            <p className="text-xs text-teal-700 mt-1">Track what remains in Raw Materials warehouse and exactly what has been deducted to production.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" placeholder="Search materials..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 ${inputCls}`} />
             </div>
-            <select value={selectedWarehouse} onChange={(e) => setSelectedWarehouse(e.target.value)} className={`px-4 py-2 ${inputCls}`}>
-              <option value="all">All Warehouses</option>
-              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
@@ -186,32 +254,35 @@ export default function WarehousePage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className={`text-left ${thCls} cursor-pointer`} onClick={() => toggleSort('name')}>
-                      <span className="inline-flex items-center gap-1">Material / Product <ArrowUpDown className="w-3 h-3" /></span>
+                      <span className="inline-flex items-center gap-1">Material <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
                     <th className={`text-left ${thCls}`}>Code</th>
-                    <th className={`text-left ${thCls}`}>Category</th>
-                    <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('current_stock')}>
-                      <span className="inline-flex items-center gap-1 justify-end">Current Stock <ArrowUpDown className="w-3 h-3" /></span>
-                    </th>
                     <th className={`text-left ${thCls}`}>Unit</th>
-                    <th className={`text-right ${thCls}`}>Reorder Level</th>
-                    <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('cost_per_unit')}>
-                      <span className="inline-flex items-center gap-1 justify-end">Value <ArrowUpDown className="w-3 h-3" /></span>
+                    <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('rm_balance')}>
+                      <span className="inline-flex items-center gap-1 justify-end">RM On Hand <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
+                    <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('sent_mtd')}>
+                      <span className="inline-flex items-center gap-1 justify-end">Deducted to Production (MTD) <ArrowUpDown className="w-3 h-3" /></span>
+                    </th>
+                    <th className={`text-right ${thCls}`}>Deducted to Production (All Time)</th>
+                    <th className={`text-right ${thCls}`}>Production Warehouse</th>
+                    <th className={`text-right ${thCls}`}>Reorder Level</th>
                     <th className={`text-center ${thCls}`}>Stock Level</th>
                     <th className={`text-center ${thCls}`}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((m) => {
-                    const st = getStatus(m);
+                  {rmRows.map((m) => {
+                    const st = getStatus(m.rm_balance, m.reorder_level);
                     return (
                       <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">{m.code}</td>
-                        <td className="px-4 py-3 text-slate-600">{m.category}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{m.current_stock.toLocaleString()}</td>
                         <td className="px-4 py-3 text-slate-500">{m.unit}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{m.rm_balance.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-medium text-amber-700">{m.sent_mtd.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-medium text-slate-700">{m.sent_total.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-teal-700">{m.prod_balance.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right">
                           {editingReorder === m.id ? (
                             <div className="flex items-center gap-1 justify-end">
@@ -252,18 +323,17 @@ export default function WarehousePage() {
                             </button>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-800">$ {(m.current_stock * m.cost_per_unit).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                         <td className="px-4 py-3">
                           <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className={`h-2 rounded-full ${statusBarColor[st]}`} style={{ width: `${stockPct(m)}%` }} />
+                            <div className={`h-2 rounded-full ${statusBarColor[st]}`} style={{ width: `${stockPct(m.rm_balance, m.reorder_level)}%` }} />
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center"><StatusBadge status={st} /></td>
                       </tr>
                     );
                   })}
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">No materials found</td></tr>
+                  {rmRows.length === 0 && (
+                    <tr><td colSpan={10} className="px-4 py-12 text-center text-slate-400">No materials found</td></tr>
                   )}
                 </tbody>
               </table>
