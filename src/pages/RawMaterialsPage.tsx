@@ -82,7 +82,11 @@ export default function RawMaterialsPage() {
 
   async function fetchMaterials() {
     setLoading(true);
-    const { data } = await supabase.from('raw_materials').select('*').order('name');
+    const { data } = await supabase
+      .from('raw_materials')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
     setMaterials(data || []);
     setLoading(false);
   }

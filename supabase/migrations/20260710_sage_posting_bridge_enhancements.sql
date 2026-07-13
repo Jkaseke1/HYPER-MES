@@ -32,8 +32,18 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE sage_stock_balances
-  ADD CONSTRAINT sage_stock_balances_code_warehouse_unique UNIQUE (sage_code, warehouse_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'sage_stock_balances_code_warehouse_unique'
+      AND conrelid = 'public.sage_stock_balances'::regclass
+  ) THEN
+    ALTER TABLE public.sage_stock_balances
+      ADD CONSTRAINT sage_stock_balances_code_warehouse_unique UNIQUE (sage_code, warehouse_id);
+  END IF;
+END $$;
 
 -- Ensure only one source reference is populated
 ALTER TABLE sage_stock_balances
@@ -311,3 +321,23 @@ ALTER TABLE sync_log
     'rm_cost_updated',
     'reconciliation_completed'
   )) NOT VALID;
+
+-- ============================================================
+-- 6. Guardrails for raw materials Sage mapping
+-- ============================================================
+-- Block future active raw materials without a Sage code.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.raw_materials'::regclass
+      AND conname = 'raw_materials_active_sage_code_required_check'
+  ) THEN
+    ALTER TABLE public.raw_materials
+      ADD CONSTRAINT raw_materials_active_sage_code_required_check
+      CHECK (
+        is_active = false OR NULLIF(BTRIM(sage_code), '') IS NOT NULL
+      ) NOT VALID;
+  END IF;
+END $$;
