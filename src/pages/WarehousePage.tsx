@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { RawMaterial, Warehouse, StockMovement } from '../types/database';
+import { RawMaterial, StockMovement } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 
@@ -22,7 +22,6 @@ const inputCls = 'border border-slate-300 rounded-lg text-sm focus:outline-none 
 
 export default function WarehousePage() {
   const [tab, setTab] = useState<Tab>('stock');
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [bufferBalances, setBufferBalances] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
@@ -45,20 +44,46 @@ export default function WarehousePage() {
   useEffect(() => { if (tab === 'movements') fetchMovements(); }, [tab, dateFrom, dateTo, moveType]);
   useEffect(() => { if (tab === 'buffer') fetchBufferBalances(); }, [tab]);
 
-  async function fetchData() {
-    setLoading(true);
+  useEffect(() => {
+    const channel = supabase
+      .channel('warehouse-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
+        fetchData(true);
+        if (tab === 'buffer') fetchBufferBalances();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
+        fetchData(true);
+        if (tab === 'movements') fetchMovements();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
+        fetchData(true);
+      })
+      .subscribe();
+
+    const intervalId = window.setInterval(() => {
+      fetchData(true);
+      if (tab === 'buffer') fetchBufferBalances();
+      if (tab === 'movements') fetchMovements();
+    }, 12000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
+  }, [tab, dateFrom, dateTo, moveType]);
+
+  async function fetchData(silent = false) {
+    if (!silent) setLoading(true);
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
     const [
-      { data: w },
       { data: m },
       { data: rmBalances },
       { data: prodBalances },
       { data: transferOutMovements }
     ] = await Promise.all([
-      supabase.from('warehouses').select('*').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase
         .from('warehouse_stock_balances')
@@ -78,7 +103,6 @@ export default function WarehousePage() {
         .limit(5000),
     ]);
 
-    setWarehouses(w || []);
     setMaterials(m || []);
 
     const rmMap: Record<string, number> = {};
@@ -107,7 +131,7 @@ export default function WarehousePage() {
     setProductionTransferTotals(totalMap);
     setProductionTransferMtd(mtdMap);
 
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   async function fetchMovements() {
@@ -123,6 +147,7 @@ export default function WarehousePage() {
     const { data } = await supabase
       .from('warehouse_stock_balances')
       .select('*, raw_materials(*), warehouses(*)')
+      .eq('raw_materials.is_active', true)
       .eq('warehouses.code', 'BUFFER')
       .gt('quantity', 0)
       .order('updated_at', { ascending: false });

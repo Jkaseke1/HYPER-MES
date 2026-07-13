@@ -34,8 +34,8 @@ export default function ProductionWarehousePage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  async function fetchTransfers() {
-    setLoading(true);
+  async function fetchTransfers(silent = false) {
+    if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from('stock_movements')
       .select('id, raw_material_id, quantity, unit, movement_date, batch_number, notes, created_at, raw_materials(name, code, unit)')
@@ -44,10 +44,28 @@ export default function ProductionWarehousePage() {
     if (error) console.error('Failed to load production warehouse:', error);
     setTransfers((data as any) || []);
     setLastRefresh(new Date());
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => { fetchTransfers(); }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('production-warehouse-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
+        fetchTransfers(true);
+      })
+      .subscribe();
+
+    const intervalId = window.setInterval(() => {
+      fetchTransfers(true);
+    }, 12000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const aggregated = useMemo<AggregatedMaterial[]>(() => {
     const map: Record<string, AggregatedMaterial> = {};
@@ -97,7 +115,7 @@ export default function ProductionWarehousePage() {
           <p className="text-sm text-slate-500 mt-1">Raw materials transferred to the production floor — visible to production team</p>
         </div>
         <button
-          onClick={fetchTransfers}
+          onClick={() => fetchTransfers()}
           className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />

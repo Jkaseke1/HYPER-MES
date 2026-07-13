@@ -65,6 +65,30 @@ export default function MaterialTransferPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('material-transfer-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
+        fetchData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
+        fetchData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
+        fetchData(true);
+      })
+      .subscribe();
+
+    const intervalId = window.setInterval(() => {
+      fetchData(true);
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // Default from warehouse to Raw Materials Warehouse (code 'RM')
   useEffect(() => {
     const rmWarehouse = warehouses.find((w) => w.code === 'RM');
@@ -90,8 +114,8 @@ export default function MaterialTransferPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.raw_material_id]);
 
-  async function fetchData() {
-    setLoading(true);
+  async function fetchData(silent = false) {
+    if (!silent) setLoading(true);
     const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
       supabase
         .from('material_transfers')
@@ -134,7 +158,7 @@ export default function MaterialTransferPage() {
       });
       setBufferWarehouseBalances(balances);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   async function createTransfer() {
