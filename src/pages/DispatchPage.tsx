@@ -23,7 +23,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg', unit_price: 0 };
+const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg' };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', icon: Clock },
@@ -641,7 +641,7 @@ export default function DispatchPage() {
       </Dialog>
 
       {/* View Modal */}
-      <Modal open={!!viewOrder} onClose={() => setViewOrder(null)} title="Dispatch Details" size="xl">
+      <Modal open={!!viewOrder} onClose={() => setViewOrder(null)} title="Dispatch Details" size="4xl">
         {viewOrder && (
           <div className="space-y-6">
             {/* Header */}
@@ -822,7 +822,7 @@ export default function DispatchPage() {
       />
 
       {/* Picking Slip Modal */}
-      <Modal open={showPickingSlip} onClose={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} title="Picking Slip" size="lg">
+      <Modal open={showPickingSlip} onClose={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} title="Picking Slip" size="2xl">
         {pickingSlipOrder && viewItems.length > 0 && (
           <div className="space-y-6">
             <div className="border-b border-slate-200 pb-5">
