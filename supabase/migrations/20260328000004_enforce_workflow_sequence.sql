@@ -8,25 +8,26 @@ DECLARE
     issued_count INTEGER;
     has_outputs BOOLEAN;
 BEGIN
+    -- Trigger runs on production_orders, so the key is NEW.id/OLD.id (not production_order_id)
     -- Get ingredient counts for this production order
     SELECT 
         COUNT(*) as ingredient_count,
         COUNT(CASE WHEN issued = true THEN 1 END) as issued_count
     INTO ingredient_count, issued_count
     FROM production_order_materials
-    WHERE production_order_id = COALESCE(NEW.production_order_id, OLD.production_order_id);
+    WHERE production_order_id = COALESCE(NEW.id, OLD.id);
     
     -- Check if there are any outputs for completion check
     SELECT EXISTS(
         SELECT 1 FROM production_outputs 
-        WHERE production_order_id = COALESCE(NEW.production_order_id, OLD.production_order_id)
+        WHERE production_order_id = COALESCE(NEW.id, OLD.id)
         AND quantity_produced IS NOT NULL AND quantity_produced > 0
     ) INTO has_outputs;
     
     -- ENFORCEMENT RULES
     
     -- Rule 1: Cannot move to materials_issued unless ALL ingredients are issued
-    IF NEW.status = 'materials_issued' THEN
+    IF NEW.status = 'materials_issued' AND OLD.status IS DISTINCT FROM NEW.status THEN
         IF ingredient_count = 0 THEN
             RAISE EXCEPTION 'Cannot issue materials — no ingredients linked to this order. Please set up the BOM for this formulation first.';
         END IF;
@@ -37,14 +38,14 @@ BEGIN
     END IF;
     
     -- Rule 2: Cannot move to in_progress unless status is materials_issued
-    IF NEW.status = 'in_progress' THEN
+    IF NEW.status = 'in_progress' AND OLD.status IS DISTINCT FROM NEW.status THEN
         IF OLD.status != 'materials_issued' THEN
             RAISE EXCEPTION 'Cannot start production — materials must be issued first. Please issue all ingredients before starting production.';
         END IF;
     END IF;
     
     -- Rule 3: Cannot move to completed unless status is in_progress AND outputs are recorded
-    IF NEW.status = 'completed' THEN
+    IF NEW.status = 'completed' AND OLD.status IS DISTINCT FROM NEW.status THEN
         IF OLD.status != 'in_progress' THEN
             RAISE EXCEPTION 'Cannot complete production order — production must be in progress first. Please start production before completing.';
         END IF;
