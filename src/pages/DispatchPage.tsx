@@ -67,10 +67,10 @@ export default function DispatchPage() {
       if (b.data) setBranches(b.data);
       if (w.data) {
         setWarehouses(w.data);
-        // Default warehouse to Despatch Warehouse (DSP)
-        const dspWarehouse = w.data.find(wh => wh.code === 'DSP');
-        if (dspWarehouse) {
-          setForm(prev => ({ ...prev, warehouse_id: dspWarehouse.id }));
+        // Default to DEB (Sage dispatch source warehouse), fallback to DSP
+        const defaultWarehouse = w.data.find(wh => wh.code === 'DEB') || w.data.find(wh => wh.code === 'DSP');
+        if (defaultWarehouse) {
+          setForm(prev => ({ ...prev, warehouse_id: defaultWarehouse.id }));
         }
       }
       if (f.data) setFormulations(f.data);
@@ -123,10 +123,10 @@ export default function DispatchPage() {
   const resetForm = () => { 
     setForm(initForm); 
     setItems([{ ...EMPTY_ITEM }]); 
-    // Re-apply DSP warehouse default
-    const dspWarehouse = warehouses.find(wh => wh.code === 'DSP');
-    if (dspWarehouse) {
-      setForm(prev => ({ ...prev, warehouse_id: dspWarehouse.id }));
+    // Re-apply DEB/Sage source warehouse default
+    const defaultWarehouse = warehouses.find(wh => wh.code === 'DEB') || warehouses.find(wh => wh.code === 'DSP');
+    if (defaultWarehouse) {
+      setForm(prev => ({ ...prev, warehouse_id: defaultWarehouse.id }));
     }
   };
 
