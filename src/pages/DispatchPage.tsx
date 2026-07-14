@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, DollarSign, Hash } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, DollarSign, Hash, Warehouse, Calendar, User, Route, ArrowRight, Clock, CheckCircle2, Box } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
@@ -25,6 +25,15 @@ const TABS: { key: Tab; label: string }[] = [
 
 const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg', unit_price: 0 };
 
+const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', icon: Clock },
+  loading: { label: 'Loading', color: 'text-blue-700', bg: 'bg-blue-50', icon: Box },
+  dispatched: { label: 'Dispatched', color: 'text-indigo-700', bg: 'bg-indigo-50', icon: Truck },
+  in_transit: { label: 'In Transit', color: 'text-purple-700', bg: 'bg-purple-50', icon: Route },
+  delivered: { label: 'Delivered', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: CheckCircle2 },
+  cancelled: { label: 'Cancelled', color: 'text-red-700', bg: 'bg-red-50', icon: AlertTriangle },
+};
+
 export default function DispatchPage() {
   const [orders, setOrders] = useState<DispatchOrder[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -49,7 +58,7 @@ export default function DispatchPage() {
   const [pickingSlipOrder, setPickingSlipOrder] = useState<DispatchOrder | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name)').order('created_at', { ascending: false });
+    let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name, code)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     const { data } = await q;
     if (data) setOrders(data as DispatchOrder[]);
@@ -67,7 +76,6 @@ export default function DispatchPage() {
       if (b.data) setBranches(b.data);
       if (w.data) {
         setWarehouses(w.data);
-        // Default to DEB (Sage dispatch source warehouse), fallback to DSP
         const defaultWarehouse = w.data.find(wh => wh.code === 'DEB') || w.data.find(wh => wh.code === 'DSP');
         if (defaultWarehouse) {
           setForm(prev => ({ ...prev, warehouse_id: defaultWarehouse.id }));
@@ -98,6 +106,14 @@ export default function DispatchPage() {
     return o.dispatch_number.toLowerCase().includes(s) || o.driver_name.toLowerCase().includes(s) || o.vehicle_number.toLowerCase().includes(s) || (o.branches as any)?.name?.toLowerCase().includes(s);
   });
 
+  const stats = {
+    total: orders.length,
+    pending: orders.filter(o => o.status === 'pending').length,
+    inTransit: orders.filter(o => o.status === 'in_transit' || o.status === 'dispatched').length,
+    delivered: orders.filter(o => o.status === 'delivered').length,
+    totalWeight: orders.reduce((s, o) => s + (o.total_weight || 0), 0),
+  };
+
   const handleCreate = async () => {
     setSaving(true);
     try {
@@ -120,10 +136,9 @@ export default function DispatchPage() {
     }
   };
 
-  const resetForm = () => { 
-    setForm(initForm); 
-    setItems([{ ...EMPTY_ITEM }]); 
-    // Re-apply DEB/Sage source warehouse default
+  const resetForm = () => {
+    setForm(initForm);
+    setItems([{ ...EMPTY_ITEM }]);
     const defaultWarehouse = warehouses.find(wh => wh.code === 'DEB') || warehouses.find(wh => wh.code === 'DSP');
     if (defaultWarehouse) {
       setForm(prev => ({ ...prev, warehouse_id: defaultWarehouse.id }));
@@ -155,12 +170,11 @@ export default function DispatchPage() {
 
   const openView = async (order: DispatchOrder) => {
     setViewOrder(order);
-    const { data } = await supabase.from('dispatch_items').select('*, formulations(name, code)').eq('dispatch_order_id', order.id);
+    const { data } = await supabase.from('dispatch_items').select('*, formulations(name, code, sage_code)').eq('dispatch_order_id', order.id);
     if (data) setViewItems(data as DispatchItem[]);
   };
 
   const updateStatus = async (id: string, status: string) => {
-    // Validate FG stock before marking as delivered
     if (status === 'delivered' && viewOrder?.id === id) {
       const itemsToCheck = viewItems
         .filter(item => item.formulation_id)
@@ -189,7 +203,6 @@ export default function DispatchPage() {
     if (status === 'delivered') updates.delivered_at = new Date().toISOString();
     await supabase.from('dispatch_orders').update(updates).eq('id', id);
 
-    // Write dispatch_out movements so FG ledger balance stays accurate
     if (status === 'delivered') {
       const itemsForMovement = viewOrder?.id === id ? viewItems : [];
       const movements = itemsForMovement
@@ -213,7 +226,6 @@ export default function DispatchPage() {
   };
 
   const deleteOrder = async (order: DispatchOrder) => {
-    // Check deletion protection - only Pending dispatches can be deleted
     if (order.status !== 'pending') {
       alert('Cannot delete — this dispatch has been processed. Only pending dispatches can be deleted.');
       return;
@@ -236,241 +248,382 @@ export default function DispatchPage() {
     }
   };
 
-  const STATUS_FLOW: Record<string, { label: string; next: string }> = { pending: { label: 'Start Loading', next: 'loading' }, loading: { label: 'Mark Dispatched', next: 'dispatched' }, dispatched: { label: 'In Transit', next: 'in_transit' }, in_transit: { label: 'Mark Delivered', next: 'delivered' } };
+  const STATUS_FLOW: Record<string, { label: string; next: string }> = {
+    pending: { label: 'Start Loading', next: 'loading' },
+    loading: { label: 'Mark Dispatched', next: 'dispatched' },
+    dispatched: { label: 'In Transit', next: 'in_transit' },
+    in_transit: { label: 'Mark Delivered', next: 'delivered' },
+  };
   const nextStatus = (s: string) => STATUS_FLOW[s] || null;
 
+  const statusIndex = (s: string) => ['pending', 'loading', 'dispatched', 'in_transit', 'delivered'].indexOf(s);
+  const currentStatusIndex = viewOrder ? statusIndex(viewOrder.status) : -1;
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Dispatch Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage finished goods dispatch to branches</p>
+    <div className="min-h-screen bg-slate-50/60 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Dispatch Management</h1>
+            <p className="text-sm text-slate-500 mt-1">Plan, track and deliver finished goods to branches.</p>
+          </div>
+          <button
+            onClick={() => { resetForm(); setShowCreate(true); }}
+            className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-teal-600/20 transition-all active:scale-95"
+          >
+            <Plus className="w-5 h-5" />
+            New Dispatch
+          </button>
         </div>
-        <button onClick={() => { resetForm(); setShowCreate(true); }} className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
-          <Plus className="w-4 h-4" /> New Dispatch
-        </button>
-      </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex bg-slate-100 rounded-lg p-1">
-          {TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${tab === t.key ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>
-              {t.label}
-            </button>
-          ))}
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Dispatches</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.total.toLocaleString()}</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                <Truck className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">Pending</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.pending.toLocaleString()}</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">On The Road</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.inTransit.toLocaleString()}</p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                <Route className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Weight</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalWeight.toLocaleString()} <span className="text-sm font-medium text-slate-500">kg</span></p>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+                <Scale className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search dispatches..." className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-        </div>
-      </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              {['Dispatch #', 'Branch', 'Date', 'Vehicle', 'Driver', 'Weight (kg)', 'Status', 'Actions'].map((h) => (
-                <th key={h} className="text-left px-4 py-3 font-semibold text-slate-600">{h}</th>
+        {/* Filters */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            <div className="flex flex-wrap gap-2">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                    tab === t.key
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {t.label}
+                </button>
               ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.map((o) => (
-              <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 font-medium text-slate-800">{o.dispatch_number}</td>
-                <td className="px-4 py-3 text-slate-600">{(o.branches as any)?.name || '-'}</td>
-                <td className="px-4 py-3 text-slate-600">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</td>
-                <td className="px-4 py-3 text-slate-600">{o.vehicle_number}</td>
-                <td className="px-4 py-3 text-slate-600">{o.driver_name}</td>
-                <td className="px-4 py-3 text-slate-600">{o.total_weight.toLocaleString()}</td>
-                <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openView(o)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Eye className="w-4 h-4" /></button>
-                    {nextStatus(o.status) && (
-                      <button onClick={() => updateStatus(o.id, nextStatus(o.status)!.next)} className="px-2 py-1 text-xs font-medium rounded-md bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors">
-                        {nextStatus(o.status)!.label}
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!filtered.length && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">No dispatch orders found</td></tr>
-            )}
-          </tbody>
-        </table>
+            </div>
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search dispatch, branch, vehicle or driver..."
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 bg-slate-50/50"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50/80 border-b border-slate-200">
+                <tr>
+                  {['Dispatch #', 'Branch', 'Date', 'Vehicle', 'Driver', 'Weight', 'Value', 'Status', ''].map((h) => (
+                    <th key={h} className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((o) => (
+                  <tr key={o.id} className="group hover:bg-slate-50/80 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-xs">
+                          {o.dispatch_number.split('-').pop()?.slice(0, 3)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800">{o.dispatch_number}</p>
+                          <p className="text-xs text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-slate-400" />
+                        <span className="font-medium text-slate-700">{(o.branches as any)?.name || '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-slate-400" />
+                        <span className="text-slate-700">{o.vehicle_number || '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span className="text-slate-700">{o.driver_name || '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 font-medium text-slate-700">{o.total_weight.toLocaleString()} kg</td>
+                    <td className="px-5 py-4 font-medium text-slate-700">${o.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-5 py-4">
+                      <StatusBadge status={o.status} />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => { setPickingSlipOrder(o); setShowPickingSlip(true); }}
+                          className="p-2 rounded-lg bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          title="Picking Slip"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                        {nextStatus(o.status) && (
+                          <button
+                            onClick={() => updateStatus(o.id, nextStatus(o.status)!.next)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors"
+                          >
+                            {nextStatus(o.status)!.label}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openView(o)}
+                          className="p-2 rounded-lg bg-slate-50 text-slate-500 hover:bg-teal-50 hover:text-teal-600 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!filtered.length && (
+                  <tr>
+                    <td colSpan={9} className="px-5 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-slate-400">
+                        <Truck className="w-12 h-12 mb-3 text-slate-300" />
+                        <p className="text-sm font-medium">No dispatch orders found</p>
+                        <p className="text-xs mt-1">Try adjusting your search or create a new dispatch.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
+      {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-[1200px] w-[98vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-[1200px] flex flex-col [&>button.absolute]:hidden">
-          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
-            <div className="flex items-center justify-between pr-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <Truck className="w-5 h-5 text-white" />
+        <DialogContent className="max-w-6xl w-[98vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-6xl flex flex-col border-0 shadow-2xl rounded-2xl overflow-hidden [&>button.absolute]:hidden">
+          <div className="shrink-0 bg-gradient-to-r from-slate-900 to-slate-800 text-white px-6 py-4 relative">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-teal-500 flex items-center justify-center shadow-lg">
+                  <Truck className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold tracking-tight">Create Dispatch Order</h2>
+                  <h2 className="text-xl font-bold tracking-tight">Create Dispatch Order</h2>
                   <p className="text-slate-400 text-xs">Schedule finished goods delivery and assign branch, vehicle and driver</p>
                 </div>
               </div>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">Pending</span>
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 rounded-full bg-white/10 text-xs font-medium border border-white/20">Pending</span>
+                <button
+                  onClick={() => setShowCreate(false)}
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setShowCreate(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-4 h-4 text-white" />
-            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center shrink-0">
-                  <Scale className="w-4 h-4 text-teal-600" />
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-slate-50/80 space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-2xl border border-teal-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                  <Scale className="w-5 h-5 text-teal-600" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Total Weight</p>
-                  <p className="mt-0.5 text-xl font-bold text-teal-900">{totalWeight.toLocaleString()} kg</p>
+                  <p className="text-2xl font-bold text-slate-900">{totalWeight.toLocaleString()} <span className="text-sm font-medium text-slate-500">kg</span></p>
                 </div>
               </div>
-              <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <DollarSign className="w-4 h-4 text-blue-600" />
+              <div className="rounded-2xl border border-blue-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total Value</p>
-                  <p className="mt-0.5 text-xl font-bold text-blue-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  <p className="text-2xl font-bold text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-slate-500/10 flex items-center justify-center shrink-0">
-                  <Hash className="w-4 h-4 text-slate-600" />
+              <div className="rounded-2xl border border-slate-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                  <Hash className="w-5 h-5 text-slate-600" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Items</p>
-                  <p className="mt-0.5 text-xl font-bold text-slate-900">{items.filter(i => i.formulation_id).length}</p>
+                  <p className="text-2xl font-bold text-slate-900">{items.filter(i => i.formulation_id).length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600" />
-                  <h3 className="text-sm font-semibold text-slate-800">Dispatch Details</h3>
+            {/* Dispatch Details */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white shadow-sm p-5 space-y-5">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                  <MapPin className="w-4 h-4" />
                 </div>
-                <Badge variant="outline" className="text-[11px]">Destination</Badge>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Dispatch Details</h3>
+                <Badge variant="outline" className="ml-auto text-[11px]">Destination</Badge>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Dispatch #</label>
-                  <input type="text" value={dispatchNumber || 'Auto-generated'} disabled className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-100 text-slate-500 cursor-not-allowed" />
-                  <p className="text-[11px] text-slate-500 mt-0.5">System generated</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Dispatch #</label>
+                  <input type="text" value={dispatchNumber || 'Auto-generated'} disabled className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 text-slate-500 cursor-not-allowed" />
+                  <p className="text-[11px] text-slate-400">System generated</p>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Branch *</label>
-                  <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Branch <span className="text-red-500">*</span></label>
+                  <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white">
                     <option value="">Select branch</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Warehouse</label>
-                  <select value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Source Warehouse</label>
+                  <select value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white">
                     <option value="">Select warehouse</option>
-                    {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.code})</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Dispatch Date</label>
-                  <input type="date" value={form.dispatch_date} onChange={(e) => setForm({ ...form, dispatch_date: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Dispatch Date</label>
+                  <input type="date" value={form.dispatch_date} onChange={(e) => setForm({ ...form, dispatch_date: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" />
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-amber-600" />
-                  <h3 className="text-sm font-semibold text-slate-800">Transport Details</h3>
+            {/* Transport */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white shadow-sm p-5 space-y-5">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                  <Truck className="w-4 h-4" />
                 </div>
-                <Badge variant="outline" className="text-[11px]">Logistics</Badge>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Transport Details</h3>
+                <Badge variant="outline" className="ml-auto text-[11px]">Logistics</Badge>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Vehicle Number</label>
-                  <input value={form.vehicle_number} onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="e.g. ABC 1234" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Vehicle Number</label>
+                  <input value={form.vehicle_number} onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" placeholder="e.g. ABC 1234" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Driver Name</label>
-                  <input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="e.g. John Doe" />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Driver Name</label>
+                  <input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" placeholder="e.g. John Doe" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Delivery Notes</label>
-                  <input value={form.delivery_notes} onChange={(e) => setForm({ ...form, delivery_notes: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" placeholder="Special instructions..." />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Delivery Notes</label>
+                  <input value={form.delivery_notes} onChange={(e) => setForm({ ...form, delivery_notes: e.target.value })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" placeholder="Special instructions..." />
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <Package className="w-4 h-4 text-teal-600" />
-                  <h3 className="text-sm font-semibold text-slate-800">Dispatch Items</h3>
+            {/* Items */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white shadow-sm p-5 space-y-5">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                  <Package className="w-4 h-4" />
                 </div>
-                <Badge variant="outline" className="text-[11px]">Finished Goods</Badge>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Dispatch Items</h3>
+                <Badge variant="outline" className="ml-auto text-[11px]">Finished Goods</Badge>
               </div>
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-100">
+                  <thead className="bg-slate-50">
                     <tr>
-                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total', 'Stock Movement'].map((h) => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold text-slate-600 text-xs">{h}</th>
+                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total', 'Stock'].map((h) => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-3 py-2 min-w-[220px]">
-                          <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 min-w-[240px]">
+                          <select value={item.formulation_id} onChange={(e) => updateItem(idx, 'formulation_id', e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white">
                             <option value="">Select product</option>
                             {formulations.map((f) => <option key={f.id} value={f.id}>{f.sage_code} — {f.name}</option>)}
                           </select>
                           {item.formulation_id && (
-                            <p className={`text-xs mt-1 font-semibold ${(stockBalances[item.formulation_id] ?? 0) > 0 ? 'text-teal-600' : 'text-amber-600'}`}>
+                            <p className={`text-xs mt-2 font-semibold ${(stockBalances[item.formulation_id] ?? 0) > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
                               Available: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}
                             </p>
                           )}
                         </td>
-                        <td className="px-3 py-2 min-w-[180px]">
+                        <td className="px-4 py-3 min-w-[180px]">
                           {batchNumbers[item.formulation_id]?.length ? (
-                            <select value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                            <select value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white">
                               <option value="">Select batch</option>
                               {batchNumbers[item.formulation_id].map((bn) => <option key={bn} value={bn}>{bn}</option>)}
                             </select>
                           ) : (
-                            <input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} placeholder="e.g. BATCH-2026-103" className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" />
+                            <input value={item.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} placeholder="e.g. BATCH-2026-103" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" />
                           )}
                         </td>
-                        <td className="px-3 py-2"><input type="number" value={item.quantity || ''} onChange={(e) => updateItem(idx, 'quantity', +e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" /></td>
-                        <td className="px-3 py-2">
-                          <select value={item.unit} onChange={(e) => updateItem(idx, 'unit', e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white">
+                        <td className="px-4 py-3"><input type="number" value={item.quantity || ''} onChange={(e) => updateItem(idx, 'quantity', +e.target.value)} className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" /></td>
+                        <td className="px-4 py-3">
+                          <select value={item.unit} onChange={(e) => updateItem(idx, 'unit', e.target.value)} className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white">
                             {['kg', 'bags', 'tons'].map((u) => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-28 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" /></td>
-                        <td className="px-3 py-2 text-slate-700 font-medium">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                        <td className="px-3 py-2 min-w-[150px]">
+                        <td className="px-4 py-3"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" /></td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold min-w-[100px]">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-3 min-w-[120px]">
                           {item.formulation_id && item.quantity > 0 && (
-                            <div className="text-xs">
-                              <div className="text-slate-600">Current: {stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}</div>
-                              <div className="text-amber-600">After: {stockBalances[item.formulation_id] !== undefined ? `${(stockBalances[item.formulation_id] - item.quantity).toLocaleString()} kg` : '…'}</div>
+                            <div className="text-xs space-y-0.5">
+                              <div className="text-slate-500">Current: <span className="font-semibold text-slate-700">{stockBalances[item.formulation_id] !== undefined ? `${stockBalances[item.formulation_id].toLocaleString()} kg` : '…'}</span></div>
+                              <div className="text-slate-500">After: <span className="font-semibold text-amber-600">{stockBalances[item.formulation_id] !== undefined ? `${(stockBalances[item.formulation_id] - item.quantity).toLocaleString()} kg` : '…'}</span></div>
                             </div>
                           )}
                         </td>
@@ -479,21 +632,21 @@ export default function DispatchPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-between items-center">
-                <button onClick={() => setItems([...items, { ...EMPTY_ITEM }])} className="flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
-                  <Plus className="w-3.5 h-3.5" /> Add Item
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <button onClick={() => setItems([...items, { ...EMPTY_ITEM }])} className="flex items-center gap-2 text-sm font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl transition-colors">
+                  <Plus className="w-4 h-4" /> Add Item
                 </button>
                 <div className="flex gap-6 text-sm">
-                  <span className="text-slate-600">Total Weight: <strong className="text-slate-900">{totalWeight.toLocaleString()} kg</strong></span>
-                  <span className="text-slate-600">Total Value: <strong className="text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-slate-500">Total Weight: <strong className="text-slate-900">{totalWeight.toLocaleString()} kg</strong></span>
+                  <span className="text-slate-500">Total Value: <strong className="text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 rounded-b-lg flex justify-end gap-3">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-            <button onClick={handleCreate} disabled={saving || !form.branch_id} className="px-4 py-2 text-sm font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 flex justify-end gap-3">
+            <button onClick={() => setShowCreate(false)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={handleCreate} disabled={saving || !form.branch_id} className="px-5 py-2.5 text-sm font-semibold bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <Truck className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save Dispatch'}
             </button>
@@ -501,52 +654,113 @@ export default function DispatchPage() {
         </DialogContent>
       </Dialog>
 
+      {/* View Modal */}
       <Modal open={!!viewOrder} onClose={() => setViewOrder(null)} title="Dispatch Details" size="xl">
         {viewOrder && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center"><Truck className="w-5 h-5 text-teal-600" /></div>
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-5 border-b border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center shadow-lg text-white">
+                  <Truck className="w-7 h-7" />
+                </div>
                 <div>
-                  <p className="font-semibold text-slate-800">{viewOrder.dispatch_number}</p>
-                  <p className="text-xs text-slate-500">{format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')}</p>
+                  <p className="text-lg font-bold text-slate-900">{viewOrder.dispatch_number}</p>
+                  <div className="flex items-center gap-2 text-sm text-slate-500 mt-0.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={viewOrder.status} />
-                <button onClick={() => { setPickingSlipOrder(viewOrder); setShowPickingSlip(true); }} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200">
+                <button onClick={() => { setPickingSlipOrder(viewOrder); setShowPickingSlip(true); }} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200">
                   <FileText className="w-3.5 h-3.5" />
                   Picking Slip
                 </button>
                 {nextStatus(viewOrder.status) && (
-                  <button onClick={() => updateStatus(viewOrder.id, nextStatus(viewOrder.status)!.next)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
+                  <button onClick={() => updateStatus(viewOrder.id, nextStatus(viewOrder.status)!.next)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
                     {nextStatus(viewOrder.status)!.label}
                   </button>
                 )}
                 {viewOrder.status === 'pending' && (
-                  <button onClick={() => deleteOrder(viewOrder)} disabled={saving} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">
+                  <button onClick={() => deleteOrder(viewOrder)} disabled={saving} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors border border-red-200">
                     <AlertTriangle className="w-3 h-3" />
                     Delete
                   </button>
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4 bg-slate-50 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
-                <div><p className="text-xs text-slate-500">Branch</p><p className="text-sm font-medium text-slate-700">{(viewOrder.branches as any)?.name || '-'}</p></div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Truck className="w-4 h-4 text-slate-400 mt-0.5" />
-                <div><p className="text-xs text-slate-500">Vehicle / Driver</p><p className="text-sm font-medium text-slate-700">{viewOrder.vehicle_number} / {viewOrder.driver_name}</p></div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Package className="w-4 h-4 text-slate-400 mt-0.5" />
-                <div><p className="text-xs text-slate-500">Weight / Value</p><p className="text-sm font-medium text-slate-700">{viewOrder.total_weight.toLocaleString()} kg / ${viewOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p></div>
+
+            {/* Status Timeline */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70">
+              <div className="flex items-center justify-between">
+                {['pending', 'loading', 'dispatched', 'in_transit', 'delivered'].map((s, i) => {
+                  const isActive = i <= currentStatusIndex;
+                  const isCurrent = i === currentStatusIndex;
+                  const Icon = STATUS_META[s]?.icon || Clock;
+                  return (
+                    <div key={s} className="flex flex-col items-center gap-2 flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${isCurrent ? 'bg-teal-600 border-teal-600 text-white' : isActive ? 'bg-teal-100 border-teal-300 text-teal-700' : 'bg-white border-slate-200 text-slate-400'}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className={`text-[10px] font-semibold uppercase tracking-wide ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>{STATUS_META[s]?.label || s}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            {viewOrder.delivery_notes && <p className="text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-lg px-4 py-2">{viewOrder.delivery_notes}</p>}
-            
+
+            {/* Info Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-slate-200/70 p-4 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Branch</p>
+                  <p className="font-semibold text-slate-800">{(viewOrder.branches as any)?.name || '-'}</p>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200/70 p-4 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+                  <Warehouse className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Source Warehouse</p>
+                  <p className="font-semibold text-slate-800">{(viewOrder.warehouses as any)?.name || '-'} <span className="text-slate-400 font-normal">({(viewOrder.warehouses as any)?.code || '-'})</span></p>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200/70 p-4 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Vehicle / Driver</p>
+                  <p className="font-semibold text-slate-800">{viewOrder.vehicle_number || '-'} <span className="text-slate-400 font-normal">/ {viewOrder.driver_name || '-'}</span></p>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200/70 p-4 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Weight / Value</p>
+                  <p className="font-semibold text-slate-800">{viewOrder.total_weight.toLocaleString()} kg <span className="text-slate-400 font-normal">/ ${viewOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></p>
+                </div>
+              </div>
+            </div>
+
+            {viewOrder.delivery_notes && (
+              <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 uppercase">Delivery Notes</p>
+                  <p className="text-sm text-amber-900 mt-1">{viewOrder.delivery_notes}</p>
+                </div>
+              </div>
+            )}
+
             {viewOrder.status === 'pending' && (
               <div className="border-t border-slate-200 pt-4">
                 <ApprovalButtons
@@ -566,35 +780,39 @@ export default function DispatchPage() {
                 />
               </div>
             )}
-            
+
             {viewOrder.rejection_reason && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
                 <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
                 <p className="text-sm text-red-700">{viewOrder.rejection_reason}</p>
               </div>
             )}
-            
+
             <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-2">Items</h4>
-              <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-                <thead className="bg-slate-50">
-                  <tr>{['Product', 'Batch', 'Qty', 'Unit', 'Price', 'Total'].map((h) => <th key={h} className="text-left px-3 py-2 text-xs font-medium text-slate-600">{h}</th>)}</tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {viewItems.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2 text-slate-700">{(item.formulations as any)?.name || '-'}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.batch_number}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.quantity}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.unit}</td>
-                      <td className="px-3 py-2 text-slate-600">${item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-slate-700 font-medium">${item.line_total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3">Dispatch Items</h4>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/70">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {['Product', 'Batch', 'Qty', 'Unit', 'Unit Price', 'Total'].map((h) => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>)}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {viewItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 text-slate-700 font-medium">{(item.formulations as any)?.name || '-'}</td>
+                        <td className="px-4 py-3 text-slate-600 font-mono text-xs">{item.batch_number}</td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold">{item.quantity}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.unit}</td>
+                        <td className="px-4 py-3 text-slate-600">${item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold">${item.line_total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            
+
             <div className="border-t border-slate-200 pt-4">
               <ApprovalHistory entityType="dispatch_order" entityId={viewOrder.id} />
             </div>
@@ -622,50 +840,50 @@ export default function DispatchPage() {
       {/* Picking Slip Modal */}
       <Modal open={showPickingSlip} onClose={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} title="Picking Slip" size="lg">
         {pickingSlipOrder && viewItems.length > 0 && (
-          <div className="space-y-4">
-            <div className="border-b border-slate-200 pb-4">
-              <div className="flex items-center justify-between mb-3">
+          <div className="space-y-6">
+            <div className="border-b border-slate-200 pb-5">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800">PICKING SLIP</h3>
+                  <h3 className="text-xl font-bold text-slate-900">PICKING SLIP</h3>
                   <p className="text-sm text-slate-500">Dispatch: {pickingSlipOrder.dispatch_number}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-slate-500">Date</p>
-                  <p className="text-sm font-medium text-slate-700">{format(new Date(pickingSlipOrder.dispatch_date), 'dd MMM yyyy')}</p>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide">Date</p>
+                  <p className="text-sm font-semibold text-slate-700">{format(new Date(pickingSlipOrder.dispatch_date), 'dd MMM yyyy')}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-slate-500">Branch</p>
-                  <p className="font-medium text-slate-800">{(pickingSlipOrder.branches as any)?.name || '-'}</p>
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60">
+                  <p className="text-xs text-slate-400 uppercase">Branch</p>
+                  <p className="font-semibold text-slate-800">{(pickingSlipOrder.branches as any)?.name || '-'}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500">Vehicle / Driver</p>
-                  <p className="font-medium text-slate-800">{pickingSlipOrder.vehicle_number} / {pickingSlipOrder.driver_name}</p>
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60">
+                  <p className="text-xs text-slate-400 uppercase">Vehicle / Driver</p>
+                  <p className="font-semibold text-slate-800">{pickingSlipOrder.vehicle_number} / {pickingSlipOrder.driver_name}</p>
                 </div>
               </div>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-slate-700 mb-3">Items to Pick</h4>
-              <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-                <thead className="bg-slate-100">
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3">Items to Pick</h4>
+              <table className="w-full text-sm border border-slate-200/70 rounded-2xl overflow-hidden">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Product</th>
-                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Batch</th>
-                    <th className="text-right px-3 py-2 font-semibold text-slate-600">Qty</th>
-                    <th className="text-left px-3 py-2 font-semibold text-slate-600">Unit</th>
-                    <th className="text-center px-3 py-2 font-semibold text-slate-600">Picked</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Product</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Batch</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Qty</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Unit</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Picked</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {viewItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-700 font-medium">{(item.formulations as any)?.name || '-'}</td>
-                      <td className="px-3 py-2 text-slate-600 font-mono text-xs">{item.batch_number}</td>
-                      <td className="px-3 py-2 text-right text-slate-700 font-semibold">{item.quantity.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.unit}</td>
-                      <td className="px-3 py-2 text-center">
+                    <tr key={item.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 text-slate-700 font-medium">{(item.formulations as any)?.name || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600 font-mono text-xs">{item.batch_number}</td>
+                      <td className="px-4 py-3 text-right text-slate-700 font-semibold">{item.quantity.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-600">{item.unit}</td>
+                      <td className="px-4 py-3 text-center">
                         <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                       </td>
                     </tr>
@@ -674,32 +892,32 @@ export default function DispatchPage() {
               </table>
             </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-xs text-slate-500">Total Weight</p>
+                  <p className="text-xs text-slate-400 uppercase">Total Weight</p>
                   <p className="text-lg font-bold text-slate-800">{pickingSlipOrder.total_weight.toLocaleString()} kg</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Total Value</p>
+                  <p className="text-xs text-slate-400 uppercase">Total Value</p>
                   <p className="text-lg font-bold text-slate-800">${pickingSlipOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
             </div>
 
             {pickingSlipOrder.delivery_notes && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
                 <p className="text-xs font-semibold text-amber-800 mb-1">Delivery Notes</p>
                 <p className="text-sm text-amber-700">{pickingSlipOrder.delivery_notes}</p>
               </div>
             )}
 
-            <div className="border-t border-slate-200 pt-4 flex justify-between">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm">
+            <div className="border-t border-slate-200 pt-5 flex justify-between">
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-semibold text-sm">
                 <FileText className="w-4 h-4" />
                 Print Slip
               </button>
-              <button onClick={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium text-sm">
+              <button onClick={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} className="px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors font-semibold text-sm">
                 Close
               </button>
             </div>
