@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, Hash, Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, DollarSign, Hash, Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
@@ -23,7 +23,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg' };
+const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg', unit_price: 0 };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', icon: Clock },
@@ -98,6 +98,7 @@ export default function DispatchPage() {
   };
 
   const totalWeight = items.reduce((s, i) => s + (i.quantity || 0), 0);
+  const totalValue = items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
 
   const filtered = orders.filter((o) => {
     if (!search) return true;
@@ -117,9 +118,9 @@ export default function DispatchPage() {
     setSaving(true);
     try {
       const generatedNumber = await generateDispatchNumber();
-      const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: 0 }).select().single();
+      const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: totalValue }).select().single();
       if (!error && data) {
-        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: i.unit_price, line_total: i.quantity * i.unit_price }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
       }
       if (error) throw error;
@@ -360,7 +361,7 @@ export default function DispatchPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50/80 border-b border-slate-200">
                 <tr>
-                  {['Dispatch #', 'Branch', 'Date', 'Vehicle', 'Driver', 'Weight', 'Status', ''].map((h) => (
+                  {['Dispatch #', 'Branch', 'Date', 'Vehicle', 'Driver', 'Weight', 'Value', 'Status', ''].map((h) => (
                     <th key={h} className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -399,6 +400,7 @@ export default function DispatchPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4 font-medium text-slate-700">{o.total_weight.toLocaleString()} kg</td>
+                    <td className="px-5 py-4 font-medium text-slate-700">${o.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td className="px-5 py-4">
                       <StatusBadge status={o.status} />
                     </td>
@@ -432,7 +434,7 @@ export default function DispatchPage() {
                 ))}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center">
+                    <td colSpan={9} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-slate-400">
                         <Truck className="w-12 h-12 mb-3 text-slate-300" />
                         <p className="text-sm font-medium">No dispatch orders found</p>
@@ -476,7 +478,7 @@ export default function DispatchPage() {
 
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-slate-50/80 space-y-6">
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="rounded-2xl border border-teal-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
                 <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
                   <Scale className="w-5 h-5 text-teal-600" />
@@ -484,6 +486,15 @@ export default function DispatchPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Total Weight</p>
                   <p className="text-2xl font-bold text-slate-900">{totalWeight.toLocaleString()} <span className="text-sm font-medium text-slate-500">kg</span></p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-blue-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total Value</p>
+                  <p className="text-2xl font-bold text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200/60 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
@@ -571,7 +582,7 @@ export default function DispatchPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Stock'].map((h) => (
+                      {['Product', 'Batch Number', 'Qty', 'Unit', 'Unit Price', 'Total', 'Stock'].map((h) => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -606,6 +617,8 @@ export default function DispatchPage() {
                             {['kg', 'bags', 'tons'].map((u) => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </td>
+                        <td className="px-4 py-3"><input type="number" value={item.unit_price || ''} onChange={(e) => updateItem(idx, 'unit_price', +e.target.value)} className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 bg-white" /></td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold min-w-[100px]">${(item.quantity * item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                         <td className="px-4 py-3 min-w-[120px]">
                           {item.formulation_id && item.quantity > 0 && (
                             <div className="text-xs space-y-0.5">
@@ -623,8 +636,9 @@ export default function DispatchPage() {
                 <button onClick={() => setItems([...items, { ...EMPTY_ITEM }])} className="flex items-center gap-2 text-sm font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl transition-colors">
                   <Plus className="w-4 h-4" /> Add Item
                 </button>
-                <div className="text-sm">
+                <div className="flex gap-6 text-sm">
                   <span className="text-slate-500">Total Weight: <strong className="text-slate-900">{totalWeight.toLocaleString()} kg</strong></span>
+                  <span className="text-slate-500">Total Value: <strong className="text-slate-900">${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
                 </div>
               </div>
             </div>
@@ -731,8 +745,8 @@ export default function DispatchPage() {
                   <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase">Total Weight</p>
-                  <p className="font-semibold text-slate-800">{viewOrder.total_weight.toLocaleString()} kg</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Weight / Value</p>
+                  <p className="font-semibold text-slate-800">{viewOrder.total_weight.toLocaleString()} kg <span className="text-slate-400 font-normal">/ ${viewOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></p>
                 </div>
               </div>
             </div>
@@ -780,7 +794,7 @@ export default function DispatchPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {['Product', 'Batch', 'Qty', 'Unit'].map((h) => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>)}
+                      {['Product', 'Batch', 'Qty', 'Unit', 'Unit Price', 'Total'].map((h) => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>)}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
@@ -790,6 +804,8 @@ export default function DispatchPage() {
                         <td className="px-4 py-3 text-slate-600 font-mono text-xs">{item.batch_number}</td>
                         <td className="px-4 py-3 text-slate-700 font-semibold">{item.quantity}</td>
                         <td className="px-4 py-3 text-slate-600">{item.unit}</td>
+                        <td className="px-4 py-3 text-slate-600">${item.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold">${item.line_total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -877,9 +893,15 @@ export default function DispatchPage() {
             </div>
 
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70">
-              <div className="text-sm">
-                <p className="text-xs text-slate-400 uppercase">Total Weight</p>
-                <p className="text-lg font-bold text-slate-800">{pickingSlipOrder.total_weight.toLocaleString()} kg</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase">Total Weight</p>
+                  <p className="text-lg font-bold text-slate-800">{pickingSlipOrder.total_weight.toLocaleString()} kg</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 uppercase">Total Value</p>
+                  <p className="text-lg font-bold text-slate-800">${pickingSlipOrder.total_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
             </div>
 
