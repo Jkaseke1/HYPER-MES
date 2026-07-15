@@ -94,7 +94,6 @@ const navGroups: NavGroup[] = [
     icon: WarehouseIcon,
     items: [
       { to: '/warehouse', icon: WarehouseIcon, label: 'Finished Goods Warehouse' },
-      { to: '/price-control', icon: DollarSign, label: 'Price Control' },
       { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
     ],
   },
