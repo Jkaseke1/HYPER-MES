@@ -238,6 +238,12 @@ export default function GoodsReceivedPage() {
   const updateItem = (index: number, field: keyof GRNItem, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
+    if (field === 'raw_material_id' && value) {
+      const mat = materials.find(m => m.id === value);
+      if (mat && mat.cost_per_unit) {
+        newItems[index].unit_cost = Math.round(mat.cost_per_unit * 10000) / 10000;
+      }
+    }
     setItems(newItems);
   };
 
@@ -736,7 +742,7 @@ export default function GoodsReceivedPage() {
                           />
                         </div>
                         <div className="lg:col-span-2 space-y-1.5">
-                          <Label className="text-xs">Unit Cost</Label>
+                          <Label className="text-xs">Unit Cost {item.raw_material_id && materials.find(m => m.id === item.raw_material_id)?.cost_per_unit ? <span className="text-slate-400 font-normal">(Sage avg: ${materials.find(m => m.id === item.raw_material_id)?.cost_per_unit?.toFixed(4)})</span> : null}</Label>
                           <Input
                             type="number"
                             value={item.unit_cost}
