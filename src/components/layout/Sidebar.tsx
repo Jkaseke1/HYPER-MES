@@ -154,6 +154,7 @@ const navGroups: NavGroup[] = [
     label: 'Administration',
     icon: Shield,
     items: [
+      { to: '/sage-posting-review', icon: ClipboardCheck, label: 'Sage Posting Review' },
       { to: '/admin/users', icon: Users, label: 'User Management' },
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],

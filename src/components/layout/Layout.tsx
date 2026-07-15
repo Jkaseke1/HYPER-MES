@@ -32,6 +32,7 @@ const pageTitles: Record<string, string> = {
   '/spare-parts': 'Spare Parts',
   '/settings': 'Settings',
   '/admin/users': 'User Management',
+  '/sage-posting-review': 'Sage Posting Review',
 };
 
 export default function Layout() {

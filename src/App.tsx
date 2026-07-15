@@ -59,6 +59,7 @@ const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
 const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
 const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
 const PaymentHistoryPage = lazy(() => import('./pages/payroll/PaymentHistoryPage'));
+const SagePostingReviewPage = lazy(() => import('./pages/SagePostingReviewPage'));
 
 function PageLoader() {
   return (
@@ -170,6 +171,7 @@ function AppRoutes() {
           <Route path="/weigh-bridge" element={<WeighBridgePage />} />
           <Route path="/chick-bookings" element={<Navigate to="/chick/purchase-orders" replace />} />
           <Route path="/production-warehouse" element={<ProductionWarehousePage />} />
+          <Route path="/sage-posting-review" element={<SagePostingReviewPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
