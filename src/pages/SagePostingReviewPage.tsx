@@ -43,6 +43,8 @@ const EVENT_LABELS: Record<string, string> = {
   materials_issued: 'RM Issue',
   production_completed: 'Batch Complete',
   dispatch_delivered: 'Dispatch',
+  macropack_completed: 'Macropack',
+  reconciliation_variance_approved: 'Recon Variance',
 };
 
 const TX_LABELS: Record<string, string> = {
