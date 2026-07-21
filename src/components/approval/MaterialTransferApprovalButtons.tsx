@@ -105,25 +105,46 @@ export default function MaterialTransferApprovalButtons({
         throw new Error('Insufficient stock in Buffer Warehouse');
       }
 
-      await supabase.rpc('update_warehouse_balance', {
+      const { error: bufferBalanceError } = await supabase.rpc('update_warehouse_balance', {
         p_raw_material_id: rawMaterialId,
         p_warehouse_id: bufferWarehouse.id,
         p_quantity_delta: -quantity
       });
 
-      // 2. Record stock movement to production floor
+      if (bufferBalanceError) throw bufferBalanceError;
+
+      // 2. Add stock to Production Warehouse
+      const { data: productionWarehouse } = await supabase
+        .from('warehouses')
+        .select('id')
+        .eq('code', 'PRODUCTION')
+        .single();
+
+      if (!productionWarehouse) {
+        throw new Error('Production Warehouse not found');
+      }
+
+      const { error: prodBalanceError } = await supabase.rpc('update_warehouse_balance', {
+        p_raw_material_id: rawMaterialId,
+        p_warehouse_id: productionWarehouse.id,
+        p_quantity_delta: quantity
+      });
+
+      if (prodBalanceError) throw prodBalanceError;
+
+      // 3. Record stock movement to production floor
       await supabase.from('stock_movements').insert({
         raw_material_id: rawMaterialId,
         movement_type: 'production_input',
         quantity: quantity,
-        warehouse_id: bufferWarehouse.id,
+        warehouse_id: productionWarehouse.id,
         reference_type: 'material_transfer',
         reference_id: transferId,
         notes: 'Step 2: Transfer from Buffer to Production Floor',
         performed_by: user.id,
       });
 
-      // 3. Update transfer status
+      // 4. Update transfer status
       const { error: updateError } = await supabase
         .from('material_transfers')
         .update({

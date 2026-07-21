@@ -29,6 +29,7 @@ interface AggregatedMaterial {
 
 export default function ProductionWarehousePage() {
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -36,13 +37,25 @@ export default function ProductionWarehousePage() {
 
   async function fetchTransfers(silent = false) {
     if (!silent) setLoading(true);
-    const { data, error } = await supabase
-      .from('stock_movements')
-      .select('id, raw_material_id, quantity, unit, movement_date, batch_number, notes, created_at, raw_materials(name, code, unit)')
-      .eq('movement_type', 'production_input')
-      .order('created_at', { ascending: false });
-    if (error) console.error('Failed to load production warehouse:', error);
-    setTransfers((data as any) || []);
+    const [{ data: smData, error: smError }, { data: wbData, error: wbError }] = await Promise.all([
+      supabase
+        .from('stock_movements')
+        .select('id, raw_material_id, quantity, unit, movement_date, batch_number, notes, created_at, raw_materials(name, code, unit)')
+        .eq('movement_type', 'production_input')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'PRODUCTION'),
+    ]);
+    if (smError) console.error('Failed to load production movements:', smError);
+    if (wbError) console.error('Failed to load production balances:', wbError);
+    setTransfers((smData as any) || []);
+    const balMap: Record<string, number> = {};
+    (wbData as any || []).forEach((b: any) => {
+      balMap[b.raw_material_id] = Number(b.quantity || 0);
+    });
+    setBalances(balMap);
     setLastRefresh(new Date());
     if (!silent) setLoading(false);
   }
@@ -90,8 +103,13 @@ export default function ProductionWarehousePage() {
         map[id].last_transfer = t.movement_date || t.created_at;
       }
     }
+    for (const [id, m] of Object.entries(map)) {
+      if (balances[id] !== undefined) {
+        map[id].net_available = balances[id];
+      }
+    }
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
-  }, [transfers]);
+  }, [transfers, balances]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return aggregated;
