@@ -64,13 +64,14 @@ export default function GRNApprovalButtons({
       try {
         // Fetch GRN details and line items
         const [grnRes, itemsRes, latestRateRes] = await Promise.all([
-          supabase.from('goods_received_notes').select('received_date, grn_number').eq('id', grnId).single(),
+          supabase.from('goods_received_notes').select('received_date, grn_number, warehouse_id').eq('id', grnId).single(),
           supabase.from('grn_items').select('raw_material_id, received_qty, unit_cost, raw_materials(name)').eq('grn_id', grnId),
           supabase.from('usd_zig_rate_history').select('rate').order('effective_date', { ascending: false }).limit(1),
         ]);
 
         const grnDate = grnRes.data?.received_date;
         const grnNumber = grnRes.data?.grn_number;
+        const warehouseId = grnRes.data?.warehouse_id;
         const items = itemsRes.data || [];
         const latestRate = latestRateRes.data?.[0]?.rate || null;
 
@@ -95,6 +96,22 @@ export default function GRNApprovalButtons({
             grn_reference: grnNumber || grnId,
           }));
           await supabase.from('rm_daily_receipts').insert(receiptEntries);
+
+          // Update MES warehouse stock balance for each received item
+          if (warehouseId) {
+            const balanceUpdates = items.map((item: any) =>
+              supabase.rpc('update_warehouse_balance', {
+                p_raw_material_id: item.raw_material_id,
+                p_warehouse_id: warehouseId,
+                p_quantity_delta: Number(item.received_qty || 0),
+              })
+            );
+            const balanceResults = await Promise.all(balanceUpdates);
+            const balanceErrors = balanceResults.filter((r: any) => r.error);
+            if (balanceErrors.length > 0) {
+              console.warn('Warehouse balance update failed for some items:', balanceErrors.map((r: any) => r.error?.message).join('; '));
+            }
+          }
         }
 
         // Write sync_log entry for bridge worker to pick up (Sage integration)
