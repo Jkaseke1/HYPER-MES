@@ -410,7 +410,7 @@ export default function MaterialTransferPage() {
 
       {/* Create Transfer Modal */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-4xl p-0">
+        <DialogContent className="w-[96vw] max-w-6xl p-0 max-h-[94vh] overflow-hidden">
           <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
             <div className="flex items-center justify-between pr-10">
               <div className="flex items-center gap-3">
@@ -435,7 +435,7 @@ export default function MaterialTransferPage() {
             </button>
           </div>
 
-          <div className="p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
+          <div className="p-4 md:p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 overflow-y-auto max-h-[calc(94vh-72px)]">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
               <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -445,7 +445,7 @@ export default function MaterialTransferPage() {
                   </div>
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Core</span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-600">Raw Material *</label>
                     <select
@@ -537,7 +537,7 @@ export default function MaterialTransferPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-600">
                     Source Batch / GRN Lot {availableLots.length > 0 && <span className="text-[10px] text-slate-400">(FIFO — oldest first)</span>}
