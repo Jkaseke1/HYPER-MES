@@ -73,110 +73,30 @@ export default function MaterialTransferApprovalButtons({
   }
 
   async function handleStep2Approve() {
-    // Step 2: Accept to Production
-    // - Deduct stock from Buffer Warehouse
-    // - Record transfer to Production Floor
-    // - Update status to 'received'
     setProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Get Buffer Warehouse ID
-      const { data: bufferWarehouse } = await supabase
-        .from('warehouses')
-        .select('id')
-        .eq('code', 'BUFFER')
-        .single();
-
-      if (!bufferWarehouse) {
-        throw new Error('Buffer Warehouse not found');
-      }
-
-      // 1. Deduct stock from Buffer Warehouse
-      const { data: bufferBalance } = await supabase
-        .from('warehouse_stock_balances')
-        .select('quantity')
-        .eq('raw_material_id', rawMaterialId)
-        .eq('warehouse_id', bufferWarehouse.id)
-        .single();
-
-      if (!bufferBalance || (bufferBalance.quantity || 0) < quantity) {
-        throw new Error('Insufficient stock in Buffer Warehouse');
-      }
-
-      const { error: bufferBalanceError } = await supabase.rpc('update_warehouse_balance', {
-        p_raw_material_id: rawMaterialId,
-        p_warehouse_id: bufferWarehouse.id,
-        p_quantity_delta: -quantity
+      const { error: approveError } = await supabase.rpc('approve_material_transfer_to_production', {
+        p_transfer_id: transferId,
+        p_approved_by: user.id,
       });
 
-      if (bufferBalanceError) throw bufferBalanceError;
-
-      // 2. Add stock to Production Warehouse
-      const { data: productionWarehouse } = await supabase
-        .from('warehouses')
-        .select('id')
-        .eq('code', 'PRODUCTION')
-        .single();
-
-      if (!productionWarehouse) {
-        throw new Error('Production Warehouse not found');
-      }
-
-      const { error: prodBalanceError } = await supabase.rpc('update_warehouse_balance', {
-        p_raw_material_id: rawMaterialId,
-        p_warehouse_id: productionWarehouse.id,
-        p_quantity_delta: quantity
-      });
-
-      if (prodBalanceError) throw prodBalanceError;
-
-      // 3. Record stock movement to production floor
-      await supabase.from('stock_movements').insert({
-        raw_material_id: rawMaterialId,
-        movement_type: 'production_input',
-        quantity: quantity,
-        warehouse_id: productionWarehouse.id,
-        reference_type: 'material_transfer',
-        reference_id: transferId,
-        notes: 'Step 2: Transfer from Buffer to Production Floor',
-        performed_by: user.id,
-      });
-
-      // 4. Update transfer status
-      const { error: updateError } = await supabase
-        .from('material_transfers')
-        .update({
-          status: 'received',
-          production_approved_by: user.id,
-          production_approved_at: new Date().toISOString(),
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', transferId);
-
-      if (updateError) throw updateError;
-
-      // Log approval
-      try {
-        await supabase.rpc('log_approval_action', {
-          p_entity_type: 'material_transfer',
-          p_entity_id: transferId,
-          p_action: 'production_approved',
-          p_previous_status: 'in_buffer',
-          p_new_status: 'received',
-          p_approved_by: user.id,
-          p_comments: 'Accepted to Production Floor'
-        });
-      } catch (logError) {
-        console.warn('Failed to log approval:', logError);
-      }
+      if (approveError) throw approveError;
 
       onApproved();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Step 2 approval error:', error);
-      alert('Failed to accept to production. Please try again.');
+
+      const message = String(error?.message || '');
+      if (message.toLowerCase().includes('insufficient stock in buffer')) {
+        alert(`Failed to accept to production: ${message}`);
+      } else if (message.toLowerCase().includes('network') || message.toLowerCase().includes('fetch')) {
+        alert('Network interruption detected. Once network is back, click Accept to Production again — processing is retry-safe.');
+      } else {
+        alert(`Failed to accept to production: ${message || 'Please try again.'}`);
+      }
     } finally {
       setProcessing(false);
     }
