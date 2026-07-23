@@ -139,7 +139,7 @@ export default function ProductionOrdersPage() {
     onConfirm: null,
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
-  const SAGE_STOCK_MAX_AGE_MINUTES = 5;
+  const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
   const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
     setConfirmDialog({
