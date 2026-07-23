@@ -158,13 +158,20 @@ export default function DispatchPage() {
 
   const fetchFGStock = async (formulationId: string) => {
     if (!formulationId) return;
-    const [{ data: inbound }, { data: outbound }] = await Promise.all([
-      supabase.from('stock_movements').select('quantity').eq('formulation_id', formulationId).eq('movement_type', 'production_output'),
-      supabase.from('stock_movements').select('quantity').eq('formulation_id', formulationId).eq('movement_type', 'dispatch_out'),
-    ]);
-    const totalIn = (inbound || []).reduce((s, r) => s + r.quantity, 0);
-    const totalOut = (outbound || []).reduce((s, r) => s + r.quantity, 0);
-    setStockBalances(prev => ({ ...prev, [formulationId]: totalIn - totalOut }));
+    const { data: formulation } = await supabase
+      .from('formulations')
+      .select('sage_code')
+      .eq('id', formulationId)
+      .single();
+    if (!formulation?.sage_code) return;
+    const DEB_SAGE_WAREHOUSE_ID = 17;
+    const { data: sageStock } = await supabase
+      .from('sage_stock_balances')
+      .select('quantity')
+      .eq('sage_code', formulation.sage_code)
+      .eq('warehouse_id', DEB_SAGE_WAREHOUSE_ID)
+      .single();
+    setStockBalances(prev => ({ ...prev, [formulationId]: Number(sageStock?.quantity || 0) }));
   };
 
   const openView = async (order: DispatchOrder) => {

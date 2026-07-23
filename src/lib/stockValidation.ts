@@ -76,7 +76,7 @@ export async function validateStockAvailability(
 }
 
 /**
- * Check if finished goods have sufficient stock before dispatch (uses stock_movements ledger)
+ * Check if finished goods have sufficient stock before dispatch (uses Sage stock balances)
  */
 export async function validateFGStockAvailability(
   items: Array<{ formulation_id: string; quantity: number; name?: string }>
@@ -86,33 +86,34 @@ export async function validateFGStockAvailability(
   try {
     const formulationIds = items.map((i) => i.formulation_id).filter(Boolean);
 
-    const [{ data: inbound }, { data: outbound }] = await Promise.all([
-      supabase
-        .from('stock_movements')
-        .select('formulation_id, quantity')
-        .in('formulation_id', formulationIds)
-        .eq('movement_type', 'production_output'),
-      supabase
-        .from('stock_movements')
-        .select('formulation_id, quantity')
-        .in('formulation_id', formulationIds)
-        .eq('movement_type', 'dispatch_out'),
-    ]);
+    const { data: formulations } = await supabase
+      .from('formulations')
+      .select('id, sage_code, name')
+      .in('id', formulationIds);
 
-    const netStock: Record<string, number> = {};
-    for (const id of formulationIds) {
-      const totalIn = (inbound || []).filter((r) => r.formulation_id === id).reduce((s, r) => s + r.quantity, 0);
-      const totalOut = (outbound || []).filter((r) => r.formulation_id === id).reduce((s, r) => s + r.quantity, 0);
-      netStock[id] = totalIn - totalOut;
+    const sageCodes = (formulations || []).map((f: any) => f.sage_code).filter(Boolean);
+    const DEB_SAGE_WAREHOUSE_ID = 17;
+
+    const { data: sageStock } = await supabase
+      .from('sage_stock_balances')
+      .select('sage_code, quantity')
+      .eq('warehouse_id', DEB_SAGE_WAREHOUSE_ID)
+      .in('sage_code', sageCodes);
+
+    const stockMap: Record<string, number> = {};
+    for (const row of sageStock || []) {
+      stockMap[(row as any).sage_code] = Number((row as any).quantity || 0);
     }
 
     const errors: StockError[] = [];
     for (const item of items) {
-      const available = netStock[item.formulation_id] || 0;
+      const formulation = formulations?.find((f: any) => f.id === item.formulation_id);
+      const sageCode = formulation?.sage_code;
+      const available = sageCode ? (stockMap[sageCode] || 0) : 0;
       if (available < item.quantity) {
         errors.push({
           materialId: item.formulation_id,
-          materialName: item.name || 'Unknown Product',
+          materialName: item.name || formulation?.name || 'Unknown Product',
           available,
           requested: item.quantity,
           shortfall: item.quantity - available,
