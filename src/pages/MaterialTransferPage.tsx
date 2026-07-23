@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -40,7 +40,6 @@ export default function MaterialTransferPage() {
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
   const [bufferWarehouseBalances, setBufferWarehouseBalances] = useState<Record<string, number>>({});
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
-  const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -49,15 +48,18 @@ export default function MaterialTransferPage() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
 
-  const [form, setForm] = useState({
-    raw_material_id: '',
-    from_warehouse_id: '',
-    to_location: 'Production Floor',
-    quantity: 0,
+  // Multi-line transfer state
+  const [transferLines, setTransferLines] = useState<Array<{
+    id: string;
+    raw_material_id: string;
+    quantity: number;
+    source_lot_id: string;
+  }>>([{ id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
+
+  const [sharedForm, setSharedForm] = useState({
     transfer_date: format(new Date(), 'yyyy-MM-dd'),
     purpose: '',
     production_order_id: '',
-    source_lot_id: '',
     notes: '',
   });
 
@@ -89,30 +91,20 @@ export default function MaterialTransferPage() {
     };
   }, []);
 
-  // Default from warehouse to Raw Materials Warehouse (code 'RM')
-  useEffect(() => {
-    const rmWarehouse = warehouses.find((w) => w.code === 'RM');
-    if (rmWarehouse && !form.from_warehouse_id) {
-      setForm((f) => ({ ...f, from_warehouse_id: rmWarehouse.id }));
-    }
-  }, [warehouses]);
+  const addTransferLine = () => {
+    setTransferLines([...transferLines, { id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
+  };
 
-  // Load available lots (FIFO order) whenever the selected raw material changes
-  useEffect(() => {
-    async function loadLots() {
-      if (!form.raw_material_id) { setAvailableLots([]); return; }
-      const { data, error } = await supabase
-        .from('v_rm_available_lots')
-        .select('lot_id, batch_number, qty_remaining, unit, received_date, grn_number, source')
-        .eq('raw_material_id', form.raw_material_id);
-      if (error) { console.error('Failed to load lots:', error); setAvailableLots([]); return; }
-      setAvailableLots(data || []);
-    }
-    loadLots();
-    // Clear any previously selected lot when material changes
-    setForm(f => ({ ...f, source_lot_id: '' }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.raw_material_id]);
+  const removeTransferLine = (id: string) => {
+    if (transferLines.length === 1) return;
+    setTransferLines(transferLines.filter(line => line.id !== id));
+  };
+
+  const updateTransferLine = (id: string, field: string, value: any) => {
+    setTransferLines(transferLines.map(line =>
+      line.id === id ? { ...line, [field]: value } : line
+    ));
+  };
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true);
@@ -161,7 +153,7 @@ export default function MaterialTransferPage() {
     if (!silent) setLoading(false);
   }
 
-  async function createTransfer() {
+  async function createTransfers() {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -171,9 +163,8 @@ export default function MaterialTransferPage() {
         return;
       }
 
-      // Find RM warehouse and Buffer warehouse
       const rmWarehouse = warehouses.find((w) => w.code === 'RM');
-      const fromWarehouseId = rmWarehouse?.id || form.from_warehouse_id;
+      const fromWarehouseId = rmWarehouse?.id;
 
       if (!fromWarehouseId) {
         alert('Raw Materials Warehouse not found. Please contact admin.');
@@ -181,46 +172,61 @@ export default function MaterialTransferPage() {
         return;
       }
 
-      // Check RM warehouse balance
-      const rmBalance = rmWarehouseBalances[form.raw_material_id] || 0;
-      if (form.quantity > rmBalance) {
-        alert(`Insufficient stock in Raw Materials Warehouse. Available: ${rmBalance.toLocaleString()} kg, Requested: ${form.quantity.toLocaleString()} kg`);
+      // Validate all lines
+      const validLines = transferLines.filter(line => line.raw_material_id && line.quantity > 0);
+      if (validLines.length === 0) {
+        alert('Please add at least one material with quantity > 0');
         setSaving(false);
         return;
       }
 
-      const { error: createError } = await supabase.rpc('create_material_transfer_to_buffer', {
-        p_raw_material_id: form.raw_material_id,
-        p_from_warehouse_id: fromWarehouseId,
-        p_quantity: form.quantity,
-        p_unit: rawMaterials.find(m => m.id === form.raw_material_id)?.unit || 'kg',
-        p_transfer_date: form.transfer_date,
-        p_purpose: form.purpose,
-        p_notes: form.notes || null,
-        p_production_order_id: form.production_order_id || null,
-        p_requested_by: user.id,
-      });
+      // Check stock for all lines
+      for (const line of validLines) {
+        const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+        const material = rawMaterials.find(m => m.id === line.raw_material_id);
+        if (line.quantity > rmBalance) {
+          alert(`Insufficient stock for ${material?.name || 'material'}. Available: ${rmBalance.toLocaleString()} kg, Requested: ${line.quantity.toLocaleString()} kg`);
+          setSaving(false);
+          return;
+        }
+      }
 
-      if (createError) {
-        console.error('Error creating transfer:', createError);
-        alert(`Failed to create transfer: ${createError.message}`);
+      // Create all transfers
+      const errors: string[] = [];
+      for (const line of validLines) {
+        const material = rawMaterials.find(m => m.id === line.raw_material_id);
+        const { error } = await supabase.rpc('create_material_transfer_to_buffer', {
+          p_raw_material_id: line.raw_material_id,
+          p_from_warehouse_id: fromWarehouseId,
+          p_quantity: line.quantity,
+          p_unit: material?.unit || 'kg',
+          p_transfer_date: sharedForm.transfer_date,
+          p_purpose: sharedForm.purpose,
+          p_notes: sharedForm.notes || null,
+          p_production_order_id: sharedForm.production_order_id || null,
+          p_requested_by: user.id,
+        });
+
+        if (error) {
+          errors.push(`${material?.name || line.raw_material_id}: ${error.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        alert(`Some transfers failed:\n${errors.join('\n')}`);
         setSaving(false);
         return;
       }
 
       setShowCreate(false);
-      setForm({
-        raw_material_id: '',
-        from_warehouse_id: '',
-        to_location: 'Production Floor',
-        quantity: 0,
+      setTransferLines([{ id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
+      setSharedForm({
         transfer_date: format(new Date(), 'yyyy-MM-dd'),
         purpose: '',
         production_order_id: '',
-        source_lot_id: '',
         notes: '',
       });
-      setSuccessMessage('Transfer created successfully!');
+      setSuccessMessage(`${validLines.length} transfer(s) created successfully!`);
       setTimeout(() => setSuccessMessage(''), 3000);
       fetchData();
     } catch (err: any) {
@@ -436,55 +442,23 @@ export default function MaterialTransferPage() {
           </div>
 
           <div className="p-4 md:p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 overflow-y-auto max-h-[calc(94vh-72px)]">
+            {/* Shared Header Fields */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
               <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
-                    <Package className="w-4 h-4 text-blue-600" />
-                    <p className="text-sm font-semibold text-slate-800">Transfer Details</p>
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    <p className="text-sm font-semibold text-slate-800">Shared Transfer Info</p>
                   </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Core</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">All Items</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Raw Material *</label>
-                    <select
-                      value={form.raw_material_id}
-                      onChange={(e) => setForm({ ...form, raw_material_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      required
-                    >
-                      <option value="">Select material</option>
-                      {rawMaterials.map((material) => {
-                        const rmBalance = rmWarehouseBalances[material.id] ?? 0;
-                        return (
-                          <option key={material.id} value={material.id}>
-                            {material.name} ({material.code}) - RM Stock: {rmBalance.toLocaleString()} {material.unit}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Quantity *</label>
-                    <input
-                      type="number"
-                      value={form.quantity || ''}
-                      onChange={(e) => setForm({ ...form, quantity: e.target.value ? parseFloat(e.target.value) : 0 })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      placeholder="0.00"
-                      step="0.01"
-                      required
-                    />
-                  </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-600">Transfer Date *</label>
                     <input
                       type="date"
-                      value={form.transfer_date}
-                      onChange={(e) => setForm({ ...form, transfer_date: e.target.value })}
+                      value={sharedForm.transfer_date}
+                      onChange={(e) => setSharedForm({ ...sharedForm, transfer_date: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                       required
                     />
@@ -494,11 +468,38 @@ export default function MaterialTransferPage() {
                     <label className="text-xs font-semibold text-slate-600">Purpose *</label>
                     <input
                       type="text"
-                      value={form.purpose}
-                      onChange={(e) => setForm({ ...form, purpose: e.target.value })}
+                      value={sharedForm.purpose}
+                      onChange={(e) => setSharedForm({ ...sharedForm, purpose: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
                       placeholder="e.g., For Batch BATCH-2026-123"
                       required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Production Order (Optional)</label>
+                    <select
+                      value={sharedForm.production_order_id}
+                      onChange={(e) => setSharedForm({ ...sharedForm, production_order_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                    >
+                      <option value="">Select order (optional)</option>
+                      {productionOrders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {order.batch_number} - {order.status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600">Notes</label>
+                    <input
+                      type="text"
+                      value={sharedForm.notes}
+                      onChange={(e) => setSharedForm({ ...sharedForm, notes: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      placeholder="Additional notes..."
                     />
                   </div>
                 </div>
@@ -529,81 +530,79 @@ export default function MaterialTransferPage() {
               </div>
             </div>
 
+            {/* Transfer Line Items */}
             <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-sm p-3 space-y-2.5">
               <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
                 <div className="flex items-center gap-2">
-                  <Factory className="w-4 h-4 text-indigo-600" />
-                  <p className="text-sm font-semibold text-slate-800">Additional Details</p>
+                  <Package className="w-4 h-4 text-indigo-600" />
+                  <p className="text-sm font-semibold text-slate-800">Materials to Transfer</p>
                 </div>
+                <button
+                  onClick={addTransferLine}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Material
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">
-                    Source Batch / GRN Lot {availableLots.length > 0 && <span className="text-[10px] text-slate-400">(FIFO — oldest first)</span>}
-                  </label>
-                  <select
-                    value={form.source_lot_id}
-                    onChange={(e) => {
-                      const lot = availableLots.find(l => l.lot_id === e.target.value);
-                      setForm({
-                        ...form,
-                        source_lot_id: e.target.value,
-                        quantity: lot ? Math.min(form.quantity || lot.qty_remaining, lot.qty_remaining) : form.quantity,
-                      });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                    disabled={!form.raw_material_id}
-                  >
-                    <option value="">
-                      {!form.raw_material_id ? 'Select a raw material first' : availableLots.length === 0 ? 'No available lots — check GRN approvals' : 'Select source batch (optional)'}
-                    </option>
-                    {availableLots.map((lot) => (
-                      <option key={lot.lot_id} value={lot.lot_id}>
-                        {lot.batch_number} · {Number(lot.qty_remaining).toLocaleString()} {lot.unit} available {lot.grn_number ? `· GRN ${lot.grn_number}` : lot.source === 'opening_balance' ? '· Opening' : ''} · {new Date(lot.received_date).toLocaleDateString()}
-                      </option>
-                    ))}
-                  </select>
-                  {form.source_lot_id && (() => {
-                    const lot = availableLots.find(l => l.lot_id === form.source_lot_id);
-                    if (!lot) return null;
-                    const over = form.quantity > Number(lot.qty_remaining);
-                    return (
-                      <p className={`text-[11px] mt-1 ${over ? 'text-red-600' : 'text-slate-500'}`}>
-                        {over
-                          ? `⚠ Transfer quantity exceeds lot balance (${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}).`
-                          : `Lot balance: ${Number(lot.qty_remaining).toLocaleString()} ${lot.unit}.`}
-                      </p>
-                    );
-                  })()}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600">Production Order (Optional)</label>
-                  <select
-                    value={form.production_order_id}
-                    onChange={(e) => setForm({ ...form, production_order_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                  >
-                    <option value="">Select order (optional)</option>
-                    {productionOrders.map((order) => (
-                      <option key={order.id} value={order.id}>
-                        {order.batch_number} - {order.status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-600">Notes</label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                  rows={3}
-                  placeholder="Additional notes..."
-                />
+              <div className="space-y-2">
+                {transferLines.map((line, index) => {
+                  const material = rawMaterials.find(m => m.id === line.raw_material_id);
+                  const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+                  const insufficient = line.quantity > rmBalance;
+                  return (
+                    <div key={line.id} className="grid grid-cols-12 gap-2 items-start p-2.5 rounded-lg border border-slate-200 bg-white">
+                      <div className="col-span-1 flex items-center justify-center pt-2">
+                        <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                      </div>
+                      <div className="col-span-6 space-y-1">
+                        <label className="text-[10px] font-semibold text-slate-500">Raw Material *</label>
+                        <select
+                          value={line.raw_material_id}
+                          onChange={(e) => updateTransferLine(line.id, 'raw_material_id', e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        >
+                          <option value="">Select material</option>
+                          {rawMaterials.map((mat) => {
+                            const bal = rmWarehouseBalances[mat.id] ?? 0;
+                            return (
+                              <option key={mat.id} value={mat.id}>
+                                {mat.name} ({mat.code}) - Stock: {bal.toLocaleString()} {mat.unit}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <div className="col-span-3 space-y-1">
+                        <label className="text-[10px] font-semibold text-slate-500">Quantity *</label>
+                        <input
+                          type="number"
+                          value={line.quantity || ''}
+                          onChange={(e) => updateTransferLine(line.id, 'quantity', e.target.value ? parseFloat(e.target.value) : 0)}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white ${
+                            insufficient ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                          }`}
+                          placeholder="0.00"
+                          step="0.01"
+                        />
+                        {line.raw_material_id && insufficient && (
+                          <p className="text-[10px] text-red-600 mt-0.5">⚠ Exceeds stock ({rmBalance.toLocaleString()} {material?.unit})</p>
+                        )}
+                      </div>
+                      <div className="col-span-2 flex items-end justify-end pt-5">
+                        <button
+                          onClick={() => removeTransferLine(line.id)}
+                          disabled={transferLines.length === 1}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Remove line"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -615,18 +614,15 @@ export default function MaterialTransferPage() {
                 Cancel
               </button>
               <button
-                onClick={createTransfer}
+                onClick={createTransfers}
                 disabled={
                   saving ||
-                  !form.raw_material_id ||
-                  !form.from_warehouse_id ||
-                  !form.quantity ||
-                  !form.purpose ||
-                  (form.quantity > (rmWarehouseBalances[form.raw_material_id] || 0))
+                  !sharedForm.purpose ||
+                  transferLines.filter(l => l.raw_material_id && l.quantity > 0).length === 0
                 }
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center text-sm font-medium"
               >
-                {saving ? 'Creating...' : 'Create Transfer'}
+                {saving ? 'Creating...' : `Create ${transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Transfer(s)`}
               </button>
             </div>
           </div>
