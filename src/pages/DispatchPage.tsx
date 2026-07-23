@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, Hash, Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box, ArrowRight } from 'lucide-react';
+import { Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, Hash, Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box, ArrowRight, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
@@ -56,6 +56,7 @@ export default function DispatchPage() {
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
   const [showPickingSlip, setShowPickingSlip] = useState(false);
   const [pickingSlipOrder, setPickingSlipOrder] = useState<DispatchOrder | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     let q = supabase.from('dispatch_orders').select('*, branches(name, code), warehouses(name, code)').order('created_at', { ascending: false });
@@ -116,23 +117,56 @@ export default function DispatchPage() {
   const handleCreate = async () => {
     setSaving(true);
     try {
-      const generatedNumber = await generateDispatchNumber();
-      const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: 0 }).select().single();
-      if (!error && data) {
-        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+      if (editingOrderId) {
+        const { error: updateError } = await supabase.from('dispatch_orders').update({ ...form, total_weight: totalWeight }).eq('id', editingOrderId);
+        if (updateError) throw updateError;
+        await supabase.from('dispatch_items').delete().eq('dispatch_order_id', editingOrderId);
+        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
+      } else {
+        const generatedNumber = await generateDispatchNumber();
+        const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: 0 }).select().single();
+        if (!error && data) {
+          const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+          if (rows.length) await supabase.from('dispatch_items').insert(rows);
+        }
+        if (error) throw error;
       }
-      if (error) throw error;
     } catch (error: any) {
-      console.error('Error creating dispatch order:', error);
-      alert(`Failed to create dispatch order: ${error.message}`);
+      console.error('Error saving dispatch order:', error);
+      alert(`Failed to save dispatch order: ${error.message}`);
     } finally {
       setSaving(false);
       setShowCreate(false);
+      setEditingOrderId(null);
       resetForm();
       setDispatchNumber('');
       fetchOrders();
     }
+  };
+
+  const handleEdit = async (order: DispatchOrder) => {
+    setViewOrder(null);
+    const { data: editItems } = await supabase.from('dispatch_items').select('*, formulations(id, name, sage_code)').eq('dispatch_order_id', order.id);
+    setForm({
+      branch_id: order.branch_id,
+      warehouse_id: order.warehouse_id,
+      dispatch_date: format(new Date(order.dispatch_date), 'yyyy-MM-dd'),
+      vehicle_number: order.vehicle_number || '',
+      driver_name: order.driver_name || '',
+      delivery_notes: order.delivery_notes || '',
+    });
+    if (editItems && editItems.length > 0) {
+      setItems(editItems.map((i: any) => ({ formulation_id: i.formulation_id, batch_number: i.batch_number || '', quantity: i.quantity, unit: i.unit || 'kg' })));
+      for (const i of editItems) {
+        if (i.formulation_id) fetchFGStock(i.formulation_id);
+      }
+    } else {
+      setItems([{ ...EMPTY_ITEM }]);
+    }
+    setEditingOrderId(order.id);
+    setDispatchNumber(order.dispatch_number);
+    setShowCreate(true);
   };
 
   const resetForm = () => {
@@ -275,7 +309,7 @@ export default function DispatchPage() {
             <p className="text-sm text-slate-500 mt-1">Plan, track and deliver finished goods to branches.</p>
           </div>
           <button
-            onClick={() => { resetForm(); setShowCreate(true); }}
+            onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
             className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-teal-600/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
@@ -641,7 +675,7 @@ export default function DispatchPage() {
             <button onClick={() => setShowCreate(false)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={saving || !form.branch_id} className="px-5 py-2.5 text-sm font-semibold bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <Truck className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Dispatch'}
+              {saving ? 'Saving...' : editingOrderId ? 'Update Dispatch' : 'Save Dispatch'}
             </button>
           </div>
         </DialogContent>
@@ -689,6 +723,12 @@ export default function DispatchPage() {
                       <FileText className="w-4 h-4" />
                       Picking Slip
                     </button>
+                    {viewOrder.status === 'pending' && (
+                      <button onClick={() => handleEdit(viewOrder)} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200">
+                        <Pencil className="w-4 h-4" />
+                        Edit
+                      </button>
+                    )}
                     {viewOrder.status === 'pending' && (
                       <button onClick={() => deleteOrder(viewOrder)} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-red-50 text-red-700 hover:bg-red-100 transition-colors border border-red-200">
                         <AlertTriangle className="w-4 h-4" />
