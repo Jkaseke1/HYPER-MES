@@ -84,6 +84,7 @@ const navGroups: NavGroup[] = [
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
       { to: '/macropack', icon: Beaker, label: 'Macropack Manufacturing' },
       { to: '/production-warehouse', icon: Boxes, label: 'Production Warehouse' },
+      { to: '/finished-goods', icon: Boxes, label: 'Finished Goods' },
       // Reporting
       { to: '/shift-reports', icon: ClipboardType, label: 'Shift Reports' },
       { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
@@ -95,7 +96,6 @@ const navGroups: NavGroup[] = [
     icon: WarehouseIcon,
     items: [
       { to: '/warehouse', icon: WarehouseIcon, label: 'Finished Goods Warehouse' },
-      { to: '/finished-goods', icon: Boxes, label: 'Finished Goods' },
       { to: '/dispatch', icon: Truck, label: 'Dispatch Orders' },
     ],
   },
