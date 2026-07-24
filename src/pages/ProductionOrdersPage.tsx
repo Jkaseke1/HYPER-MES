@@ -8,8 +8,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
-import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
-import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
+import PackagingDeclaration from '../components/production/PackagingDeclaration';
 
 interface OrderMaterial {
   id: string; 
@@ -985,28 +984,16 @@ export default function ProductionOrdersPage() {
       setWorkflowError('Cannot complete — enter actual output quantity first.');
       return;
     }
-    const tonnesOut = output.actual_qty / 1000;
-    const { data } = await supabase
-      .from('production_bom_packaging')
-      .select('item_code, description, unit, expected_qty_per_tonne')
-      .eq('formulation_id', selected.formulation_id);
-    const items = (data || []).map((p: any) => ({
-      item_code: p.item_code,
-      description: p.description,
-      unit: p.unit,
-      expected_qty: p.expected_qty_per_tonne * tonnesOut,
-    }));
-    setPkgBomItems(items);
     setShowPkgModal(true);
   }
 
-  async function handlePkgConfirm(actuals: PackagingActual[], notes: string) {
+  async function handlePkgConfirm(lines: any[]) {
     setShowPkgModal(false);
-    await updateStatus('completed', actuals, notes);
+    await updateStatus('completed', lines);
   }
 
   // Enforce workflow sequence (Issue 2)
-  const updateStatus = async (status: string, pkgActuals: PackagingActual[] = [], pkgNotes: string = '') => {
+  const updateStatus = async (status: string, pkgActuals: any[] = [], pkgNotes: string = '') => {
     if (!selected) return;
     setWorkflowError(null);
     setSaving(true);
@@ -1075,17 +1062,15 @@ export default function ProductionOrdersPage() {
       // Save packaging declaration for completed orders
       if (status === 'completed' && pkgActuals.length > 0) {
         const pkgData = pkgActuals
-          .filter(a => a.actual_qty !== '')
+          .filter(a => a.packaging_sku_id && a.bags_used > 0)
           .map(a => ({
             production_order_id: selected.id,
-            item_code: a.item_code,
-            description: a.description,
-            expected_qty: a.expected_qty,
-            actual_qty: parseFloat(String(a.actual_qty)) || 0,
-            notes: pkgNotes || null,
+            packaging_sku_id: a.packaging_sku_id,
+            bags_used: a.bags_used,
+            implied_tonnes: a.implied_tonnes || 0,
           }));
         if (pkgData.length > 0) {
-          await supabase.from('production_packaging_issues').insert(pkgData);
+          await supabase.from('batch_packaging_used').insert(pkgData);
         }
       }
 
@@ -2632,15 +2617,19 @@ export default function ProductionOrdersPage() {
       </Dialog>
 
       {/* Packaging Declaration Modal */}
-      <PackagingDeclarationModal
-        open={showPkgModal}
-        onClose={() => setShowPkgModal(false)}
-        onConfirm={handlePkgConfirm}
-        bomPackagingItems={pkgBomItems}
-        plannedQty={selected?.actual_qty || 0}
-        rateLabel={selected ? `${(selected.actual_qty / 1000).toFixed(3)} t actual output` : ''}
-        saving={saving}
-      />
+      <Dialog open={showPkgModal} onOpenChange={(open) => setShowPkgModal(open)}>
+        <DialogContent className="max-w-4xl p-0">
+          <div className="p-6">
+            {selected && (
+              <PackagingDeclaration
+                actualOutputQty={output.actual_qty ? output.actual_qty / 1000 : 0}
+                onSave={handlePkgConfirm}
+                disabled={saving}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDialog.open} onOpenChange={(open) => { if (!open) closeConfirmDialog(); }}>
         <DialogContent className="max-w-md p-0">
