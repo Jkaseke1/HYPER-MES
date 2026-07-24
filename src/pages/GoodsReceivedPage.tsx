@@ -479,138 +479,165 @@ export default function GoodsReceivedPage() {
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
-          <DialogHeader className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
-            <div className="flex items-center justify-between pr-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <Package className="w-5 h-5 text-white" />
+          {/* Premium Header */}
+          <DialogHeader className="shrink-0 bg-gradient-to-r from-slate-950 via-slate-900 to-teal-950 text-white px-6 py-4 rounded-t-xl relative overflow-hidden">
+            {/* Background decorative glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-transparent to-emerald-500/5 pointer-events-none" />
+            <div className="relative flex items-center justify-between pr-10">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-xl flex items-center justify-center shadow-xl shadow-teal-500/30">
+                  <Package className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <DialogTitle className="text-lg font-bold tracking-tight">Create New GRN</DialogTitle>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <DialogTitle className="text-xl font-extrabold tracking-tight">Create New GRN</DialogTitle>
+                    <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">DRAFT</span>
+                  </div>
                   <DialogDescription className="text-slate-400 text-xs">
-                    Add a new goods received note and optionally link a weigh bridge ticket
+                    Goods Received Note — Raw Material Inbound · Sage Auto-Post on Approval
                   </DialogDescription>
                 </div>
               </div>
-              <Badge variant="secondary" className="text-xs px-2.5 py-0.5 bg-white/15 text-white border border-white/20 hover:bg-white/20">
-                Draft
-              </Badge>
+              <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400">
+                <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg">
+                  <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                  Sage Sync Ready
+                </div>
+              </div>
             </div>
             <button
               onClick={() => setModalOpen(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center transition-colors"
               aria-label="Close"
             >
               <X className="w-4 h-4 text-white" />
             </button>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
-            <div className="space-y-3 [&_input]:h-9 [&_[role='combobox']]:h-9 [&_textarea]:min-h-[84px]">
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-                <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 bg-slate-50" style={{scrollbarWidth:'thin'}}>
+            <div className="space-y-4 [&_input]:h-10 [&_[role='combobox']]:h-10 [&_textarea]:min-h-[80px]">
+
+              {/* Section 1: GRN Header + Receipt Overview */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+
+                {/* GRN Header Panel */}
+                <div className="xl:col-span-8 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-blue-600" />
-                      <p className="text-sm font-semibold text-slate-800">GRN Header</p>
+                      <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-sm font-bold text-white tracking-wide">GRN Header</p>
                     </div>
-                    <Badge variant="outline" className="text-[11px]">Core Details</Badge>
+                    <span className="text-[10px] font-bold bg-white/15 text-white border border-white/20 px-2.5 py-0.5 rounded-full">CORE DETAILS</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier">Supplier *</Label>
-                      <Select value={supplierId} onValueChange={setSupplierId}>
-                        <SelectTrigger className="bg-white">
-                          <SelectValue placeholder="Select supplier" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {suppliers.map((supplier) => (
-                            <SelectItem key={supplier.id} value={supplier.id}>
-                              {supplier.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="supplier" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Supplier *</Label>
+                        <Select value={supplierId} onValueChange={setSupplierId}>
+                          <SelectTrigger className="bg-slate-50 border-slate-200 font-medium focus:border-blue-500 focus:ring-blue-500/20">
+                            <SelectValue placeholder="Select supplier..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {suppliers.map((supplier) => (
+                              <SelectItem key={supplier.id} value={supplier.id}>
+                                {supplier.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="received_date" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Received Date *</Label>
+                        <Input
+                          id="received_date"
+                          type="date"
+                          value={receivedDate}
+                          onChange={(e) => setReceivedDate(e.target.value)}
+                          className="bg-slate-50 border-slate-200 font-medium focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Receipt Overview Panel */}
+                <div className="xl:col-span-4 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
+                        <Hash className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-sm font-bold text-white tracking-wide">Receipt Overview</p>
+                    </div>
+                    <span className="text-[10px] font-bold bg-teal-400/20 text-teal-300 border border-teal-400/30 px-2.5 py-0.5 rounded-full">AUTO</span>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-blue-50/50 px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Ordered</p>
+                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{totalOrderedQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-emerald-50/50 px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Received</p>
+                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{totalReceivedQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                      </div>
+                      <div className="col-span-2 rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-teal-50/50 px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Weigh Bridge Nett</p>
+                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                      </div>
+                    </div>
+
+                    <div className={`rounded-xl px-3 py-2.5 text-xs font-medium flex items-center gap-2 ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      {wbNettMassValue > 0
+                        ? `Variance: ${wbVariancePct.toFixed(1)}% — GRN vs WB nett mass`
+                        : 'Variance will appear once nett mass is entered'}
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="received_date">Received Date *</Label>
-                      <Input
-                        id="received_date"
-                        type="date"
-                        value={receivedDate}
-                        onChange={(e) => setReceivedDate(e.target.value)}
-                        className="bg-white"
+                      <Label htmlFor="notes" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Notes</Label>
+                      <Textarea
+                        id="notes"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Additional notes or comments..."
+                        rows={3}
+                        className="bg-slate-50 border-slate-200 text-sm resize-none"
                       />
                     </div>
                   </div>
                 </div>
-
-                <div className="xl:col-span-4 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Hash className="w-4 h-4 text-slate-600" />
-                      <p className="text-sm font-semibold text-slate-800">Receipt Overview</p>
-                    </div>
-                    <Badge variant="secondary" className="text-[11px]">Auto</Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="text-slate-500">Ordered Qty</p>
-                      <p className="font-semibold text-slate-800">{totalOrderedQty.toLocaleString()} kg</p>
-                    </div>
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="text-slate-500">Received Qty</p>
-                      <p className="font-semibold text-slate-800">{totalReceivedQty.toLocaleString()} kg</p>
-                    </div>
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 col-span-2">
-                      <p className="text-slate-500">Weigh Bridge Nett</p>
-                      <p className="font-semibold text-slate-800">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} kg</p>
-                    </div>
-                  </div>
-
-                  <div className={`rounded-md border px-3 py-2 text-xs ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                    {wbNettMassValue > 0
-                      ? `Variance: ${wbVariancePct.toFixed(1)}% between GRN received and WB nett mass`
-                      : 'Variance will appear once nett mass is entered'}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Additional notes or comments..."
-                      rows={4}
-                      className="bg-white"
-                    />
-                  </div>
-                </div>
               </div>
 
-              <div className="rounded-xl border border-teal-300/60 bg-slate-50/95 shadow-sm p-3 space-y-3">
+              {/* Weigh Bridge Ticket Section */}
+              <div className="rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setWbExpanded(!wbExpanded)}
-                  className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-teal-100 pb-2 text-left"
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-left"
                 >
-                  <div className="flex items-center gap-2">
-                    <Scale className="w-4 h-4 text-teal-700" />
-                    <h3 className="text-sm font-semibold text-slate-800">Weigh Bridge Ticket</h3>
-                    <span className="text-xs text-slate-500">optional — click to expand</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
+                      <Scale className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">Weigh Bridge Ticket</p>
+                      <p className="text-[10px] text-teal-200">Optional — Link or capture inbound logistics data</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[11px] border-teal-300 text-teal-700">Inbound Logistics</Badge>
-                    {wbExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                    <span className="text-[10px] font-bold bg-white/15 text-white border border-white/20 px-2 py-0.5 rounded-full">INBOUND LOGISTICS</span>
+                    {wbExpanded ? <ChevronUp className="w-4 h-4 text-white" /> : <ChevronDown className="w-4 h-4 text-white" />}
                   </div>
                 </button>
 
                 {wbExpanded && (
-                  <>
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 space-y-1.5">
-                      <Label className="text-xs text-slate-500">Link Existing Ticket</Label>
+                  <div className="p-4 space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Link Existing Ticket</Label>
                       <div className="flex flex-col md:flex-row md:items-center gap-2">
                         <Select
                           value={weighBridgeTicketId}
@@ -672,70 +699,76 @@ export default function GoodsReceivedPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
-                      <div className="rounded-lg border border-slate-200 p-2.5 space-y-2.5">
-                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Vehicle & Driver</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      {/* Vehicle & Driver */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                        <div className="bg-slate-100 border-b border-slate-200 px-3 py-2">
+                          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">🚛 Vehicle & Driver</p>
+                        </div>
+                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Ticket No</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Ticket No</Label>
                             <Input value={wbForm.transaction_no} onChange={(e) => setWbForm({ ...wbForm, transaction_no: e.target.value })} placeholder="WB-001" className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Vehicle Reg</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Vehicle Reg</Label>
                             <Input value={wbForm.vehicle_reg} onChange={(e) => setWbForm({ ...wbForm, vehicle_reg: e.target.value })} placeholder="ABC-1234" className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Haulier</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Haulier</Label>
                             <Input value={wbForm.haulier_code} onChange={(e) => setWbForm({ ...wbForm, haulier_code: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Trailer No</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Trailer No</Label>
                             <Input value={wbForm.trailer_number} onChange={(e) => setWbForm({ ...wbForm, trailer_number: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Driver Name</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Driver Name</Label>
                             <Input value={wbForm.driver_name} onChange={(e) => setWbForm({ ...wbForm, driver_name: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Driver ID</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Driver ID</Label>
                             <Input value={wbForm.driver_id} onChange={(e) => setWbForm({ ...wbForm, driver_id: e.target.value })} className="bg-white" />
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-lg border border-slate-200 p-2.5 space-y-2.5">
-                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Weighing</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {/* Weighing Data */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                        <div className="bg-slate-100 border-b border-slate-200 px-3 py-2">
+                          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">⚖️ Weighing Data</p>
+                        </div>
+                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Product Code</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Product Code</Label>
                             <Input value={wbForm.product_code} onChange={(e) => setWbForm({ ...wbForm, product_code: e.target.value })} className="bg-white" />
                           </div>
-                          <div className="space-y-1.5 md:col-span-2">
-                            <Label className="text-xs">Comment</Label>
-                            <Input value={wbForm.comment} onChange={(e) => setWbForm({ ...wbForm, comment: e.target.value })} placeholder="Optional comment..." className="bg-white" />
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-500">Comment</Label>
+                            <Input value={wbForm.comment} onChange={(e) => setWbForm({ ...wbForm, comment: e.target.value })} placeholder="Optional..." className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Time In</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Time In</Label>
                             <Input type="datetime-local" value={wbForm.time_in} onChange={(e) => setWbForm({ ...wbForm, time_in: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Time Out</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Time Out</Label>
                             <Input type="datetime-local" value={wbForm.time_out} onChange={(e) => setWbForm({ ...wbForm, time_out: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">First Mass (kg)</Label>
+                            <Label className="text-xs font-semibold text-slate-500">First Mass (kg)</Label>
                             <Input type="number" value={wbForm.first_mass} onChange={(e) => setWbForm({ ...wbForm, first_mass: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Second Mass (kg)</Label>
+                            <Label className="text-xs font-semibold text-slate-500">Second Mass (kg)</Label>
                             <Input type="number" value={wbForm.second_mass} onChange={(e) => setWbForm({ ...wbForm, second_mass: e.target.value })} className="bg-white" />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Nett Mass (kg)</Label>
-                            <Input type="number" value={wbForm.nett_mass} onChange={(e) => setWbForm({ ...wbForm, nett_mass: e.target.value })} className="bg-white" />
+                            <Label className="text-xs font-semibold text-slate-500">Nett Mass (kg)</Label>
+                            <Input type="number" value={wbForm.nett_mass} onChange={(e) => setWbForm({ ...wbForm, nett_mass: e.target.value })} className="bg-white font-bold" />
                           </div>
-                          <div className="flex items-end pb-1">
-                            <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-slate-300 bg-white w-full">
+                          <div className="flex items-end">
+                            <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-slate-200 bg-white w-full cursor-pointer">
                               <input
                                 type="checkbox"
                                 id="wb_driver_signed"
@@ -743,147 +776,186 @@ export default function GoodsReceivedPage() {
                                 onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
                                 className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                               />
-                              <Label htmlFor="wb_driver_signed" className="text-xs">Driver Signed</Label>
+                              <Label htmlFor="wb_driver_signed" className="text-xs font-semibold cursor-pointer">Driver Signed</Label>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 
-              <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-sm p-3 space-y-2.5">
-                <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Warehouse className="w-4 h-4 text-indigo-600" />
-                    <Label className="text-base font-semibold">Line Items</Label>
+              {/* Line Items Section */}
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
+                      <Warehouse className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">Line Items</p>
+                      <p className="text-[10px] text-indigo-200">{items.length} item{items.length !== 1 ? 's' : ''} · Raw material receipts</p>
+                    </div>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="bg-white border-indigo-200 hover:bg-indigo-50">
-                    <Plus className="h-4 w-4 mr-1" />
+                  <button
+                    type="button"
+                    onClick={addItem}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-bold rounded-lg transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
                     Add Item
-                  </Button>
+                  </button>
                 </div>
 
-                {items.map((item, index) => (
-                  <Card key={index} className="border-indigo-200/70 bg-slate-50/95 shadow-sm">
-                    <CardContent className="pt-3 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="text-[11px] border-indigo-200 text-indigo-700 bg-indigo-50">Item {index + 1}</Badge>
-                        {items.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => removeItem(index)}
-                          >
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
-                        <div className="lg:col-span-8 space-y-2">
-                          <Label>Raw Material *</Label>
-                          <Select
-                            value={item.raw_material_id}
-                            onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
-                          >
-                            <SelectTrigger className="bg-white">
-                              <SelectValue placeholder="Select material" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {materials.map((material) => (
-                                <SelectItem key={material.id} value={material.id}>
-                                  {material.code} - {material.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                <div className="p-4 space-y-3">
+                  {items.map((item, index) => (
+                    <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                      {/* Item header */}
+                      <div className="flex items-center justify-between bg-white border-b border-slate-100 px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 bg-indigo-600 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">{index + 1}</span>
+                          <span className="text-xs font-bold text-slate-700">Raw Material Line {index + 1}</span>
                         </div>
-                        <div className="lg:col-span-4 grid grid-cols-2 gap-1.5 text-xs">
-                          <div className="rounded-md border border-indigo-100 bg-indigo-50/60 px-2.5 py-2">
-                            <p className="text-slate-500">Received</p>
-                            <p className="font-semibold text-slate-800">{Number(item.received_qty || 0).toLocaleString()} kg</p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-2 text-xs">
+                            <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
+                            <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</span>
                           </div>
-                          <div className="rounded-md border border-indigo-100 bg-indigo-50/60 px-2.5 py-2">
-                            <p className="text-slate-500">Line Value</p>
-                            <p className="font-semibold text-slate-800">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</p>
-                          </div>
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeItem(index)}
+                              className="text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-colors border border-red-200"
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
-                        <div className="lg:col-span-3 space-y-1.5">
-                          <Label className="text-xs">Ordered Qty</Label>
+                      {/* Material selector */}
+                      <div className="px-4 pt-3 pb-2">
+                        <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Raw Material *</Label>
+                        <Select
+                          value={item.raw_material_id}
+                          onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
+                        >
+                          <SelectTrigger className="mt-1.5 bg-white border-slate-200 font-medium focus:border-indigo-500">
+                            <SelectValue placeholder="Select material" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {materials.map((material) => (
+                              <SelectItem key={material.id} value={material.id}>
+                                {material.code} — {material.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Quantity grid */}
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-4 pb-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-slate-500">Ordered Qty</Label>
                           <Input
                             type="number"
                             value={item.ordered_qty}
                             onChange={(e) => updateItem(index, 'ordered_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white"
+                            className="bg-white border-slate-200"
+                            placeholder="0.00"
                           />
                         </div>
-                        <div className="lg:col-span-3 space-y-1.5">
-                          <Label className="text-xs">Received Qty *</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-indigo-600">Received Qty *</Label>
                           <Input
                             type="number"
                             value={item.received_qty}
                             onChange={(e) => updateItem(index, 'received_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white"
+                            className="bg-white border-indigo-200 focus:border-indigo-500 font-bold"
+                            placeholder="0.00"
                           />
                         </div>
-                        <div className="lg:col-span-2 space-y-1.5">
-                          <Label className="text-xs">Unit Cost</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-slate-500">Unit Cost ($)</Label>
                           <Input
                             type="number"
                             value={item.unit_cost}
                             onChange={(e) => updateItem(index, 'unit_cost', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white"
+                            className="bg-white border-slate-200"
+                            placeholder="0.00"
                           />
                         </div>
-                        <div className="lg:col-span-2 space-y-1.5">
-                          <Label className="text-xs">Batch Number</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-slate-500">Batch Number</Label>
                           <Input
                             value={item.batch_number}
                             onChange={(e) => updateItem(index, 'batch_number', e.target.value)}
-                            className="bg-white"
+                            className="bg-white border-slate-200 font-mono"
+                            placeholder="e.g. BTH-001"
                           />
                         </div>
-                        <div className="lg:col-span-2 space-y-1.5">
-                          <Label className="text-xs">Expiry Date</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-slate-500">Expiry Date</Label>
                           <Input
                             type="date"
                             value={item.expiry_date}
                             onChange={(e) => updateItem(index, 'expiry_date', e.target.value)}
-                            className="bg-white"
+                            className="bg-white border-slate-200"
                           />
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                    </div>
+                  ))}
 
-                <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5 text-xs">
-                    <div className="text-slate-600">Total Ordered: <span className="font-semibold text-slate-800">{totalOrderedQty.toLocaleString()} kg</span></div>
-                    <div className="text-slate-600">Total Received: <span className="font-semibold text-slate-800">{totalReceivedQty.toLocaleString()} kg</span></div>
-                    <div className="text-slate-600">Estimated Value: <span className="font-semibold text-slate-800">${totalReceivedValue.toFixed(2)}</span></div>
+                  {/* Summary Bar */}
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="text-center">
+                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Total Ordered</p>
+                        <p className="font-extrabold text-white text-base font-mono">{totalOrderedQty.toLocaleString()} <span className="text-slate-400 text-xs">kg</span></p>
+                      </div>
+                      <div className="text-center border-x border-slate-700">
+                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Total Received</p>
+                        <p className="font-extrabold text-emerald-400 text-base font-mono">{totalReceivedQty.toLocaleString()} <span className="text-slate-400 text-xs">kg</span></p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Estimated Value</p>
+                        <p className="font-extrabold text-teal-300 text-base font-mono">${totalReceivedValue.toFixed(2)}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="shrink-0 flex justify-end gap-2 border-t bg-white px-4 py-2.5">
-            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveGRN} disabled={saving}>
-              {saving ? 'Creating...' : 'Create GRN'}
-            </Button>
+          {/* Footer */}
+          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/80 px-6 py-3.5">
+            <p className="text-xs text-slate-400 hidden sm:block">GRN will be posted to Sage 200 Evolution automatically upon approval</p>
+            <div className="flex gap-2 ml-auto">
+              <button
+                onClick={() => setModalOpen(false)}
+                disabled={saving}
+                className="px-5 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveGRN}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+              >
+                {saving ? (
+                  <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
+                ) : (
+                  <><Package className="w-4 h-4" /> Create GRN</>
+                )}
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
