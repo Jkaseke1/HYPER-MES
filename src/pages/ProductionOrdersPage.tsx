@@ -1113,50 +1113,57 @@ export default function ProductionOrdersPage() {
   const completedCount = orders.filter(o => o.status === 'completed').length;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-xl">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Production Orders</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage batch production with enforced workflow sequence</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full border border-teal-500/30 font-mono font-medium">Shop-Floor Execution</span>
+            <span className="text-slate-400 text-xs">• Sage Synchronized</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Production Orders</h1>
+          <p className="text-slate-300 text-sm mt-1">Manage batch production, material issues, and Sage FG completions</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> Create Order
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all shrink-0">
+          <Plus className="w-5 h-5" /> Create Production Order
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard title="Total Orders" value={totalOrders} icon={Package} color="teal" />
         <StatCard title="Pending" value={pendingCount} icon={Clock} color="amber" />
         <StatCard title="In Progress" value={inProgressCount} icon={Play} color="blue" />
         <StatCard title="Completed" value={completedCount} icon={CheckCircle2} color="emerald" />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="border-b border-slate-200">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex gap-1">
+      {/* Filter & Search Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-md overflow-hidden">
+        <div className="border-b border-slate-100 p-4 bg-slate-50/50">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
               {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all shrink-0 ${
                     tab === t.key
-                      ? 'bg-teal-100 text-teal-700'
-                      : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
+                      ? 'bg-slate-900 text-white shadow'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <div className="relative max-w-sm">
+            <div className="relative max-w-sm w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search batch number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
               />
             </div>
           </div>
@@ -1168,64 +1175,112 @@ export default function ProductionOrdersPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Package className="w-12 h-12 mb-3" />
-            <p className="text-sm font-medium">No production orders found</p>
+            <Package className="w-12 h-12 mb-3 text-slate-300" />
+            <p className="text-sm font-medium">No production orders found matching filter</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50">
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Batch Number</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Formulation</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Production Line</th>
-                  <th className="text-right px-4 py-3 font-semibold text-slate-600">Planned Qty</th>
-                  <th className="text-right px-4 py-3 font-semibold text-slate-600">Actual Qty</th>
-                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
-                  <th className="text-center px-4 py-3 font-semibold text-slate-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{order.batch_number}</div>
-                      {order.profiles?.full_name && (
-                        <div className="text-xs text-slate-500 mt-1">
-                          Created by <span className="font-medium text-slate-700">{order.profiles.full_name}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-slate-600">{order.formulations?.name || '-'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-slate-600">{order.machines?.name || '-'}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="text-slate-800">{order.planned_qty} {order.unit}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="text-slate-800">{order.actual_qty} {order.unit}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={order.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center">
-                        <button
-                          onClick={() => openDetail(order)}
-                          className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+          <div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-100/70">
+                    <th className="text-left px-4 py-3.5 font-bold text-slate-700">Batch Number</th>
+                    <th className="text-left px-4 py-3.5 font-bold text-slate-700">Formulation</th>
+                    <th className="text-left px-4 py-3.5 font-bold text-slate-700">Production Line</th>
+                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Planned Qty</th>
+                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Actual Qty</th>
+                    <th className="text-left px-4 py-3.5 font-bold text-slate-700">Status</th>
+                    <th className="text-center px-4 py-3.5 font-bold text-slate-700">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((order) => (
+                    <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3.5">
+                        <div className="font-mono font-bold text-slate-900">{order.batch_number}</div>
+                        {order.profiles?.full_name && (
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            Created by <span className="font-medium text-slate-700">{order.profiles.full_name}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="font-medium text-slate-800">{order.formulations?.name || '-'}</div>
+                        <div className="text-xs text-slate-400 font-mono">{order.formulations?.code}</div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="text-slate-700 font-medium">{order.machines?.name || '-'}</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
+                        {order.planned_qty} {order.unit}
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
+                        {order.actual_qty ? `${order.actual_qty} ${order.unit}` : '-'}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <StatusBadge status={order.status} />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center justify-center">
+                          <button
+                            onClick={() => openDetail(order)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 rounded-lg transition-colors"
+                            title="Manage Batch Order"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-teal-600" />
+                            Manage
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card Grid View */}
+            <div className="block md:hidden divide-y divide-slate-100">
+              {filtered.map((order) => (
+                <div key={order.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/50">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-extrabold bg-slate-900 text-white px-2.5 py-1 rounded">
+                      {order.batch_number}
+                    </span>
+                    <StatusBadge status={order.status} />
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-base">{order.formulations?.name || 'Production Batch'}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Line: {order.machines?.name || 'Main Plant'}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase">Planned</span>
+                      <span className="font-bold text-slate-800">{order.planned_qty} {order.unit}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase">Actual</span>
+                      <span className="font-bold text-slate-800">{order.actual_qty || 0} {order.unit}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <span className="text-[11px] text-slate-400">
+                      {order.profiles?.full_name ? `Operator: ${order.profiles.full_name}` : ''}
+                    </span>
+                    <button
+                      onClick={() => openDetail(order)}
+                      className="inline-flex items-center gap-1 px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Manage Order
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

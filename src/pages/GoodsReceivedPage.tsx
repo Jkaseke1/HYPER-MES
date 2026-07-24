@@ -248,19 +248,27 @@ export default function GoodsReceivedPage() {
     return Number.isNaN(parsed) ? '' : parsed;
   };
 
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      pending: 'secondary',
-      approved: 'default',
-      rejected: 'destructive',
-    };
-    return <Badge variant={variants[status] || 'outline'}>{status}</Badge>;
+    switch (status) {
+      case 'approved':
+        return <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 font-semibold">Approved</Badge>;
+      case 'pending':
+        return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 font-semibold">Pending</Badge>;
+      case 'rejected':
+        return <Badge className="bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-0.5 font-semibold">Rejected</Badge>;
+      default:
+        return <Badge variant="outline" className="font-semibold">{status}</Badge>;
+    }
   };
 
-  const filteredGRNs = grns.filter(grn =>
-    grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
-    grn.suppliers?.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredGRNs = grns.filter(grn => {
+    const matchesSearch = grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
+      grn.suppliers?.name.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || grn.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const stats = {
     total: grns.length,
@@ -285,107 +293,186 @@ export default function GoodsReceivedPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500 font-medium animate-pulse">Loading Goods Received Notes...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6 max-w-[1600px] mx-auto">
       <StockTakeFrozenBanner />
       
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-xl">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Goods Received Notes</h1>
-          <p className="text-muted-foreground mt-1">Manage incoming raw material deliveries</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full border border-teal-500/30 font-mono font-medium">Inbound Logistics</span>
+            <span className="text-slate-400 text-xs">• Sage Synchronized</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Goods Received Notes</h1>
+          <p className="text-slate-300 text-sm mt-1">Capture raw material deliveries & automated Sage GRV postings</p>
         </div>
-        <Button onClick={() => setModalOpen(true)} size="lg">
-          <Plus className="mr-2 h-4 w-4" />
-          New GRN
+        <Button onClick={() => setModalOpen(true)} size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/20 shrink-0">
+          <Plus className="mr-2 h-5 w-5" />
+          New GRN Delivery
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* KPI Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <StatCard icon={Package} title="Total GRNs" value={stats.total} subtitle="All time" color="blue" />
-        <StatCard icon={Clock} title="Pending" value={stats.pending} subtitle="Awaiting approval" color="amber" />
-        <StatCard icon={FileText} title="Approved" value={stats.approved} subtitle="Ready to receive" color="emerald" />
+        <StatCard icon={Clock} title="Pending Approval" value={stats.pending} subtitle="Awaiting sign-off" color="amber" />
+        <StatCard icon={FileText} title="Sage Approved" value={stats.approved} subtitle="Posted to Sage" color="emerald" />
         <StatCard icon={Calendar} title="This Month" value={stats.thisMonth} subtitle="Current period" color="teal" />
       </div>
 
-      {/* Search */}
-      <div className="flex items-center space-x-2">
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Search by GRN number or supplier..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 bg-slate-50/50 border-slate-200 focus:bg-white"
           />
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {(['all', 'pending', 'approved', 'rejected'] as const).map((st) => (
+            <button
+              key={st}
+              onClick={() => setStatusFilter(st)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all shrink-0 ${
+                statusFilter === st
+                  ? 'bg-slate-900 text-white shadow'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {st}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* GRNs Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent GRNs</CardTitle>
-          <CardDescription>View and manage all goods received notes</CardDescription>
+      {/* GRNs View: Desktop Table + Mobile Card Grid */}
+      <Card className="border border-slate-200 shadow-md overflow-hidden">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4 px-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-bold text-slate-900">Delivery Register</CardTitle>
+              <CardDescription className="text-xs text-slate-500">View, inspect, and approve incoming goods notes</CardDescription>
+            </div>
+            <Badge variant="outline" className="font-mono text-xs text-slate-600 bg-white">
+              {filteredGRNs.length} record(s)
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>GRN Number</TableHead>
-                <TableHead>Supplier</TableHead>
-                <TableHead>Weigh Bridge</TableHead>
-                <TableHead>Received Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created By</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredGRNs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No GRNs found
-                  </TableCell>
+        <CardContent className="p-0">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-100/70 hover:bg-slate-100/70">
+                  <TableHead className="font-bold text-slate-700">GRN Number</TableHead>
+                  <TableHead className="font-bold text-slate-700">Supplier</TableHead>
+                  <TableHead className="font-bold text-slate-700">Weigh Bridge</TableHead>
+                  <TableHead className="font-bold text-slate-700">Received Date</TableHead>
+                  <TableHead className="font-bold text-slate-700">Status</TableHead>
+                  <TableHead className="font-bold text-slate-700">Created Date</TableHead>
+                  <TableHead className="text-right font-bold text-slate-700 pr-6">Action</TableHead>
                 </TableRow>
-              ) : (
-                filteredGRNs.map((grn) => (
-                  <TableRow key={grn.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {(grn as any).wb_transaction_no && (
-                          <span title="Weigh Bridge data captured"><Scale className="w-3.5 h-3.5 text-teal-500 shrink-0" /></span>
-                        )}
-                        <span className="font-mono text-xs text-slate-500">{grn.grn_number}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{grn.suppliers?.name}</TableCell>
-                    <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
-                    <TableCell>{format(new Date(grn.received_date), 'PPP')}</TableCell>
-                    <TableCell>{getStatusBadge(grn.status)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {format(new Date(grn.created_at), 'PPp')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewGRN(grn)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {filteredGRNs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-slate-400 py-12">
+                      No Goods Received Notes found matching criteria
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredGRNs.map((grn) => (
+                    <TableRow key={grn.id} className="hover:bg-slate-50/80 transition-colors">
+                      <TableCell className="font-semibold">
+                        <div className="flex items-center gap-2">
+                          {(grn as any).wb_transaction_no && (
+                            <span title="Weigh Bridge data captured"><Scale className="w-4 h-4 text-emerald-600 shrink-0" /></span>
+                          )}
+                          <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">{grn.grn_number}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium text-slate-900">{grn.suppliers?.name}</TableCell>
+                      <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
+                      <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
+                      <TableCell>{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell className="text-xs text-slate-500">
+                        {format(new Date(grn.created_at), 'MMM d, yyyy • HH:mm')}
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewGRN(grn)}
+                          className="hover:bg-teal-50 hover:text-teal-700 border-slate-300 font-semibold"
+                        >
+                          <Eye className="h-4 w-4 mr-1.5 text-teal-600" />
+                          Inspect
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card List View (Phones & Tablets) */}
+          <div className="block md:hidden divide-y divide-slate-100">
+            {filteredGRNs.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-sm">
+                No Goods Received Notes found matching criteria
+              </div>
+            ) : (
+              filteredGRNs.map((grn) => (
+                <div key={grn.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold bg-slate-900 text-white px-2 py-1 rounded">
+                        {grn.grn_number}
+                      </span>
+                      {(grn as any).wb_transaction_no && (
+                        <Badge variant="outline" className="text-[10px] text-teal-700 border-teal-300 bg-teal-50">
+                          <Scale className="w-3 h-3 mr-1 text-teal-600 inline" /> WB Ticket
+                        </Badge>
+                      )}
+                    </div>
+                    {getStatusBadge(grn.status)}
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-base">{grn.suppliers?.name}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Received: {format(new Date(grn.received_date), 'PPP')}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <span className="text-[11px] text-slate-400">
+                      {format(new Date(grn.created_at), 'MMM d, HH:mm')}
+                    </span>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleViewGRN(grn)}
+                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" />
+                      View Details
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
 
