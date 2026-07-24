@@ -39,6 +39,7 @@ const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
+const FinishedGoodsPage = lazy(() => import('./pages/FinishedGoodsPage'));
 const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
 const ProcessLossReportPage = lazy(() => import('./pages/ProcessLossReportPage'));
 const ChickDistributionPage = lazy(() => import('./pages/ChickDistributionPage'));
@@ -171,6 +172,7 @@ function AppRoutes() {
           <Route path="/weigh-bridge" element={<WeighBridgePage />} />
           <Route path="/chick-bookings" element={<Navigate to="/chick/purchase-orders" replace />} />
           <Route path="/production-warehouse" element={<ProductionWarehousePage />} />
+          <Route path="/finished-goods" element={<FinishedGoodsPage />} />
           <Route path="/sage-posting-review" element={<SagePostingReviewPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
