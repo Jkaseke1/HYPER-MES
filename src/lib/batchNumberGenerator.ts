@@ -13,35 +13,14 @@ import { supabase } from './supabase';
 export async function peekBatchNumber(prefix: string): Promise<string> {
   const year = new Date().getFullYear();
   try {
-    let tableName = 'production_orders';
-    let colName = 'batch_number';
-    if (prefix === 'DSP') { tableName = 'dispatch_orders'; colName = 'dispatch_number'; }
-    else if (prefix === 'GRN') { tableName = 'goods_received_notes'; colName = 'grn_number'; }
-    else if (prefix === 'PO') { tableName = 'purchase_orders'; colName = 'po_number'; }
-    else if (prefix === 'WB') { tableName = 'weigh_bridge_tickets'; colName = 'ticket_no'; }
-
-    // Query the latest actual record inserted in DB
     const { data } = await supabase
-      .from(tableName)
-      .select(colName)
-      .like(colName, `${prefix}-${year}-%`)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .from('batch_sequences')
+      .select('next_sequence')
+      .eq('prefix', prefix)
+      .eq('year', year)
+      .maybeSingle();
 
-    let maxSeq = 0;
-    if (data && data.length > 0) {
-      for (const row of data) {
-        const val = (row as any)[colName] || '';
-        const parts = val.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        if (!isNaN(num) && num > maxSeq) {
-          maxSeq = num;
-        }
-      }
-    }
-
-    const nextSeq = maxSeq + 1;
+    const nextSeq = data?.next_sequence || 1;
     const sequenceNumber = String(nextSeq).padStart(6, '0');
     return `${prefix}-${year}-${sequenceNumber}`;
   } catch (err) {
@@ -58,44 +37,29 @@ export async function generateBatchNumber(prefix: string): Promise<string> {
   const year = new Date().getFullYear();
   
   try {
-    let tableName = 'production_orders';
-    let colName = 'batch_number';
-    if (prefix === 'DSP') { tableName = 'dispatch_orders'; colName = 'dispatch_number'; }
-    else if (prefix === 'GRN') { tableName = 'goods_received_notes'; colName = 'grn_number'; }
-    else if (prefix === 'PO') { tableName = 'purchase_orders'; colName = 'po_number'; }
-    else if (prefix === 'WB') { tableName = 'weigh_bridge_tickets'; colName = 'ticket_no'; }
+    // 1. Fetch current sequence from batch_sequences table
+    const { data } = await supabase
+      .from('batch_sequences')
+      .select('id, next_sequence')
+      .eq('prefix', prefix)
+      .eq('year', year)
+      .maybeSingle();
 
-    const { data: maxRows } = await supabase
-      .from(tableName)
-      .select(colName)
-      .like(colName, `${prefix}-${year}-%`)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    let currentSeq = data?.next_sequence || 1;
 
-    let maxSeq = 0;
-    if (maxRows && maxRows.length > 0) {
-      for (const row of maxRows) {
-        const val = (row as any)[colName] || '';
-        const parts = val.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        if (!isNaN(num) && num > maxSeq) {
-          maxSeq = num;
-        }
-      }
+    // 2. Increment next_sequence atomically in batch_sequences
+    if (data?.id) {
+      await supabase
+        .from('batch_sequences')
+        .update({ next_sequence: currentSeq + 1, updated_at: new Date().toISOString() })
+        .eq('id', data.id);
+    } else {
+      await supabase
+        .from('batch_sequences')
+        .insert({ prefix, year, next_sequence: currentSeq + 1 });
     }
 
-    const nextSeq = maxSeq + 1;
-
-    // Sync/update batch_sequences table in Supabase
-    await supabase
-      .from('batch_sequences')
-      .upsert(
-        { prefix, year, next_sequence: nextSeq + 1, updated_at: new Date().toISOString() },
-        { onConflict: 'prefix,year' }
-      );
-
-    const sequenceNumber = String(nextSeq).padStart(6, '0');
+    const sequenceNumber = String(currentSeq).padStart(6, '0');
     return `${prefix}-${year}-${sequenceNumber}`;
   } catch (err) {
     console.error('Batch number generation failed:', err);
