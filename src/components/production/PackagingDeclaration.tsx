@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, AlertTriangle, CheckCircle2, Plus, Trash2, Loader2, Sparkles, Scale } from 'lucide-react';
+import { Package, AlertTriangle, CheckCircle2, Plus, Trash2, Loader2, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface PackagingSKU {
@@ -20,13 +20,30 @@ interface PackagingLine {
 interface PackagingDeclarationProps {
   actualOutputQty: number; // in tonnes
   formulationId?: string;
+  unitSize?: string; // e.g. "50", "50kg", "25"
+  formulationName?: string; // e.g. "Broiler Starter/Grower 50kg"
   onSave: (lines: PackagingLine[]) => Promise<void>;
   disabled?: boolean;
+}
+
+// Extract target bag size (in kg) from unitSize or formulationName
+function extractTargetBagSize(unitSize?: string, formulationName?: string): number {
+  if (unitSize) {
+    const match = unitSize.match(/(\d+)/);
+    if (match) return parseInt(match[1], 10);
+  }
+  if (formulationName) {
+    const match = formulationName.match(/(\d+)\s*kg/i);
+    if (match) return parseInt(match[1], 10);
+  }
+  return 50; // Default to standard 50kg bag
 }
 
 export default function PackagingDeclaration({
   actualOutputQty,
   formulationId,
+  unitSize,
+  formulationName,
   onSave,
   disabled = false
 }: PackagingDeclarationProps) {
@@ -36,9 +53,11 @@ export default function PackagingDeclaration({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const targetBagSizeKg = extractTargetBagSize(unitSize, formulationName);
+
   useEffect(() => {
     fetchSkus();
-  }, [actualOutputQty, formulationId]);
+  }, [actualOutputQty, formulationId, unitSize, formulationName]);
 
   async function fetchSkus() {
     try {
@@ -46,17 +65,23 @@ export default function PackagingDeclaration({
       const { data, error: err } = await supabase
         .from('packaging_skus')
         .select('*')
-        .eq('is_active', true)
-        .order('bag_size_kg', { ascending: false });
+        .eq('is_active', true);
 
       if (err) throw err;
-      const available = data || [];
+      
+      // Sort SKUs by closeness to targetBagSizeKg (e.g., 50kg SKU first!)
+      const available = (data || []).sort((a, b) => {
+        const diffA = Math.abs((Number(a.bag_size_kg) || 0) - targetBagSizeKg);
+        const diffB = Math.abs((Number(b.bag_size_kg) || 0) - targetBagSizeKg);
+        return diffA - diffB;
+      });
+
       setSkus(available);
       await autoPopulateLines(available);
     } catch (err) {
       console.error('Failed to fetch packaging SKUs:', err);
       setError('Failed to load packaging SKUs');
-    } finally {
+    } fontally {
       setLoading(false);
     }
   }
@@ -99,16 +124,18 @@ export default function PackagingDeclaration({
       }
     }
 
-    // 2. Fallback: auto-pick the best matching SKU (e.g., 50kg or 25kg bag)
+    // 2. Fallback: pick the SKU closest to targetBagSizeKg (e.g. 50kg bag)
     if (initial.length === 0) {
-      const defaultSku = availableSkus.find((s) => s.bag_size_kg > 0) || availableSkus[0];
-      if (defaultSku && defaultSku.bag_size_kg > 0) {
-        const bags = outputInKg > 0 ? Math.max(1, Math.round(outputInKg / defaultSku.bag_size_kg)) : 0;
+      // availableSkus is already sorted with closest bag_size_kg first (e.g., 50kg)
+      const matchedSku = availableSkus.find(s => Number(s.bag_size_kg) === targetBagSizeKg) || availableSkus[0];
+      
+      if (matchedSku && matchedSku.bag_size_kg > 0) {
+        const bags = outputInKg > 0 ? Math.max(1, Math.round(outputInKg / matchedSku.bag_size_kg)) : 0;
         initial.push({
-          id: `default-${defaultSku.id}-${Date.now()}`,
-          packaging_sku_id: defaultSku.id,
+          id: `default-${matchedSku.id}-${Date.now()}`,
+          packaging_sku_id: matchedSku.id,
           bags_used: bags,
-          implied_tonnes: (bags * defaultSku.bag_size_kg) / 1000,
+          implied_tonnes: (bags * matchedSku.bag_size_kg) / 1000,
         });
       }
     }
@@ -152,7 +179,7 @@ export default function PackagingDeclaration({
   }
 
   function addLine() {
-    const defaultSku = skus.find((s) => s.bag_size_kg > 0) || skus[0];
+    const defaultSku = skus.find(s => Number(s.bag_size_kg) === targetBagSizeKg) || skus[0];
     if (!defaultSku) return;
 
     const bags = actualOutputQty > 0 ? Math.max(1, Math.round((actualOutputQty * 1000) / defaultSku.bag_size_kg)) : 0;
@@ -215,7 +242,7 @@ export default function PackagingDeclaration({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-500">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mb-2" />
-        <p className="text-sm font-medium">Loading packaging SKUs & auto-populating bags...</p>
+        <p className="text-sm font-medium">Auto-selecting {targetBagSizeKg}kg packaging SKU...</p>
       </div>
     );
   }
@@ -233,11 +260,11 @@ export default function PackagingDeclaration({
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold tracking-tight">Declare Packaging Used</h3>
                 <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  <Sparkles className="w-3 h-3" /> Auto-Calculated
+                  <Sparkles className="w-3 h-3" /> Auto-Selected {targetBagSizeKg}kg SKU
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Bags are auto-calculated from declared actual output ({actualOutputQty.toFixed(3)} tonnes). Verify before completion.
+                Bags auto-calculated from output ({actualOutputQty.toFixed(3)} tonnes = {(actualOutputQty * 1000).toLocaleString()} kg) for {targetBagSizeKg}kg packaging.
               </p>
             </div>
           </div>
@@ -252,7 +279,7 @@ export default function PackagingDeclaration({
           <span className="text-[10px] text-slate-400 font-mono">{(actualOutputQty * 1000).toLocaleString()} kg</span>
         </div>
         <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Auto Bag Count</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Auto Bag Count ({targetBagSizeKg}kg)</span>
           <p className="text-lg font-extrabold text-emerald-900 mt-0.5">{totalBags.toLocaleString()} <span className="text-xs font-normal text-emerald-600">bags</span></p>
           <span className="text-[10px] text-emerald-600 font-mono">Implied: {totalImpliedTonnes.toFixed(3)} t</span>
         </div>
@@ -297,7 +324,6 @@ export default function PackagingDeclaration({
           </div>
         ) : (
           lines.map((line, idx) => {
-            const currentSku = skus.find((s) => s.id === line.packaging_sku_id);
             return (
               <div key={line.id} className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-sm space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -333,7 +359,7 @@ export default function PackagingDeclaration({
                   </div>
 
                   <div className="md:col-span-3 space-y-1">
-                    <label className="block text-[11px] font-bold text-emerald-700 uppercase">Bags Used</label>
+                    <label className="block text-[11px] font-bold text-emerald-700 uppercase">Bags Used ({targetBagSizeKg}kg)</label>
                     <input
                       type="number"
                       min="1"

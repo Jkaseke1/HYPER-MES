@@ -2694,6 +2694,8 @@ export default function ProductionOrdersPage() {
                     : (output.actual_qty || selected.actual_qty || 0) / 1000
                 }
                 formulationId={selected.formulation_id}
+                unitSize={selected.unit_size}
+                formulationName={selected.formulations?.name}
                 onSave={handlePkgConfirm}
                 disabled={saving}
               />
