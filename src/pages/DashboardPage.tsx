@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Circle, Play, Activity, Gauge, Users, Zap,
+  Layers, Package, Truck, Scale, Sparkles, CheckCircle2, Clock, ArrowUpRight, ShieldCheck, Factory
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
@@ -90,7 +91,6 @@ export default function DashboardPage() {
       });
       setRecentOrders((recentRes.data as ProductionOrder[]) || []);
       
-      // Filter low stock items in JavaScript
       const allMaterials = (stockRes.data as RawMaterial[]) || [];
       setLowStockItems(allMaterials);
       setTrends((trendRes.data as MonthlyTrendRow[]) || []);
@@ -134,53 +134,65 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-600 rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center h-96 text-slate-500">
+        <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-slate-700">Loading Operations Command Center...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Operations Command Center</h1>
-          <div className="flex items-center gap-4 mt-2">
-            <div className="flex items-center gap-1.5 text-[12px]">
-              <Circle className="w-2.5 h-2.5 fill-[#00d4aa] text-[#00d4aa]" />
-              <span className="text-gray-500">Materials:</span>
-              <span className="font-medium text-gray-800">{stats.rawMaterialCount}</span>
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
+              <Factory className="w-7 h-7 text-emerald-400" />
             </div>
-            <div className="flex items-center gap-1.5 text-[12px]">
-              <Circle className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
-              <span className="text-gray-500">Active Formulations:</span>
-              <span className="font-medium text-gray-800">{stats.formulationCount}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[12px]">
-              <Circle className={`w-2.5 h-2.5 ${filteredLowStock.length > 0 ? 'fill-amber-500 text-amber-500' : 'fill-emerald-500 text-emerald-500'}`} />
-              <span className="text-gray-500">Alerts:</span>
-              <span className={`font-medium ${filteredLowStock.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{filteredLowStock.length}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Operations Command Center</h1>
+                <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                  <Sparkles className="w-3.5 h-3.5" /> Live MES Floor
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 mt-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Circle className="w-2 h-2 fill-emerald-400 text-emerald-400" />
+                  Materials: <strong className="text-white">{stats.rawMaterialCount}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Circle className="w-2 h-2 fill-blue-400 text-blue-400" />
+                  Formulations: <strong className="text-white">{stats.formulationCount}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Circle className={`w-2 h-2 ${filteredLowStock.length > 0 ? 'fill-amber-400 text-amber-400' : 'fill-emerald-400 text-emerald-400'}`} />
+                  Alerts: <strong className={filteredLowStock.length > 0 ? 'text-amber-300' : 'text-emerald-300'}>{filteredLowStock.length}</strong>
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide">Updated {format(lastUpdated, 'HH:mm:ss')}</p>
-            <p className="text-[12px] text-gray-600">{format(lastUpdated, 'EEEE, MMM d')}</p>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Live Sync</p>
+              <p className="text-xs font-mono font-bold text-slate-200">{format(lastUpdated, 'EEEE, MMM d · HH:mm:ss')}</p>
+            </div>
+            <button
+              onClick={fetchLiveOrders}
+              className="p-3 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
+              title="Refresh Live Floor"
+            >
+              <RefreshCw className="w-4.5 h-4.5" />
+            </button>
           </div>
-          <button
-            onClick={fetchLiveOrders}
-            className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
-            title="Refresh live floor"
-          >
-            <RefreshCw className="w-4 h-4 text-gray-500" />
-          </button>
         </div>
       </div>
 
-      {/* Live Production Floor - Single Hero Card */}
+      {/* Hero Live Production Floor Card */}
       {(() => {
         const heroOrder = liveOrders.find(o => o.status === 'in_progress') || liveOrders[0];
         const yieldPct = heroOrder && heroOrder.planned_qty > 0 ? Math.min(100, Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)) : 0;
@@ -195,56 +207,58 @@ export default function DashboardPage() {
         const isRunning = heroOrder?.status === 'in_progress';
 
         return (
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <h2 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Live Production Floor</h2>
+                <span className={`w-3 h-3 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Manufacturing Floor Status</h2>
               </div>
-              <div className="text-[12px]">
-                <span className="text-gray-400">Status: </span>
-                <span className={`font-medium ${isRunning ? 'text-[#00d4aa]' : 'text-gray-500'}`}>{isRunning ? 'Running' : heroOrder ? 'Idle' : 'No Orders'}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 font-medium">Line Status:</span>
+                <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full border ${isRunning ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : heroOrder ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                  {isRunning ? 'ACTIVE RUNNING' : heroOrder ? 'MATERIALS ISSUED' : 'NO ORDERS'}
+                </span>
               </div>
             </div>
 
             {!heroOrder ? (
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg p-10 text-center border border-gray-100">
-                <p className="text-sm text-gray-500">No active production orders on the floor</p>
+              <div className="bg-slate-50 rounded-2xl p-10 text-center border border-slate-200/60">
+                <Factory className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">No active production orders running on the floor</p>
+                <p className="text-xs text-slate-400 mt-1">Start a new batch from Production Orders to view live telemetry.</p>
               </div>
             ) : (
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg p-5 border border-gray-100">
-                {/* Hero header */}
-                <div className="flex items-center justify-between mb-5">
+              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-[#00d4aa] rounded-lg flex items-center justify-center">
-                      <Play className="w-5 h-5 text-white fill-white" />
+                    <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                      <Play className="w-6 h-6 text-white fill-white ml-0.5" />
                     </div>
                     <div>
-                      <h3 className="text-[16px] font-semibold text-gray-900 leading-tight">{heroOrder.formulations?.name || heroOrder.batch_number}</h3>
-                      <p className="text-[12px] text-gray-500 mt-0.5">Current active line · {heroOrder.batch_number}</p>
+                      <h3 className="text-lg font-extrabold text-white tracking-tight">{heroOrder.formulations?.name || heroOrder.batch_number}</h3>
+                      <p className="text-xs text-slate-300 font-mono mt-0.5">Batch: {heroOrder.batch_number} • Main Manufacturing Line</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Runtime</p>
-                    <p className="text-[16px] font-mono font-semibold text-gray-900 tabular-nums">{runtimeStr}</p>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Active Runtime</span>
+                    <p className="text-xl font-mono font-black text-emerald-400">{runtimeStr}</p>
                   </div>
                 </div>
 
-                {/* 4 Metrics with progress bars */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Throughput', value: `${throughput.toLocaleString()} ${heroOrder.unit}/hr`, pct: Math.min(100, throughput / 10), color: '#00d4aa', icon: Zap },
-                    { label: 'Yield', value: `${yieldPct}%`, pct: yieldPct, color: '#3b82f6', icon: Gauge },
-                    { label: 'Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()}`, pct: yieldPct, color: '#f59e0b', icon: Activity },
-                    { label: 'Active Lines', value: `${liveOrders.filter(o => o.status === 'in_progress').length} Active`, pct: Math.min(100, liveOrders.filter(o => o.status === 'in_progress').length * 25), color: '#8b5cf6', icon: Users },
+                    { label: 'Throughput', value: `${throughput.toLocaleString()} ${heroOrder.unit}/hr`, pct: Math.min(100, throughput / 10), color: '#10b981', icon: Zap },
+                    { label: 'Yield Rate', value: `${yieldPct}%`, pct: yieldPct, color: '#3b82f6', icon: Gauge },
+                    { label: 'Batch Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()} kg`, pct: yieldPct, color: '#f59e0b', icon: Activity },
+                    { label: 'Active Lines', value: `${liveOrders.filter(o => o.status === 'in_progress').length} Line Running`, pct: Math.min(100, liveOrders.filter(o => o.status === 'in_progress').length * 50), color: '#a855f7', icon: Users },
                   ].map(({ label, value, pct, color, icon: Icon }) => (
-                    <div key={label}>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <Icon className="w-3 h-3 text-gray-400" />
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+                    <div key={label} className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700">
+                      <div className="flex items-center gap-1.5 mb-1 text-slate-400">
+                        <Icon className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
                       </div>
-                      <p className="text-[18px] font-semibold text-gray-900 mb-2 leading-tight">{value}</p>
-                      <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                      <p className="text-base font-extrabold text-white mb-2">{value}</p>
+                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
                       </div>
                     </div>
@@ -256,104 +270,151 @@ export default function DashboardPage() {
         );
       })()}
 
-      {/* KPI Stat Tiles - Matching Image 2 style */}
+      {/* KPI Stat Cards Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Active Orders', value: String(stats.activeOrders).padStart(2, '0'), badge: stats.activeOrders > 0 ? 'running' : 'idle', sub: stats.activeOrders > 0 ? 'Production in progress' : 'No active runs', trend: stats.activeOrders > 0 ? 'up' : null },
-          { label: 'Total Production', value: `${stats.totalProduction}`, badge: 't', sub: 'Cumulative output', trend: null },
-          { label: 'Pending Dispatch', value: String(stats.pendingDispatches).padStart(2, '0'), badge: stats.pendingDispatches > 0 ? 'pending' : 'clear', sub: stats.pendingDispatches > 0 ? 'Awaiting shipment' : 'All dispatched', trend: null },
-          { label: 'Efficiency', value: `${stats.efficiency}%`, badge: stats.efficiency >= 90 ? 'on target' : stats.efficiency >= 70 ? 'fair' : 'low', sub: 'Target: >85%', trend: stats.efficiency >= 90 ? 'up' : stats.efficiency < 70 ? 'down' : null },
-        ].map(({ label, value, badge, sub, trend }) => (
-          <div key={label} className="bg-white border border-gray-200 rounded-lg p-5">
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-3">{label}</p>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-[36px] font-semibold text-gray-900 tracking-tight leading-none">{value}</h3>
-              {trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-500" />}
-              {trend === 'down' && <TrendingDown className="w-4 h-4 text-red-500" />}
-              {badge && <span className="text-[12px] text-gray-500 ml-1">{badge}</span>}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Activity className="w-4 h-4" />
             </div>
-            <p className="text-[12px] text-gray-500 mt-2">{sub}</p>
           </div>
-        ))}
+          <div className="flex items-baseline gap-2 mt-2">
+            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{String(stats.activeOrders).padStart(2, '0')}</h3>
+            {stats.activeOrders > 0 && <TrendingUp className="w-4 h-4 text-emerald-500" />}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">{stats.activeOrders > 0 ? 'Batches in active queue' : 'No active runs'}</p>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Production</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Scale className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1 mt-2">
+            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{stats.totalProduction.toLocaleString()}</h3>
+            <span className="text-xs font-bold text-slate-400">tonnes</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Cumulative plant output</p>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Dispatch</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Truck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{String(stats.pendingDispatches).padStart(2, '0')}</h3>
+            <span className="text-xs font-bold text-purple-600">trips</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">{stats.pendingDispatches > 0 ? 'Shipments queueing' : 'All dispatched'}</p>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Plant Efficiency</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Gauge className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2 mt-2">
+            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{stats.efficiency}%</h3>
+            {stats.efficiency >= 85 ? <TrendingUp className="w-4 h-4 text-emerald-500" /> : <TrendingDown className="w-4 h-4 text-amber-500" />}
+          </div>
+          <p className="text-xs text-slate-500 mt-1">Target OEE: &gt;85%</p>
+        </div>
       </div>
 
-      {/* Charts + Side Panels */}
+      {/* Analytics Charts & Stock Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Operations Trends */}
-        <div className="xl:col-span-2 bg-white border border-gray-200 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5">
+        
+        {/* Operations Trends Chart */}
+        <div className="xl:col-span-2 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
-              <h3 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Operations Trends</h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">Last 12 months</p>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">12-Month Operations Trends & Analytics</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">Production Output (t) vs RM Consumption vs Branch Dispatches</p>
             </div>
-            <div className="flex items-center gap-5 text-[11px]">
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#00d4aa] rounded-sm" /><span className="text-gray-500">Production</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-sm" /><span className="text-gray-500">Consumption</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-0.5 bg-gray-300" /><span className="text-gray-500">Dispatch</span></div>
+            <div className="flex items-center gap-4 text-xs font-semibold">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded" /> Production</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-blue-500 rounded" /> Consumption</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-400 border-t border-dashed" /> Dispatch</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={280}>
+
+          <ResponsiveContainer width="100%" height={290}>
             <ComposedChart data={trendChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-              <XAxis dataKey="month" stroke="#9ca3af" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
-              <YAxis stroke="#9ca3af" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
-              <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Bar dataKey="production" fill="#00d4aa" radius={[4, 4, 0, 0]} name="Production (t)" />
-              <Bar dataKey="consumption" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Consumption (t)" />
-              <Line type="monotone" dataKey="dispatch" stroke="#d1d5db" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
+              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
+              <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+              <Bar dataKey="production" fill="#10b981" radius={[6, 6, 0, 0]} name="Production (t)" />
+              <Bar dataKey="consumption" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Consumption (t)" />
+              <Line type="monotone" dataKey="dispatch" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Right column */}
+        {/* Right Sidebar Widgets */}
         <div className="space-y-5">
           {/* RM Variance Alert Banner */}
           {varianceAlerts.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4 text-red-600" />
-                <h3 className="text-[13px] font-semibold text-red-800">RM Stock Variance Alert</h3>
-                <span className="ml-auto text-[11px] text-red-600 font-medium">{varianceAlerts.length} issue{varianceAlerts.length > 1 ? 's' : ''}</span>
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  <h3 className="text-xs font-bold text-rose-900 uppercase tracking-wider">Raw Material Variance Alert</h3>
+                </div>
+                <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">{varianceAlerts.length} Alerts</span>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pt-1">
                 {varianceAlerts.map((v) => (
-                  <div key={v.raw_material_name} className="flex items-center justify-between text-[12px]">
-                    <span className="text-red-700 font-medium">{v.raw_material_name}</span>
-                    <span className="text-red-600 font-bold tabular-nums">{v.stock_variance.toLocaleString('en-GB', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg</span>
+                  <div key={v.raw_material_name} className="flex items-center justify-between text-xs bg-white p-2 rounded-xl border border-rose-100 shadow-sm">
+                    <span className="font-semibold text-rose-900">{v.raw_material_name}</span>
+                    <span className="font-mono font-extrabold text-rose-700">+{v.stock_variance.toFixed(3)} kg</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Stock Alerts */}
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <div className="flex items-center justify-between mb-4">
+          {/* Stock Alerts Widget */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <h3 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Stock Alerts</h3>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Stock & Reorder Alerts</h3>
               </div>
-              <span className="text-[11px] text-gray-400">{filteredLowStock.length} items</span>
+              <span className="text-xs font-bold text-slate-500">{filteredLowStock.length} items</span>
             </div>
+
             {filteredLowStock.length === 0 ? (
-              <p className="text-[12px] text-gray-400 text-center py-6">All stock levels healthy</p>
+              <div className="py-8 text-center text-slate-400 space-y-1">
+                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-1" />
+                <p className="text-xs font-bold text-slate-700">All raw material stock levels healthy</p>
+              </div>
             ) : (
               <div className="space-y-2 max-h-[220px] overflow-y-auto">
                 {filteredLowStock.map(({ item, severity }) => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/70 hover:bg-slate-100 transition-colors">
                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
                       <div className="min-w-0">
-                        <p className="text-[12px] font-medium text-gray-900 truncate">{item.name}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">{item.code}</p>
+                        <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">{item.code}</p>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-2">
-                      <p className={`text-[12px] font-bold ${severity === 'critical' ? 'text-red-600' : 'text-amber-600'}`}>{item.current_stock.toLocaleString()} {item.unit}</p>
-                      <div className={`flex items-center gap-1 justify-end mt-0.5 ${severity === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
-                        <TrendingDown className="w-3 h-3" />
-                        <span className="text-[10px] capitalize">{severity}</span>
-                      </div>
+                      <p className={`text-xs font-extrabold font-mono ${severity === 'critical' ? 'text-rose-600' : 'text-amber-600'}`}>
+                        {item.current_stock.toLocaleString()} {item.unit}
+                      </p>
+                      <span className={`text-[10px] uppercase font-bold ${severity === 'critical' ? 'text-rose-500' : 'text-amber-500'}`}>
+                        {severity}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -362,44 +423,47 @@ export default function DashboardPage() {
           </div>
 
           {/* Pending Approvals */}
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
             <PendingApprovalsWidget limit={5} compact />
           </div>
         </div>
       </div>
 
-      {/* Recent Production Orders */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold text-gray-900 uppercase tracking-wide">Recent Production Orders</h2>
-          <span className="text-[11px] text-gray-400">{recentOrders.length} orders</span>
+      {/* Recent Production Orders Table */}
+      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-emerald-600" />
+            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Recent Production Orders</h2>
+          </div>
+          <span className="text-xs font-bold text-slate-500">{recentOrders.length} Recent Batches</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wider border-b border-gray-100">
-                <th className="px-5 py-3 text-left font-medium">Batch</th>
-                <th className="px-5 py-3 text-left font-medium">Product</th>
-                <th className="px-5 py-3 text-left font-medium">Planned</th>
-                <th className="px-5 py-3 text-left font-medium">Actual</th>
-                <th className="px-5 py-3 text-left font-medium">Status</th>
-                <th className="px-5 py-3 text-left font-medium">Date</th>
+          <table className="w-full text-xs">
+            <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold">
+              <tr>
+                <th className="px-5 py-3.5 text-left">Batch Number</th>
+                <th className="px-5 py-3.5 text-left">Product Formulation</th>
+                <th className="px-5 py-3.5 text-right">Planned (kg)</th>
+                <th className="px-5 py-3.5 text-right">Actual (kg)</th>
+                <th className="px-5 py-3.5 text-left">Status</th>
+                <th className="px-5 py-3.5 text-left">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-[13px]">No production orders found</td>
+                  <td colSpan={6} className="px-5 py-12 text-center text-slate-400">No production orders found</td>
                 </tr>
               ) : (
                 recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 font-mono text-[12px] text-gray-600">{order.batch_number}</td>
-                    <td className="px-5 py-3 text-[13px] text-gray-800 font-medium">{order.formulations?.name || '-'}</td>
-                    <td className="px-5 py-3 text-[13px] text-gray-600">{order.planned_qty} {order.unit}</td>
-                    <td className="px-5 py-3 text-[13px] text-gray-600">{order.actual_qty} {order.unit}</td>
-                    <td className="px-5 py-3"><StatusBadge status={order.status} /></td>
-                    <td className="px-5 py-3 text-[12px] text-gray-400">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
+                  <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-5 py-3.5 font-mono font-bold text-slate-900">{order.batch_number}</td>
+                    <td className="px-5 py-3.5 font-bold text-slate-800">{order.formulations?.name || '-'}</td>
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-700">{order.planned_qty?.toLocaleString()}</td>
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-700">{order.actual_qty?.toLocaleString()}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={order.status} /></td>
+                    <td className="px-5 py-3.5 text-slate-500">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
                   </tr>
                 ))
               )}
@@ -407,6 +471,7 @@ export default function DashboardPage() {
           </table>
         </div>
       </div>
+
     </div>
   );
 }
