@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
+import { generateProductionBatchNumber } from '../lib/batchNumberGenerator';
 
 interface OrderMaterial {
   id: string; 
@@ -229,9 +230,9 @@ export default function ProductionOrdersPage() {
     });
   }, []);
 
-  const genBatch = () => `BATCH-2026-${String(Math.floor(Math.random() * 900) + 100)}`;
-  const openCreate = () => { 
-    setForm({ ...emptyForm, batch_number: genBatch() }); 
+  const openCreate = async () => { 
+    const batchNumber = await generateProductionBatchNumber();
+    setForm({ ...emptyForm, batch_number: batchNumber }); 
     setMaterials([]); 
     setWorkflowError(null);
     setShowCreate(true); 
