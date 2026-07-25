@@ -1717,97 +1717,98 @@ export default function ProductionOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Order Detail Modal - Redesigned wider layout */}
+      {/* Order Detail Modal - Redesigned modern layout */}
       <Dialog open={showDetail} onOpenChange={() => setShowDetail(false)}>
-        <DialogContent className="max-w-[1200px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1200px] [&>button.absolute]:hidden">
+        <DialogContent className="max-w-[1280px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1280px] [&>button.absolute]:hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-6 py-4 flex-shrink-0 relative">
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-teal-950 text-white px-6 py-4 flex-shrink-0 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-transparent to-emerald-500/5 pointer-events-none" />
             <button
               onClick={() => setShowDetail(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center transition-colors z-10"
               aria-label="Close"
             >
               <X className="w-4 h-4 text-white" />
             </button>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
+            <div className="relative flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/30">
                 <Factory className="w-6 h-6 text-white" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold">{selected?.batch_number}</h2>
+                  <h2 className="text-xl font-extrabold tracking-tight font-mono">{selected?.batch_number}</h2>
                   {selected && <StatusBadge status={selected.status} />}
                   {downtimeEntries.length > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-300 rounded-full">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
                       <Clock className="w-3 h-3" />
-                      {downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)} hrs downtime
+                      {downtimeEntries.reduce((s, d) => s + Number(d.downtime_hours || 0), 0).toFixed(2)}h downtime
                     </span>
                   )}
                 </div>
-                <p className="text-slate-400 text-sm mt-0.5">
-                  {selected?.formulations?.name} • {selected?.machines?.name} • {selected?.unit_size || '25kg'} bags
-                  {selected?.profiles?.full_name && <span className="text-slate-500"> • Created by {selected.profiles.full_name}</span>}
+                <p className="text-slate-300 text-xs mt-1 truncate">
+                  <span className="font-semibold text-white">{selected?.formulations?.name}</span> • Line: <span className="font-semibold text-white">{selected?.machines?.name || 'Main Plant'}</span> • Bag size: {selected?.unit_size || '25'}kg
+                  {selected?.profiles?.full_name && <span className="text-slate-400"> • Created by {selected.profiles.full_name}</span>}
                 </p>
               </div>
             </div>
           </div>
 
           {selected && (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto bg-slate-50">
               {/* Error Banner */}
               {workflowError && (
-                <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
                   <div className="flex items-center gap-2 text-red-800">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="text-sm font-medium">{workflowError}</span>
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span className="text-xs font-semibold">{workflowError}</span>
                   </div>
                 </div>
               )}
 
               {/* Quick Stats Row */}
-              <div className="grid grid-cols-5 gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                <div className="text-center">
-                  <div className="text-xs text-slate-500 uppercase font-medium">Planned</div>
-                  <div className="text-lg font-bold text-slate-800">{selected.planned_qty?.toLocaleString()} kg</div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-white border-b border-slate-200 shadow-sm">
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-center">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Planned</div>
+                  <div className="text-lg font-extrabold text-slate-900 font-mono mt-0.5">{selected.planned_qty?.toLocaleString()} <span className="text-xs font-normal text-slate-500">{selected.unit}</span></div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-500 uppercase font-medium">Actual</div>
-                  <div className="text-lg font-bold text-emerald-600">{(selected.actual_qty || output.actual_qty || 0).toLocaleString()} kg</div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 text-center">
+                  <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Actual</div>
+                  <div className="text-lg font-extrabold text-emerald-700 font-mono mt-0.5">{(selected.actual_qty || output.actual_qty || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-600">{selected.unit}</span></div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-500 uppercase font-medium">Yield</div>
-                  <div className="text-lg font-bold text-blue-600">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-center">
+                  <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Yield</div>
+                  <div className="text-lg font-extrabold text-blue-700 font-mono mt-0.5">
                     {selected.planned_qty > 0 ? Math.round(((selected.actual_qty || output.actual_qty || 0) / selected.planned_qty) * 100) : 0}%
                   </div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-500 uppercase font-medium">Materials</div>
-                  <div className="text-lg font-bold text-amber-600">{detailMaterials.filter(m => m.issued).length}/{detailMaterials.length}</div>
+                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 text-center">
+                  <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Materials Issued</div>
+                  <div className="text-lg font-extrabold text-amber-700 font-mono mt-0.5">{detailMaterials.filter(m => m.issued).length}/{detailMaterials.length}</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-500 uppercase font-medium">Total Cost</div>
-                  <div className="text-lg font-bold text-slate-800">${(costing.raw_material_cost + costing.labour_cost + costing.overhead_cost).toFixed(2)}</div>
+                <div className="rounded-xl border border-slate-100 bg-slate-900 text-white p-3 text-center col-span-2 sm:col-span-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Cost</div>
+                  <div className="text-lg font-extrabold text-teal-400 font-mono mt-0.5">${(costing.raw_material_cost + costing.labour_cost + costing.overhead_cost).toFixed(2)}</div>
                 </div>
               </div>
 
               {/* Workflow Actions Bar */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2 bg-white border-b border-slate-200">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200">
+                <div className="flex items-center gap-3">
                   {selected.status === 'pending' && (
                     <button
                       onClick={() => (allIngredientsIssued() ? updateStatus('materials_issued') : bulkIssueMaterials())}
                       disabled={saving || detailMaterials.length === 0 || (!allIngredientsIssued() && !allMaterialsAvailable())}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
                     >
                       <Check className="w-4 h-4" />
-                      Approve/Issue
+                      Approve & Issue Materials
                     </button>
                   )}
                   {selected.status === 'materials_issued' && (
                     <button
                       onClick={() => updateStatus('in_progress')}
                       disabled={saving}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all"
                     >
                       <Play className="w-4 h-4" />
                       Start Production
@@ -1816,21 +1817,23 @@ export default function ProductionOrdersPage() {
                   {selected.status === 'in_progress' && (
                     <button
                       onClick={handleCompletionRequest}
-                      disabled={saving || output.actual_qty <= 0}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                      disabled={saving || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      Complete
+                      Complete Production
                     </button>
                   )}
-                  <span className="text-xs text-slate-400 ml-2">Pending → Materials Issued → In Progress → Completed</span>
+                  <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
+                    Pending → Materials Issued → In Progress → Completed
+                  </span>
                 </div>
                 {selected.status === 'pending' && (
-                  <>
+                  <div className="flex gap-2">
                     <button
                       onClick={openEditQtyModal}
                       disabled={saving}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       Edit Qty
@@ -1838,19 +1841,19 @@ export default function ProductionOrdersPage() {
                     <button
                       onClick={() => deleteOrder(selected)}
                       disabled={saving}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors"
                     >
                       <AlertTriangle className="w-3.5 h-3.5" />
                       Delete
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
 
-              {/* Tabs */}
+              {/* Navigation Tabs */}
               <div className="border-b border-slate-200 bg-white px-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1 overflow-x-auto py-1.5">
                     {(['materials', 'costing', 'output', 'operations', 'variance', 'downtime', 'logs'] as const).map((t) => (
                       <button
                         key={t}
@@ -1858,16 +1861,16 @@ export default function ProductionOrdersPage() {
                           setDetailTab(t);
                           if (t === 'materials') refreshSageStock();
                         }}
-                        className={`py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
+                        className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
                           detailTab === t
-                            ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                            : 'border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                            ? 'bg-slate-900 text-white shadow'
+                            : 'text-slate-600 hover:bg-slate-100'
                         }`}
                         disabled={t === 'variance' && selected?.status !== 'completed'}
                       >
                         {t.charAt(0).toUpperCase() + t.slice(1)}
                         {t === 'variance' && selected?.status !== 'completed' && (
-                          <span className="ml-1 text-xs text-slate-400">(Done)</span>
+                          <span className="ml-1 text-[10px] text-slate-400 font-normal">(Done)</span>
                         )}
                       </button>
                     ))}
@@ -1876,9 +1879,9 @@ export default function ProductionOrdersPage() {
                     <button
                       onClick={refreshSageStock}
                       disabled={saving}
-                      className="text-xs font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                      className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1 transition-colors shrink-0"
                     >
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3.5 h-3.5" />
                       Refresh Sage Stock
                     </button>
                   )}
@@ -1890,109 +1893,115 @@ export default function ProductionOrdersPage() {
 
             {/* Materials Tab */}
             {detailTab === 'materials' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">Components (BOM Ingredients)</h3>
-                  <div className="text-sm text-slate-600">
-                    {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">Components (BOM Ingredients)</h3>
+                    <p className="text-xs text-slate-400">List of raw materials required to execute this batch</p>
                   </div>
+                  <span className="text-xs font-bold px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">
+                    {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
+                  </span>
                 </div>
 
                 {!allMaterialsAvailable() && (
-                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                       <div>
-                        <h4 className="font-semibold text-red-800 mb-2">⚠️ Insufficient Stock - Cannot Proceed</h4>
-                        <p className="text-sm text-red-700 mb-2">The following materials do not have sufficient stock available:</p>
-                        <ul className="text-sm text-red-700 space-y-1">
+                        <h4 className="font-bold text-red-900 text-sm mb-1">⚠️ Insufficient Stock - Cannot Proceed</h4>
+                        <p className="text-xs text-red-700 mb-2">The following materials do not have sufficient stock available:</p>
+                        <ul className="text-xs text-red-700 space-y-1 font-medium">
                           {getInsufficientMaterials().map((m) => (
-                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> - Need {formatQty(m.planned_qty)}{m.unit}, have {formatQty(getAvailableStock(m))}{m.unit}</li>
+                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> — Need {formatQty(m.planned_qty)} {m.unit}, have {formatQty(getAvailableStock(m))} {m.unit}</li>
                           ))}
                         </ul>
-                        <p className="text-sm text-red-700 mt-2">Please restock these materials before issuing materials to production.</p>
+                        <p className="text-xs text-red-600 mt-2 font-medium">Please restock these materials in Sage or MES before issuing.</p>
                       </div>
                     </div>
                   </div>
                 )}
                 
                 {detailMaterials.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
+                  <div className="text-center py-12 bg-white border border-slate-200 rounded-2xl text-slate-400">
                     <Layers className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                    <p>No ingredients loaded - BOM may not be set up</p>
+                    <p className="text-sm font-medium">No ingredients loaded — BOM may not be set up</p>
                   </div>
                 ) : (
-                  <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Material</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Planned Qty</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Actual Qty</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Unit Cost</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Total Cost</th>
-                          <th className="text-center px-3 py-2 font-medium text-slate-600">Status</th>
-                          <th className="text-center px-3 py-2 font-medium text-slate-600">Action</th>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px]">
+                          <th className="text-left px-4 py-3">Material</th>
+                          <th className="text-right px-3 py-3">Planned Qty</th>
+                          <th className="text-right px-3 py-3">Actual Qty</th>
+                          <th className="text-right px-3 py-3">Unit Cost</th>
+                          <th className="text-right px-3 py-3">Total Cost</th>
+                          <th className="text-center px-3 py-3">Status</th>
+                          <th className="text-center px-3 py-3">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {detailMaterials.map((material) => {
                           const availableStock = normalizeQty(getAvailableStock(material));
                           const isOutOfStock = !hasSufficientStock(material);
+                          const qty = material.issued ? (material.actual_qty || material.planned_qty) : material.planned_qty;
+                          const lineCost = (qty || 0) * (material.unit_cost || 0);
+
                           return (
-                          <tr key={material.id}>
-                            <td className="px-3 py-2">
-                              <div className="font-medium">{material.raw_materials?.name}</div>
-                              <div className="text-xs text-slate-500">{material.raw_materials?.code}</div>
-                            </td>
-                            <td className="px-3 py-2 text-right">{material.planned_qty} {material.unit}</td>
-                            <td className="px-3 py-2 text-right">
-                              {material.issued ? (material.actual_qty || material.planned_qty) : '-'} {material.unit}
-                            </td>
-                            <td className="px-3 py-2 text-right">${material.unit_cost}</td>
-                            <td className="px-3 py-2 text-right font-medium">
-                              ${material.issued ? (material.actual_qty || material.planned_qty) * material.unit_cost : 0}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              {material.issued ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Issued
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
-                                  <Clock className="w-3 h-3" />
-                                  Pending
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              {!material.issued && selected.status === 'pending' && (
-                                <div className="flex flex-col gap-1">
-                                  {isOutOfStock && (
-                                    <div className="text-xs text-red-600 font-medium flex items-center gap-1">
-                                      <AlertTriangle className="w-3 h-3" />
-                                      Out of stock
-                                    </div>
-                                  )}
-                                  <button
-                                    onClick={() => issueIndividualIngredient(material)}
-                                    disabled={saving || isOutOfStock}
-                                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-                                      isOutOfStock
-                                        ? 'bg-red-200 text-red-700 cursor-not-allowed opacity-50'
-                                        : 'bg-teal-600 hover:bg-teal-700 text-white'
-                                    }`}
-                                    title={isOutOfStock ? 'Insufficient stock - cannot issue' : 'Issue this material to production'}
-                                  >
-                                    <Check className="w-3 h-3" />
-                                    Issue
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )})}
+                            <tr key={material.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-bold text-slate-900 text-sm">{material.raw_materials?.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{material.raw_materials?.code}</div>
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono font-medium text-slate-700">
+                                {material.planned_qty.toLocaleString()} <span className="text-slate-400 text-[10px]">{material.unit}</span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
+                                {material.issued ? (material.actual_qty || material.planned_qty).toLocaleString() : '-'} {material.issued ? <span className="text-slate-400 text-[10px]">{material.unit}</span> : ''}
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono text-slate-600">
+                                ${Number(material.unit_cost || 0).toFixed(4)}
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
+                                ${material.issued ? lineCost.toFixed(2) : '$0.00'}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                {material.issued ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full">
+                                    <CheckCircle2 className="w-3 h-3" /> Issued
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 rounded-full">
+                                    <Clock className="w-3 h-3" /> Pending
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                {!material.issued && selected.status === 'pending' && (
+                                  <div className="flex flex-col items-center gap-1">
+                                    {isOutOfStock && (
+                                      <span className="text-[10px] text-red-600 font-bold flex items-center gap-0.5">
+                                        <AlertTriangle className="w-3 h-3" /> Out of stock
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => issueIndividualIngredient(material)}
+                                      disabled={saving || isOutOfStock}
+                                      className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                                        isOutOfStock
+                                          ? 'bg-red-100 text-red-700 cursor-not-allowed opacity-50'
+                                          : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm'
+                                      }`}
+                                    >
+                                      <Check className="w-3 h-3" /> Issue
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
