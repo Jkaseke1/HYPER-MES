@@ -6,63 +6,127 @@ import { supabase } from './supabase';
  */
 
 /**
- * Get the next sequential batch number for a given prefix
- * Uses a database sequence table to ensure uniqueness and prevent gaps
+ * Preview the next batch number WITHOUT incrementing the sequence in database.
+ * This is used when opening modal forms so opening and closing forms without submitting
+ * does NOT consume or skip sequence numbers.
+ */
+export async function peekBatchNumber(prefix: string): Promise<string> {
+  const year = new Date().getFullYear();
+  try {
+    let tableName = 'production_orders';
+    let colName = 'batch_number';
+    if (prefix === 'DSP') { tableName = 'dispatch_orders'; colName = 'dispatch_number'; }
+    else if (prefix === 'GRN') { tableName = 'goods_received_notes'; colName = 'grn_number'; }
+    else if (prefix === 'PO') { tableName = 'purchase_orders'; colName = 'po_number'; }
+    else if (prefix === 'WB') { tableName = 'weigh_bridge_tickets'; colName = 'ticket_no'; }
+
+    // Query the latest actual record inserted in DB
+    const { data } = await supabase
+      .from(tableName)
+      .select(colName)
+      .like(colName, `${prefix}-${year}-%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    let maxSeq = 0;
+    if (data && data.length > 0) {
+      for (const row of data) {
+        const val = (row as any)[colName] || '';
+        const parts = val.split('-');
+        const lastPart = parts[parts.length - 1];
+        const num = parseInt(lastPart, 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    const sequenceNumber = String(nextSeq).padStart(6, '0');
+    return `${prefix}-${year}-${sequenceNumber}`;
+  } catch (err) {
+    console.error(`Error peeking batch number for ${prefix}:`, err);
+    return `${prefix}-${year}-000001`;
+  }
+}
+
+/**
+ * Get the next sequential batch number for a given prefix.
+ * This should ONLY be called when ACTUALLY SUBMITTING / SAVING a record into the database!
  */
 export async function generateBatchNumber(prefix: string): Promise<string> {
   const year = new Date().getFullYear();
   
   try {
-    // Call RPC function to get next sequence number atomically
-    const { data, error } = await supabase.rpc('get_next_batch_sequence', {
-      p_prefix: prefix,
-      p_year: year
-    });
+    let tableName = 'production_orders';
+    let colName = 'batch_number';
+    if (prefix === 'DSP') { tableName = 'dispatch_orders'; colName = 'dispatch_number'; }
+    else if (prefix === 'GRN') { tableName = 'goods_received_notes'; colName = 'grn_number'; }
+    else if (prefix === 'PO') { tableName = 'purchase_orders'; colName = 'po_number'; }
+    else if (prefix === 'WB') { tableName = 'weigh_bridge_tickets'; colName = 'ticket_no'; }
 
-    if (error) {
-      console.error('Error generating batch number:', error);
-      // Fallback to timestamp-based generation if RPC fails
-      return `${prefix}-${year}-${Date.now().toString(36).toUpperCase()}`;
+    const { data: maxRows } = await supabase
+      .from(tableName)
+      .select(colName)
+      .like(colName, `${prefix}-${year}-%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    let maxSeq = 0;
+    if (maxRows && maxRows.length > 0) {
+      for (const row of maxRows) {
+        const val = (row as any)[colName] || '';
+        const parts = val.split('-');
+        const lastPart = parts[parts.length - 1];
+        const num = parseInt(lastPart, 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
     }
 
-    if (!data) {
-      throw new Error('No sequence number returned');
-    }
+    const nextSeq = maxSeq + 1;
 
-    // Format: PREFIX-YYYY-NNNNNN (6-digit zero-padded sequence)
-    const sequenceNumber = String(data).padStart(6, '0');
+    // Sync/update batch_sequences table in Supabase
+    await supabase
+      .from('batch_sequences')
+      .upsert(
+        { prefix, year, next_sequence: nextSeq + 1, updated_at: new Date().toISOString() },
+        { onConflict: 'prefix,year' }
+      );
+
+    const sequenceNumber = String(nextSeq).padStart(6, '0');
     return `${prefix}-${year}-${sequenceNumber}`;
   } catch (err) {
     console.error('Batch number generation failed:', err);
-    // Fallback to timestamp-based generation
     return `${prefix}-${year}-${Date.now().toString(36).toUpperCase()}`;
   }
 }
 
-/**
- * Dispatch Order batch number generator
- */
-export async function generateDispatchNumber(): Promise<string> {
-  return generateBatchNumber('DSP');
+export async function peekProductionBatchNumber(): Promise<string> {
+  return peekBatchNumber('BATCH');
 }
 
-/**
- * Production Order batch number generator
- */
 export async function generateProductionBatchNumber(): Promise<string> {
   return generateBatchNumber('BATCH');
 }
 
-/**
- * Goods Received Note batch number generator
- */
+export async function peekDispatchNumber(): Promise<string> {
+  return peekBatchNumber('DSP');
+}
+
+export async function generateDispatchNumber(): Promise<string> {
+  return generateBatchNumber('DSP');
+}
+
+export async function peekGRNNumber(): Promise<string> {
+  return peekBatchNumber('GRN');
+}
+
 export async function generateGRNNumber(): Promise<string> {
   return generateBatchNumber('GRN');
 }
 
-/**
- * Purchase Order batch number generator
- */
 export async function generatePONumber(): Promise<string> {
   return generateBatchNumber('PO');
 }

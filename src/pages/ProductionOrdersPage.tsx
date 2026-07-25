@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
-import { generateProductionBatchNumber } from '../lib/batchNumberGenerator';
+import { generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 
 interface OrderMaterial {
   id: string; 
@@ -231,7 +231,7 @@ export default function ProductionOrdersPage() {
   }, []);
 
   const openCreate = async () => { 
-    const batchNumber = await generateProductionBatchNumber();
+    const batchNumber = await peekProductionBatchNumber();
     setForm({ ...emptyForm, batch_number: batchNumber }); 
     setMaterials([]); 
     setWorkflowError(null);
@@ -329,9 +329,12 @@ export default function ProductionOrdersPage() {
       // Ensure planned_qty is a valid number and not multiplied
       const plannedQty = parseFloat(String(form.planned_qty));
       
+      // Generate official batch number only on actual form submission
+      const officialBatchNumber = await generateProductionBatchNumber();
+
       // Debug: Log form data before submission
       console.log('Creating order with form data:', {
-        batch_number: form.batch_number,
+        batch_number: officialBatchNumber,
         formulation_id: form.formulation_id,
         machine_id: form.machine_id,
         planned_qty: plannedQty,
@@ -339,7 +342,7 @@ export default function ProductionOrdersPage() {
       });
       
       const { error } = await supabase.from('production_orders').insert({
-        batch_number: form.batch_number,
+        batch_number: officialBatchNumber,
         plan_id: form.plan_id || null,
         formulation_id: form.formulation_id || null,
         machine_id: form.machine_id, // Required field - NOT NULL in database
