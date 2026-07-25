@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale, Hash,
+  Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale,
   Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box, ArrowRight,
-  Pencil, Sparkles, Printer, RefreshCw, ShieldAlert, ArrowUpRight
+  Pencil, Sparkles, Printer, RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -318,141 +318,154 @@ export default function DispatchPage() {
   const currentStatusIndex = viewOrder ? statusIndex(viewOrder.status) : -1;
 
   return (
-    <div className="min-h-screen bg-slate-50/60 p-4 md:p-6 space-y-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
+      <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
 
-        {/* Header Banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
-          <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                <Truck className="w-7 h-7 text-emerald-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Dispatch Logistics Hub</h1>
-                  <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                    <Sparkles className="w-3.5 h-3.5" /> Sage Integrated
-                  </span>
+        {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
+        <div className="shrink-0 space-y-3.5">
+          {/* Top Page Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Dispatch Management</h1>
+              <p className="text-xs text-slate-500">Plan, track and deliver finished goods to branches.</p>
+            </div>
+          </div>
+
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-5 rounded-2xl text-white shadow-lg relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                  <Truck className="w-6 h-6 text-emerald-400" />
                 </div>
-                <p className="text-slate-300 text-xs md:text-sm mt-1">
-                  Schedule finished feed transfers, monitor active transit routes, and automate Sage stock delivery postings.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-extrabold tracking-tight">Dispatch Logistics Hub</h2>
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      <Sparkles className="w-3 h-3" /> Sage Integrated
+                    </span>
+                  </div>
+                  <p className="text-slate-300 text-xs mt-0.5">
+                    Schedule finished feed transfers, monitor active transit routes, and automate Sage stock delivery postings.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={fetchOrders}
-                className="p-2.5 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
-                title="Refresh Dispatches"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
-                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/25 transition-all active:scale-95 text-sm"
-              >
-                <Plus className="w-5 h-5" />
-                New Dispatch Order
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Dispatches</span>
-              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                <Truck className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-slate-900 mt-2">{stats.total.toLocaleString()}</p>
-            <span className="text-[10px] text-slate-400">All registered trips</span>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-amber-200/80 bg-amber-50/20 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Pending</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
-                <Clock className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-amber-900 mt-2">{stats.pending.toLocaleString()}</p>
-            <span className="text-[10px] text-amber-600 font-medium">Awaiting loading</span>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-blue-200/80 bg-blue-50/20 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Loading Dock</span>
-              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
-                <Box className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-blue-900 mt-2">{stats.loading.toLocaleString()}</p>
-            <span className="text-[10px] text-blue-600 font-medium">Currently loading</span>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-purple-200/80 bg-purple-50/20 p-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">On The Road</span>
-              <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
-                <Route className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-purple-900 mt-2">{stats.inTransit.toLocaleString()}</p>
-            <span className="text-[10px] text-purple-600 font-medium">Dispatched & in-transit</span>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-emerald-200/80 bg-emerald-50/20 p-4 shadow-sm hover:shadow-md transition-shadow col-span-2 md:col-span-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Delivered Weight</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
-                <Scale className="w-4 h-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-extrabold text-emerald-900 mt-2">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></p>
-            <span className="text-[10px] text-emerald-600 font-mono">{stats.totalWeight.toLocaleString()} kg total</span>
-          </div>
-        </div>
-
-        {/* Tab Navigation & Search */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl">
-              {TABS.map((t) => (
+              <div className="flex items-center gap-2">
                 <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    tab === t.key
-                      ? 'bg-slate-900 text-white shadow'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                  }`}
+                  onClick={fetchOrders}
+                  className="p-2 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
+                  title="Refresh Dispatches"
                 >
-                  {t.label}
+                  <RefreshCw className="w-4 h-4" />
                 </button>
-              ))}
+                <button
+                  onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
+                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Dispatch Order
+                </button>
+              </div>
             </div>
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search dispatch #, branch, driver, vehicle..."
-                className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
-              />
+          </div>
+
+          {/* Stats Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Dispatches</span>
+                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                  <Truck className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-slate-900 mt-1">{stats.total.toLocaleString()}</p>
+              <span className="text-[10px] text-slate-400">All registered trips</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200/80 bg-amber-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Pending</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-amber-900 mt-1">{stats.pending.toLocaleString()}</p>
+              <span className="text-[10px] text-amber-600 font-medium">Awaiting loading</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-blue-200/80 bg-blue-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Loading Dock</span>
+                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
+                  <Box className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-blue-900 mt-1">{stats.loading.toLocaleString()}</p>
+              <span className="text-[10px] text-blue-600 font-medium">Currently loading</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-purple-200/80 bg-purple-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">On The Road</span>
+                <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
+                  <Route className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-purple-900 mt-1">{stats.inTransit.toLocaleString()}</p>
+              <span className="text-[10px] text-purple-600 font-medium">In-transit</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-emerald-200/80 bg-emerald-50/20 p-3 shadow-sm col-span-2 md:col-span-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Delivered Weight</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
+                  <Scale className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-emerald-900 mt-1">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></p>
+              <span className="text-[10px] text-emerald-600 font-mono">{stats.totalWeight.toLocaleString()} kg</span>
+            </div>
+          </div>
+
+          {/* Tab Navigation & Search */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">
+            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+              <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      tab === t.key
+                        ? 'bg-slate-900 text-white shadow'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search dispatch #, branch, driver, vehicle..."
+                  className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Desktop Table View */}
-        <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+        {/* SCROLLABLE TABLE / CONTENT SECTION (Scrolls underneath static top) */}
+        <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
+          
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
             <table className="w-full text-xs">
-              <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold">
+              <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
                 <tr>
                   <th className="text-left px-5 py-3.5">Dispatch # & Date</th>
                   <th className="text-left px-5 py-3.5">Destination Branch</th>
@@ -470,9 +483,9 @@ export default function DispatchPage() {
 
                   return (
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700">
+                          <div className="w-9 h-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700">
                             {o.dispatch_number.split('-').pop()?.slice(0, 3)}
                           </div>
                           <div>
@@ -482,7 +495,7 @@ export default function DispatchPage() {
                         </div>
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                           <span className="font-bold text-slate-800">{(o.branches as any)?.name || '-'}</span>
@@ -494,7 +507,7 @@ export default function DispatchPage() {
                         </div>
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5 text-slate-800 font-bold">
                             <Truck className="w-3.5 h-3.5 text-slate-400" />
@@ -507,19 +520,19 @@ export default function DispatchPage() {
                         </div>
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         <span className="font-extrabold text-slate-900 font-mono text-sm">{o.total_weight.toLocaleString()}</span>
                         <span className="text-[10px] text-slate-400 ml-1">kg</span>
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
                           <Icon className="w-3.5 h-3.5" /> {meta.label}
                         </span>
                       </td>
 
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => { setPickingSlipOrder(o); openView(o); setShowPickingSlip(true); }}
@@ -566,65 +579,66 @@ export default function DispatchPage() {
               </tbody>
             </table>
           </div>
-        </div>
 
-        {/* Mobile Responsive Cards View */}
-        <div className="grid grid-cols-1 gap-3.5 md:hidden">
-          {filtered.map((o) => {
-            const meta = STATUS_META[o.status] || STATUS_META.pending;
-            const Icon = meta.icon;
-            const flow = nextStatus(o.status);
+          {/* Mobile Responsive Cards View */}
+          <div className="grid grid-cols-1 gap-3 p-3 md:hidden">
+            {filtered.map((o) => {
+              const meta = STATUS_META[o.status] || STATUS_META.pending;
+              const Icon = meta.icon;
+              const flow = nextStatus(o.status);
 
-            return (
-              <div key={o.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div>
-                    <span className="font-extrabold text-slate-900 font-mono text-sm">{o.dispatch_number}</span>
-                    <p className="text-[10px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
+              return (
+                <div key={o.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div>
+                      <span className="font-extrabold text-slate-900 font-mono text-sm">{o.dispatch_number}</span>
+                      <p className="text-[10px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
+                      <Icon className="w-3 h-3" /> {meta.label}
+                    </span>
                   </div>
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
-                    <Icon className="w-3 h-3" /> {meta.label}
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Destination</span>
-                    <p className="font-bold text-slate-800">{o.branches?.name || '-'}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Destination</span>
+                      <p className="font-bold text-slate-800">{o.branches?.name || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Total Weight</span>
+                      <p className="font-bold text-slate-900 font-mono">{o.total_weight.toLocaleString()} kg</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Vehicle</span>
+                      <p className="font-medium text-slate-700">{o.vehicle_number || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Driver</span>
+                      <p className="font-medium text-slate-700">{o.driver_name || '-'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Total Weight</span>
-                    <p className="font-bold text-slate-900 font-mono">{o.total_weight.toLocaleString()} kg</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Vehicle</span>
-                    <p className="font-medium text-slate-700">{o.vehicle_number || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Driver</span>
-                    <p className="font-medium text-slate-700">{o.driver_name || '-'}</p>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  {flow && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    {flow && (
+                      <button
+                        onClick={() => updateStatus(o.id, flow.next)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 text-white"
+                      >
+                        <flow.icon className="w-3.5 h-3.5" /> {flow.label}
+                      </button>
+                    )}
                     <button
-                      onClick={() => updateStatus(o.id, flow.next)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 text-white"
+                      onClick={() => openView(o)}
+                      className="p-2 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1"
                     >
-                      <flow.icon className="w-3.5 h-3.5" /> {flow.label}
+                      <Eye className="w-3.5 h-3.5" /> Details
                     </button>
-                  )}
-                  <button
-                    onClick={() => openView(o)}
-                    className="p-2 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Details
-                  </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
         </div>
 
       </div>
@@ -843,7 +857,7 @@ export default function DispatchPage() {
                         onChange={(e) => updateItem(idx, 'unit', e.target.value)}
                         className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white"
                       >
-                        <option value="kg font-bold">kg</option>
+                        <option value="kg">kg</option>
                         <option value="bags">bags</option>
                         <option value="tons">tons</option>
                       </select>
