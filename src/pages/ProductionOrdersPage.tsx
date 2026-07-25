@@ -981,8 +981,9 @@ export default function ProductionOrdersPage() {
       setWorkflowError('Cannot complete — production must be in progress.');
       return;
     }
-    if (output.actual_qty <= 0) {
-      setWorkflowError('Cannot complete — enter actual output quantity first.');
+    const currentActual = output.actual_qty || selected.actual_qty || 0;
+    if (currentActual <= 0) {
+      setWorkflowError('Cannot complete — enter actual output quantity in Output tab first.');
       return;
     }
     setShowPkgModal(true);
@@ -2674,11 +2675,15 @@ export default function ProductionOrdersPage() {
 
       {/* Packaging Declaration Modal */}
       <Dialog open={showPkgModal} onOpenChange={(open) => setShowPkgModal(open)}>
-        <DialogContent className="max-w-4xl p-0">
-          <div className="p-6">
+        <DialogContent className="max-w-3xl p-0 overflow-hidden border-none bg-transparent">
+          <div className="p-6 bg-white rounded-2xl shadow-2xl">
             {selected && (
               <PackagingDeclaration
-                actualOutputQty={output.actual_qty ? output.actual_qty / 1000 : 0}
+                actualOutputQty={
+                  selected.unit === 'tonnes'
+                    ? (output.actual_qty || selected.actual_qty || 0)
+                    : (output.actual_qty || selected.actual_qty || 0) / 1000
+                }
                 formulationId={selected.formulation_id}
                 onSave={handlePkgConfirm}
                 disabled={saving}
