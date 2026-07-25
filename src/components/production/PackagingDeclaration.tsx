@@ -26,7 +26,7 @@ interface PackagingDeclarationProps {
   disabled?: boolean;
 }
 
-// Extract target bag size (in kg) from unitSize or formulationName
+// Extract target bag size (in kg) dynamically from unitSize or formulationName
 function extractTargetBagSize(unitSize?: string, formulationName?: string): number {
   if (unitSize) {
     const match = unitSize.match(/(\d+)/);
@@ -69,7 +69,7 @@ export default function PackagingDeclaration({
 
       if (err) throw err;
       
-      // Sort SKUs by closeness to targetBagSizeKg (e.g., 50kg SKU first!)
+      // Sort SKUs dynamically: closest bag size to formulation target first
       const available = (data || []).sort((a, b) => {
         const diffA = Math.abs((Number(a.bag_size_kg) || 0) - targetBagSizeKg);
         const diffB = Math.abs((Number(b.bag_size_kg) || 0) - targetBagSizeKg);
@@ -81,7 +81,7 @@ export default function PackagingDeclaration({
     } catch (err) {
       console.error('Failed to fetch packaging SKUs:', err);
       setError('Failed to load packaging SKUs');
-    } fontally {
+    } finally {
       setLoading(false);
     }
   }
@@ -92,7 +92,7 @@ export default function PackagingDeclaration({
     const initial: PackagingLine[] = [];
     const outputInKg = Math.max(0, actualOutputQty * 1000);
 
-    // 1. Try to match formulation BOM packaging items
+    // 1. Try to match formulation BOM packaging items from database
     if (formulationId) {
       try {
         const { data: bomItems, error: bomErr } = await supabase
@@ -124,15 +124,36 @@ export default function PackagingDeclaration({
       }
     }
 
-    // 2. Fallback: pick the SKU closest to targetBagSizeKg (e.g. 50kg bag)
+    // 2. Dynamic matching from Formulation Name & Unit Size
     if (initial.length === 0) {
-      // availableSkus is already sorted with closest bag_size_kg first (e.g., 50kg)
-      const matchedSku = availableSkus.find(s => Number(s.bag_size_kg) === targetBagSizeKg) || availableSkus[0];
-      
+      const matchingSizeSkus = availableSkus.filter(
+        (s) => Number(s.bag_size_kg) === targetBagSizeKg
+      );
+
+      let matchedSku: PackagingSKU | undefined;
+
+      if (matchingSizeSkus.length > 0) {
+        // Try keyword matching against formulationName e.g. "Broiler", "Starter", "Pig", etc.
+        if (formulationName) {
+          const words = formulationName.toLowerCase().split(/[\s/_-]+/);
+          matchedSku = matchingSizeSkus.find((s) => {
+            const desc = (s.description + ' ' + s.sku_code).toLowerCase();
+            return words.some((w) => w.length > 3 && desc.includes(w));
+          });
+        }
+        if (!matchedSku) {
+          matchedSku = matchingSizeSkus[0];
+        }
+      }
+
+      if (!matchedSku) {
+        matchedSku = availableSkus[0];
+      }
+
       if (matchedSku && matchedSku.bag_size_kg > 0) {
         const bags = outputInKg > 0 ? Math.max(1, Math.round(outputInKg / matchedSku.bag_size_kg)) : 0;
         initial.push({
-          id: `default-${matchedSku.id}-${Date.now()}`,
+          id: `dynamic-${matchedSku.id}-${Date.now()}`,
           packaging_sku_id: matchedSku.id,
           bags_used: bags,
           implied_tonnes: (bags * matchedSku.bag_size_kg) / 1000,
@@ -242,7 +263,7 @@ export default function PackagingDeclaration({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-500">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mb-2" />
-        <p className="text-sm font-medium">Auto-selecting {targetBagSizeKg}kg packaging SKU...</p>
+        <p className="text-sm font-medium">Reading formulation & auto-matching {targetBagSizeKg}kg packaging SKU...</p>
       </div>
     );
   }
@@ -260,11 +281,11 @@ export default function PackagingDeclaration({
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold tracking-tight">Declare Packaging Used</h3>
                 <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  <Sparkles className="w-3 h-3" /> Auto-Selected {targetBagSizeKg}kg SKU
+                  <Sparkles className="w-3 h-3" /> Formulated for {targetBagSizeKg}kg
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Bags auto-calculated from output ({actualOutputQty.toFixed(3)} tonnes = {(actualOutputQty * 1000).toLocaleString()} kg) for {targetBagSizeKg}kg packaging.
+                Dynamic SKU matching from formulation <span className="font-semibold text-white">({formulationName || 'Custom Formulation'})</span> & unit size ({targetBagSizeKg}kg).
               </p>
             </div>
           </div>
