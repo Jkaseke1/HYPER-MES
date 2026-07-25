@@ -79,8 +79,24 @@ export default function PackagingDeclaration({
 
         const updated = { ...l, [field]: value };
 
-        // Calculate implied tonnes if bags_used or packaging_sku_id changed
-        if (field === 'bags_used' || field === 'packaging_sku_id') {
+        if (field === 'packaging_sku_id') {
+          const sku = skus.find((s) => s.id === updated.packaging_sku_id);
+          if (sku) {
+            // Auto-calculate bags from actual declared production if not yet entered
+            if (updated.bags_used === 0 && actualOutputQty > 0) {
+              updated.bags_used = Math.max(1, Math.round((actualOutputQty * 1000) / sku.bag_size_kg));
+            }
+            if (updated.bags_used > 0) {
+              updated.implied_tonnes = (updated.bags_used * sku.bag_size_kg) / 1000;
+            } else {
+              updated.implied_tonnes = 0;
+            }
+          } else {
+            updated.implied_tonnes = 0;
+          }
+        }
+
+        if (field === 'bags_used') {
           const sku = skus.find((s) => s.id === updated.packaging_sku_id);
           if (sku && updated.bags_used > 0) {
             updated.implied_tonnes = (updated.bags_used * sku.bag_size_kg) / 1000;
@@ -142,8 +158,11 @@ export default function PackagingDeclaration({
     <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
       <div>
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Packaging Declaration</h3>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-xs text-slate-500 mb-2">
           Declare packaging used for this batch. Implied production will be calculated and compared to actual output.
+        </p>
+        <p className="text-xs text-teal-700 mb-4">
+          Bag counts are auto-calculated from the declared actual output. Edit the values if they are incorrect before approving.
         </p>
       </div>
 
@@ -251,13 +270,13 @@ export default function PackagingDeclaration({
         </div>
       )}
 
-      {/* Save Button */}
+      {/* Approve & Save Button */}
       <button
         onClick={handleSave}
         disabled={disabled || saving || lines.length === 0}
         className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
       >
-        {saving ? 'Saving...' : 'Confirm Packaging Declaration'}
+        {saving ? 'Saving...' : 'Approve Packaging Declaration'}
       </button>
     </div>
   );
