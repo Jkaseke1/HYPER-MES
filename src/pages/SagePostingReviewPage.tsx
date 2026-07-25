@@ -1,18 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import {
   ClipboardCheck, CheckCircle2, XCircle, Clock, DollarSign, Package,
-  Building2, Loader2, ChevronDown, ChevronRight,
+  Building2, Loader2, ChevronDown, ChevronRight, ShieldAlert, Zap,
+  TrendingUp, FileCheck2, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import StatCard from '../components/ui/StatCard';
 
 interface SagePostingReview {
   id: string;
@@ -56,7 +53,7 @@ interface ReviewGroup {
 
 const EVENT_LABELS: Record<string, string> = {
   grn_confirmed: 'GRN Receipt',
-  materials_issued: 'RM Issue (Production Order)',
+  materials_issued: 'RM Issue',
   production_completed: 'Batch Complete',
   dispatch_delivered: 'Dispatch',
   macropack_manufactured: 'Macropack',
@@ -64,12 +61,30 @@ const EVENT_LABELS: Record<string, string> = {
   reconciliation_variance_approved: 'Recon Variance',
 };
 
+const EVENT_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  grn_confirmed:                    { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200',   dot: 'bg-blue-500' },
+  materials_issued:                 { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200',  dot: 'bg-amber-500' },
+  production_completed:             { bg: 'bg-emerald-50',text: 'text-emerald-700',border: 'border-emerald-200',dot: 'bg-emerald-500' },
+  dispatch_delivered:               { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500' },
+  macropack_manufactured:           { bg: 'bg-teal-50',   text: 'text-teal-700',   border: 'border-teal-200',   dot: 'bg-teal-500' },
+  macropack_completed:              { bg: 'bg-teal-50',   text: 'text-teal-700',   border: 'border-teal-200',   dot: 'bg-teal-500' },
+  reconciliation_variance_approved: { bg: 'bg-rose-50',   text: 'text-rose-700',   border: 'border-rose-200',   dot: 'bg-rose-500' },
+};
+
 const TX_LABELS: Record<string, string> = {
-  GRV: 'Goods Received',
-  MFDR: 'Material Issue / Stock Out',
-  MFMF: 'Manufacture / Stock In',
-  WHT: 'Warehouse Transfer',
-  ADJ: 'Adjustment',
+  GRV:  'Goods Received',
+  MFDR: 'Material Issue',
+  MFMF: 'Stock In',
+  WHT:  'Warehouse Transfer',
+  ADJ:  'Adjustment',
+};
+
+const TX_COLORS: Record<string, string> = {
+  GRV:  'bg-blue-100 text-blue-700 border-blue-200',
+  MFDR: 'bg-amber-100 text-amber-700 border-amber-200',
+  MFMF: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  WHT:  'bg-slate-100 text-slate-600 border-slate-200',
+  ADJ:  'bg-rose-100 text-rose-700 border-rose-200',
 };
 
 function groupStatus(lines: SagePostingReview[]): ReviewGroup['status'] {
@@ -107,6 +122,64 @@ function buildGroups(reviews: SagePostingReview[]): ReviewGroup[] {
 
   groups.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return groups;
+}
+
+function StatusPill({ group }: { group: ReviewGroup }) {
+  if (group.status === 'approved' && group.allPosted) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+        <FileCheck2 className="w-3 h-3" /> Posted to Sage
+      </span>
+    );
+  }
+  if (group.status === 'approved') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
+        <Zap className="w-3 h-3 animate-pulse" /> Approved — Queued
+      </span>
+    );
+  }
+  if (group.status === 'rejected') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+        <XCircle className="w-3 h-3" /> Rejected
+      </span>
+    );
+  }
+  if (group.status === 'mixed') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+        <AlertTriangle className="w-3 h-3" /> Mixed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+      <Clock className="w-3 h-3 animate-pulse" /> Pending Review
+    </span>
+  );
+}
+
+function LinePill({ status, posted_at }: { status: string; posted_at: string | null }) {
+  if (status === 'approved' && posted_at) return <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Posted</span>;
+  if (status === 'approved') return <span className="text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded">Approved</span>;
+  if (status === 'rejected') return <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">Rejected</span>;
+  return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Pending</span>;
+}
+
+function KPICard({ label, value, sub, icon: Icon, accent }: { label: string; value: string | number; sub?: string; icon: any; accent: string }) {
+  return (
+    <div className={`rounded-2xl border bg-white shadow-sm p-4 flex items-center gap-3 ${accent}`}>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${accent.replace('border-', 'bg-').replace('-200', '-100')}`}>
+        <Icon className={`w-5 h-5 ${accent.replace('border-', 'text-').replace('-200', '-600')}`} />
+      </div>
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="text-xl font-extrabold text-slate-900 leading-tight">{value}</p>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
 }
 
 export default function SagePostingReviewPage() {
@@ -153,65 +226,39 @@ export default function SagePostingReviewPage() {
 
   const approveGroup = async (group: ReviewGroup) => {
     const pendingIds = group.lines.filter((l) => l.status === 'pending').map((l) => l.id);
-    if (pendingIds.length === 0) {
-      toast.error('No pending lines in this package');
-      return;
-    }
+    if (pendingIds.length === 0) { toast.error('No pending lines in this package'); return; }
 
     setActingKey(group.key);
     const { error } = await supabase
       .from('sage_posting_reviews')
-      .update({
-        status: 'approved',
-        reviewed_by: profile?.id,
-        reviewed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: 'approved', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .in('id', pendingIds);
-
     setActingKey(null);
 
     if (error) {
-      toast.error(`Failed to approve package: ${error.message}`);
+      toast.error(`Failed to approve: ${error.message}`);
     } else {
-      toast.success(
-        `Approved ${EVENT_LABELS[group.event_type] || group.event_type}` +
-          (group.reference ? ` — ${group.reference}` : '') +
-          ` (${pendingIds.length} line${pendingIds.length === 1 ? '' : 's'})`
-      );
+      toast.success(`✅ Approved ${EVENT_LABELS[group.event_type] || group.event_type}${group.reference ? ` — ${group.reference}` : ''}`);
       fetchData();
     }
   };
 
   const handleReject = async () => {
     if (!rejectGroup) return;
-    if (!rejectReason.trim()) {
-      toast.error('Please provide a rejection reason');
-      return;
-    }
+    if (!rejectReason.trim()) { toast.error('Please provide a rejection reason'); return; }
 
     const pendingIds = rejectGroup.lines.filter((l) => l.status === 'pending').map((l) => l.id);
-    if (pendingIds.length === 0) {
-      toast.error('No pending lines to reject');
-      return;
-    }
+    if (pendingIds.length === 0) { toast.error('No pending lines to reject'); return; }
 
     setActingKey(rejectGroup.key);
     const { error } = await supabase
       .from('sage_posting_reviews')
-      .update({
-        status: 'rejected',
-        reviewed_by: profile?.id,
-        reviewed_at: new Date().toISOString(),
-        rejection_reason: rejectReason,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: 'rejected', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), rejection_reason: rejectReason, updated_at: new Date().toISOString() })
       .in('id', pendingIds);
-
     setActingKey(null);
 
     if (error) {
-      toast.error(`Failed to reject package: ${error.message}`);
+      toast.error(`Failed to reject: ${error.message}`);
     } else {
       toast.success(`Rejected package (${pendingIds.length} lines)`);
       setRejectGroup(null);
@@ -222,10 +269,7 @@ export default function SagePostingReviewPage() {
 
   const handleBatchApprove = async () => {
     const pendingGroups = groups.filter((g) => g.status === 'pending' || g.lines.some((l) => l.status === 'pending'));
-    if (pendingGroups.length === 0) {
-      toast.error('No pending packages to approve');
-      return;
-    }
+    if (pendingGroups.length === 0) { toast.error('No pending packages to approve'); return; }
 
     setBatchApproving(true);
     let successCount = 0;
@@ -234,305 +278,348 @@ export default function SagePostingReviewPage() {
       if (pendingIds.length === 0) continue;
       const { error } = await supabase
         .from('sage_posting_reviews')
-        .update({
-          status: 'approved',
-          reviewed_by: profile?.id,
-          reviewed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .update({ status: 'approved', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .in('id', pendingIds);
       if (!error) successCount++;
     }
     setBatchApproving(false);
-    toast.success(`Approved ${successCount} of ${pendingGroups.length} packages`);
+    toast.success(`✅ Approved ${successCount} of ${pendingGroups.length} packages`);
     fetchData();
   };
 
-  const pendingLineCount = reviews.filter((r) => r.status === 'pending').length;
+  const pendingLineCount  = reviews.filter((r) => r.status === 'pending').length;
   const pendingGroupCount = groups.filter((g) => g.lines.some((l) => l.status === 'pending')).length;
-  const approvedCount = reviews.filter((r) => r.status === 'approved').length;
-  const rejectedCount = reviews.filter((r) => r.status === 'rejected').length;
-  const postedCount = reviews.filter((r) => r.posted_at).length;
-  const totalValue = reviews.filter((r) => r.status === 'pending').reduce((sum, r) => sum + Number(r.total_value), 0);
+  const approvedCount     = reviews.filter((r) => r.status === 'approved').length;
+  const rejectedCount     = reviews.filter((r) => r.status === 'rejected').length;
+  const postedCount       = reviews.filter((r) => r.posted_at).length;
+  const totalValue        = reviews.filter((r) => r.status === 'pending').reduce((sum, r) => sum + Number(r.total_value), 0);
 
-  const getStatusBadge = (group: ReviewGroup) => {
-    if (group.status === 'approved' && group.allPosted) {
-      return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Posted</Badge>;
-    }
-    if (group.status === 'approved') {
-      return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Approved — Waiting Post</Badge>;
-    }
-    if (group.status === 'rejected') {
-      return <Badge className="bg-red-100 text-red-700 border-red-200">Rejected</Badge>;
-    }
-    if (group.status === 'mixed') {
-      return <Badge className="bg-purple-100 text-purple-700 border-purple-200">Mixed</Badge>;
-    }
-    return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Pending Review</Badge>;
-  };
+  const toggleExpand = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const toggleExpand = (key: string) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
+  // ── Access Denied ──────────────────────────────────────────
   if (!isFinance) {
     return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <ClipboardCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">You need Finance or Admin access to review Sage postings.</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-sm">
+          <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Access Restricted</h2>
+          <p className="text-sm text-slate-500">You need Finance or Admin access to review Sage postings.</p>
+        </div>
       </div>
     );
   }
 
+  // ── Main Page ──────────────────────────────────────────────
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Sage Posting Review</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            One approval per event package (e.g. full production order issue). Line details expand below.
-          </p>
+    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
+
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-5 sm:p-6 rounded-2xl text-white shadow-xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-teal-500/5 pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/30 font-mono font-medium">Finance Gateway</span>
+            <span className="flex items-center gap-1 text-xs text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+              Auto-refresh 15s
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Sage Posting Review</h1>
+          <p className="text-slate-300 text-sm mt-1">Approve or reject transaction packages before they post to Sage 200 Evolution</p>
         </div>
-        {pendingGroupCount > 0 && (
-          <Button onClick={handleBatchApprove} disabled={batchApproving} className="bg-emerald-600 hover:bg-emerald-700">
-            {batchApproving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            Approve All Packages ({pendingGroupCount})
-          </Button>
-        )}
+        <div className="relative flex flex-col sm:flex-row gap-2 shrink-0">
+          <button
+            onClick={fetchData}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-semibold rounded-xl transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+          {pendingGroupCount > 0 && (
+            <button
+              onClick={handleBatchApprove}
+              disabled={batchApproving}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-60"
+            >
+              {batchApproving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Approve All ({pendingGroupCount})
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <StatCard title="Pending Packages" value={pendingGroupCount.toString()} icon={Clock} color="amber" />
-        <StatCard title="Pending Lines" value={pendingLineCount.toString()} icon={Package} color="slate" />
-        <StatCard title="Approved Lines" value={approvedCount.toString()} icon={CheckCircle2} color="blue" />
-        <StatCard title="Posted to Sage" value={postedCount.toString()} icon={Package} color="emerald" />
-        <StatCard title="Pending Value" value={`$${totalValue.toFixed(2)}`} icon={DollarSign} color="slate" />
+        <KPICard label="Pending Packages" value={pendingGroupCount} icon={Clock}        accent="border-amber-200"  sub="awaiting review" />
+        <KPICard label="Pending Lines"    value={pendingLineCount}  icon={Package}      accent="border-slate-200"  sub="individual entries" />
+        <KPICard label="Approved Lines"   value={approvedCount}     icon={CheckCircle2} accent="border-blue-200"   sub="ready to post" />
+        <KPICard label="Posted to Sage"   value={postedCount}       icon={TrendingUp}   accent="border-emerald-200" sub="in Sage GL/AP/ST" />
+        <KPICard label="Pending Value"    value={`$${totalValue.toFixed(2)}`} icon={DollarSign} accent="border-slate-200" sub="under review" />
       </div>
 
-      <div className="flex gap-2">
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1">Filter:</span>
         {(['pending', 'approved', 'rejected', 'all'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              filter === f ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${
+              filter === f
+                ? 'bg-slate-900 text-white border-slate-900 shadow'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             }`}
           >
+            {f === 'pending' && <Clock className="w-3 h-3 inline mr-1 -mt-0.5" />}
+            {f === 'approved' && <CheckCircle2 className="w-3 h-3 inline mr-1 -mt-0.5" />}
+            {f === 'rejected' && <XCircle className="w-3 h-3 inline mr-1 -mt-0.5" />}
             {f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
+        <span className="ml-auto text-xs text-slate-400">{groups.length} package{groups.length !== 1 ? 's' : ''}</span>
       </div>
 
+      {/* Package List */}
       <div className="space-y-3">
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Loader2 className="w-8 h-8 text-teal-500 animate-spin mx-auto" />
-              <p className="text-sm text-slate-500 mt-2">Loading reviews...</p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center">
+            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+            <p className="text-sm text-slate-500 mt-3 font-medium">Loading review packages…</p>
+          </div>
         ) : groups.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <ClipboardCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No {filter !== 'all' ? filter : ''} packages found</p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center">
+            <ClipboardCheck className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+            <p className="text-sm font-bold text-slate-400">No {filter !== 'all' ? filter : ''} packages found</p>
+            <p className="text-xs text-slate-400 mt-1">All clear — nothing needs attention right now.</p>
+          </div>
         ) : (
           groups.map((group) => {
-            const isOpen = !!expanded[group.key];
+            const isOpen    = !!expanded[group.key];
             const hasPending = group.lines.some((l) => l.status === 'pending');
-            const codes = [...new Set(group.lines.map((l) => l.sage_code))].slice(0, 6);
+            const codes     = [...new Set(group.lines.map((l) => l.sage_code))].slice(0, 5);
             const moreCodes = group.lineCount - codes.length;
+            const ec        = EVENT_COLORS[group.event_type] || { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', dot: 'bg-slate-400' };
+            const createdAt = new Date(group.created_at).toLocaleString('en-ZW', { dateStyle: 'medium', timeStyle: 'short' });
 
             return (
-              <Card key={group.key} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex flex-col lg:flex-row lg:items-center gap-3 p-4">
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(group.key)}
-                      className="flex-1 text-left min-w-0"
-                    >
-                      <div className="flex items-start gap-2">
-                        {isOpen ? (
-                          <ChevronDown className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-slate-800">
-                              {EVENT_LABELS[group.event_type] || group.event_type}
-                            </span>
-                            {getStatusBadge(group)}
-                            <Badge variant="outline" className="text-[10px]">
-                              {group.lineCount} line{group.lineCount === 1 ? '' : 's'}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-slate-500 mt-1 truncate">
-                            {group.event_description || '—'}
-                            {group.reference ? ` · Ref ${group.reference}` : ''}
-                          </div>
-                          <div className="text-[11px] text-slate-400 mt-1 font-mono truncate">
-                            {codes.join(', ')}
-                            {moreCodes > 0 ? ` +${moreCodes} more` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
+              <div key={group.key} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md">
 
-                    <div className="flex items-center justify-between lg:justify-end gap-4 lg:pl-2">
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-slate-800">${group.totalValue.toFixed(2)}</div>
-                        <div className="text-[11px] text-slate-400">package value</div>
+                {/* Package Row */}
+                <div className="flex flex-col lg:flex-row lg:items-center gap-3 p-4">
+
+                  {/* Left — expand + event info */}
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(group.key)}
+                    className="flex-1 text-left min-w-0"
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Expand icon */}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${isOpen ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'} transition-colors`}>
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </div>
-                      {hasPending && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700"
-                            disabled={actingKey === group.key}
-                            onClick={() => approveGroup(group)}
-                          >
-                            {actingKey === group.key ? (
-                              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                            )}
-                            Approve package
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-200 hover:bg-red-50"
-                            disabled={actingKey === group.key}
-                            onClick={() => {
-                              setRejectGroup(group);
-                              setRejectReason('');
-                            }}
-                          >
-                            <XCircle className="w-3.5 h-3.5 mr-1" />
-                            Reject
-                          </Button>
+
+                      <div className="min-w-0 flex-1">
+                        {/* Event label + badges */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${ec.bg} ${ec.text} ${ec.border}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${ec.dot}`} />
+                            {EVENT_LABELS[group.event_type] || group.event_type}
+                          </span>
+                          <StatusPill group={group} />
+                          <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
+                            {group.lineCount} line{group.lineCount !== 1 ? 's' : ''}
+                          </span>
                         </div>
-                      )}
+
+                        {/* Description / Reference */}
+                        <p className="text-sm font-semibold text-slate-800 mt-1.5 truncate">
+                          {group.event_description || group.reference || '—'}
+                          {group.reference && group.event_description ? (
+                            <span className="text-slate-400 font-normal"> · {group.reference}</span>
+                          ) : null}
+                        </p>
+
+                        {/* Sage codes + timestamp */}
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          {codes.map((c) => (
+                            <span key={c} className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">{c}</span>
+                          ))}
+                          {moreCodes > 0 && (
+                            <span className="text-[10px] text-slate-400">+{moreCodes} more</span>
+                          )}
+                          <span className="text-[10px] text-slate-400 ml-auto">{createdAt}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Right — value + actions */}
+                  <div className="flex items-center justify-between lg:justify-end gap-4 lg:pl-2 shrink-0">
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold text-slate-900 font-mono">${group.totalValue.toFixed(2)}</div>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Package Value</div>
+                    </div>
+
+                    {hasPending && (
+                      <div className="flex gap-2">
+                        <button
+                          disabled={actingKey === group.key}
+                          onClick={() => approveGroup(group)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
+                        >
+                          {actingKey === group.key ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                          Approve
+                        </button>
+                        <button
+                          disabled={actingKey === group.key}
+                          onClick={() => { setRejectGroup(group); setRejectReason(''); }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all disabled:opacity-50"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {group.status === 'rejected' && group.lines[0]?.rejection_reason && (
+                      <div className="max-w-[200px] text-[10px] text-red-500 bg-red-50 border border-red-100 rounded-lg px-2 py-1 truncate" title={group.lines[0].rejection_reason}>
+                        ⚠ {group.lines[0].rejection_reason}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded line items */}
+                {isOpen && (
+                  <div className="border-t border-slate-100">
+                    <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transaction Lines — {group.lineCount} entries</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-slate-100/80 border-b border-slate-200">
+                            <th className="text-left px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Sage Code</th>
+                            <th className="text-left px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Tx Type</th>
+                            <th className="text-right px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Qty</th>
+                            <th className="text-right px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Unit Cost</th>
+                            <th className="text-right px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Total Value</th>
+                            <th className="text-left px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Warehouse</th>
+                            <th className="text-left px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Status</th>
+                            <th className="text-left px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px]">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {group.lines.map((r) => (
+                            <tr key={r.id} className="hover:bg-white transition-colors">
+                              <td className="px-4 py-3 font-mono font-bold text-slate-800">{r.sage_code}</td>
+                              <td className="px-3 py-3">
+                                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${TX_COLORS[r.sage_tx_code] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                  {r.sage_tx_code}
+                                </span>
+                                <div className="text-slate-400 text-[10px] mt-0.5">{TX_LABELS[r.sage_tx_code] || ''}</div>
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                <span className={`font-mono font-bold ${Number(r.quantity) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                  {Number(r.quantity) > 0 ? '+' : ''}{Number(r.quantity).toLocaleString()}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono text-slate-600">
+                                ${Number(r.unit_cost).toFixed(4)}
+                              </td>
+                              <td className="px-3 py-3 text-right font-mono font-bold text-slate-800">
+                                ${Number(r.total_value).toFixed(2)}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="text-slate-600 font-medium">{r.warehouse_code || `ID:${r.warehouse_id}`}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <LinePill status={r.status} posted_at={r.posted_at} />
+                                {r.sage_result?.error && (
+                                  <div className="text-red-500 text-[10px] mt-0.5 max-w-[140px] truncate" title={r.sage_result.error}>
+                                    ⚠ {r.sage_result.error}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-500 max-w-[220px] truncate" title={r.description || ''}>
+                                {r.description || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-
-                  {isOpen && (
-                    <div className="border-t border-slate-100 bg-slate-50/80">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-left text-slate-500 border-b border-slate-200">
-                              <th className="px-4 py-2 font-medium">Item</th>
-                              <th className="px-3 py-2 font-medium">Tx</th>
-                              <th className="px-3 py-2 font-medium text-right">Qty</th>
-                              <th className="px-3 py-2 font-medium text-right">Unit cost</th>
-                              <th className="px-3 py-2 font-medium text-right">Value</th>
-                              <th className="px-3 py-2 font-medium">Whse</th>
-                              <th className="px-3 py-2 font-medium">Status</th>
-                              <th className="px-4 py-2 font-medium">Description</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {group.lines.map((r) => (
-                              <tr key={r.id} className="border-b border-slate-100 last:border-0">
-                                <td className="px-4 py-2 font-mono font-medium text-slate-700">{r.sage_code}</td>
-                                <td className="px-3 py-2">
-                                  <Badge variant="outline" className="text-[10px]">{r.sage_tx_code}</Badge>
-                                  <div className="text-slate-400 text-[10px] mt-0.5">{TX_LABELS[r.sage_tx_code] || ''}</div>
-                                </td>
-                                <td className="px-3 py-2 text-right font-medium">
-                                  <span className={Number(r.quantity) < 0 ? 'text-red-600' : 'text-emerald-600'}>
-                                    {Number(r.quantity) > 0 ? '+' : ''}
-                                    {Number(r.quantity).toLocaleString()}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-right text-slate-600">${Number(r.unit_cost).toFixed(4)}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  ${Number(r.total_value).toFixed(2)}
-                                </td>
-                                <td className="px-3 py-2 text-slate-600">
-                                  <div className="flex items-center gap-1">
-                                    <Building2 className="w-3 h-3 text-slate-400" />
-                                    {r.warehouse_code || `ID:${r.warehouse_id}`}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
-                                  {r.status === 'approved' && r.posted_at
-                                    ? 'Posted'
-                                    : r.status === 'approved'
-                                      ? 'Approved'
-                                      : r.status === 'rejected'
-                                        ? 'Rejected'
-                                        : 'Pending'}
-                                  {r.sage_result?.error ? (
-                                    <div className="text-red-500 text-[10px] max-w-[140px] truncate" title={r.sage_result.error}>
-                                      {r.sage_result.error}
-                                    </div>
-                                  ) : null}
-                                </td>
-                                <td className="px-4 py-2 text-slate-500 max-w-[220px] truncate" title={r.description || ''}>
-                                  {r.description || '—'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                )}
+              </div>
             );
           })
         )}
       </div>
 
+      {/* Reject Dialog */}
       <Dialog open={!!rejectGroup} onOpenChange={(open) => !open && setRejectGroup(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reject Package</DialogTitle>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+          <DialogHeader className="bg-gradient-to-r from-red-600 to-red-700 px-5 py-4">
+            <DialogTitle className="text-white font-extrabold flex items-center gap-2">
+              <XCircle className="w-5 h-5" /> Reject Package
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="p-5 space-y-4">
             {rejectGroup && (
-              <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-                <div>
-                  <span className="text-slate-500">Event:</span>{' '}
-                  <span className="font-medium">{EVENT_LABELS[rejectGroup.event_type] || rejectGroup.event_type}</span>
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Event</span>
+                  <span className="font-bold text-slate-800">{EVENT_LABELS[rejectGroup.event_type] || rejectGroup.event_type}</span>
                 </div>
-                <div>
-                  <span className="text-slate-500">Reference:</span> {rejectGroup.reference || '—'}
+                <div className="flex justify-between">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Reference</span>
+                  <span className="font-mono font-bold text-slate-700">{rejectGroup.reference || '—'}</span>
                 </div>
-                <div>
-                  <span className="text-slate-500">Lines:</span> {rejectGroup.lineCount} · Value $
-                  {rejectGroup.totalValue.toFixed(2)}
+                <div className="flex justify-between border-t border-slate-200 pt-2 mt-2">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Package Value</span>
+                  <span className="font-extrabold text-red-600">${rejectGroup.totalValue.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Lines</span>
+                  <span className="font-bold text-slate-700">{rejectGroup.lineCount}</span>
                 </div>
               </div>
             )}
             <div className="space-y-2">
-              <Label>Rejection Reason *</Label>
+              <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Rejection Reason *</Label>
               <Textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Explain why this entire package is being rejected..."
+                placeholder="Explain why this package is being rejected so the operations team can correct it…"
                 rows={3}
+                className="resize-none border-slate-200 bg-slate-50 focus:border-red-400"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectGroup(null)}>
+          <DialogFooter className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex gap-2">
+            <button
+              onClick={() => setRejectGroup(null)}
+              className="flex-1 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors"
+            >
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleReject}>
+            </button>
+            <button
+              onClick={handleReject}
+              className="flex-1 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm transition-colors"
+            >
               Reject Package
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
