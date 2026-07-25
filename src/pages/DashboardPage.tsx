@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Circle, Play, Activity, Gauge, Users, Zap,
-  Layers, Package, Truck, Scale, Sparkles, CheckCircle2, Clock, ArrowUpRight, ShieldCheck, Factory
+  Layers, Scale, Sparkles, ShieldCheck, Factory, Truck
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
@@ -110,19 +110,24 @@ export default function DashboardPage() {
 
   function getSeverity(item: RawMaterial) {
     const forecast = forecastMap[item.id];
-    const thresholdStock = item.reorder_level * (1 + item.alert_threshold_pct);
-    const belowLevel = item.current_stock <= thresholdStock;
+    const reorderLevel = Number(item.reorder_level || 0);
+    const hasReorderLevel = reorderLevel > 0;
+    const thresholdStock = reorderLevel * (1 + (item.alert_threshold_pct || 0.1));
+    const belowLevel = hasReorderLevel ? item.current_stock <= thresholdStock : false;
+
     const daysToDepletion = forecast?.days_to_depletion;
-    const belowDays = typeof daysToDepletion === 'number'
-      ? daysToDepletion <= item.days_of_cover_target
+    const targetCover = item.days_of_cover_target || 7;
+    const belowDays = typeof daysToDepletion === 'number' && daysToDepletion > 0
+      ? daysToDepletion <= targetCover
       : false;
-    if (belowLevel && belowDays) return 'critical';
+
+    if (hasReorderLevel && belowLevel && belowDays) return 'critical';
     if (belowLevel || belowDays) return 'warning';
     return 'healthy';
   }
 
   const filteredLowStock = lowStockItems
-    .map((item) => ({ item, severity: getSeverity(item) }))
+    .map((item) => ({ item, severity: getSeverity(item), forecast: forecastMap[item.id] }))
     .filter(({ severity }) => severity !== 'healthy');
 
   const trendChartData = trends.map((row) => ({
@@ -162,7 +167,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 mt-1.5">
                 <span className="flex items-center gap-1.5">
                   <Circle className="w-2 h-2 fill-emerald-400 text-emerald-400" />
-                  Materials: <strong className="text-white">{stats.rawMaterialCount}</strong>
+                  Raw Materials: <strong className="text-white">{stats.rawMaterialCount}</strong>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Circle className="w-2 h-2 fill-blue-400 text-blue-400" />
@@ -170,7 +175,7 @@ export default function DashboardPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Circle className={`w-2 h-2 ${filteredLowStock.length > 0 ? 'fill-amber-400 text-amber-400' : 'fill-emerald-400 text-emerald-400'}`} />
-                  Alerts: <strong className={filteredLowStock.length > 0 ? 'text-amber-300' : 'text-emerald-300'}>{filteredLowStock.length}</strong>
+                  Stock Alerts: <strong className={filteredLowStock.length > 0 ? 'text-amber-300' : 'text-emerald-300'}>{filteredLowStock.length}</strong>
                 </span>
               </div>
             </div>
@@ -382,14 +387,14 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stock Alerts Widget */}
+          {/* Stock & Reorder Alerts Widget */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Stock & Reorder Alerts</h3>
               </div>
-              <span className="text-xs font-bold text-slate-500">{filteredLowStock.length} items</span>
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">{filteredLowStock.length} Alerts</span>
             </div>
 
             {filteredLowStock.length === 0 ? (
@@ -398,21 +403,26 @@ export default function DashboardPage() {
                 <p className="text-xs font-bold text-slate-700">All raw material stock levels healthy</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                {filteredLowStock.map(({ item, severity }) => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/70 hover:bg-slate-100 transition-colors">
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                {filteredLowStock.map(({ item, severity, forecast }) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200/70 hover:bg-slate-100 transition-colors">
                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{item.code}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                          <span className="font-mono font-bold text-blue-700">{item.code}</span>
+                          {forecast?.days_to_depletion != null && (
+                            <span className="text-amber-700 font-semibold">• {forecast.days_to_depletion.toFixed(1)} days left</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-2">
                       <p className={`text-xs font-extrabold font-mono ${severity === 'critical' ? 'text-rose-600' : 'text-amber-600'}`}>
                         {item.current_stock.toLocaleString()} {item.unit}
                       </p>
-                      <span className={`text-[10px] uppercase font-bold ${severity === 'critical' ? 'text-rose-500' : 'text-amber-500'}`}>
+                      <span className={`inline-block text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${severity === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>
                         {severity}
                       </span>
                     </div>
