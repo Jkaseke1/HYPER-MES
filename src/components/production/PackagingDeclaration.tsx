@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface PackagingSKU {
@@ -19,12 +19,14 @@ interface PackagingLine {
 
 interface PackagingDeclarationProps {
   actualOutputQty: number; // in tonnes
+  formulationId?: string;
   onSave: (lines: PackagingLine[]) => Promise<void>;
   disabled?: boolean;
 }
 
 export default function PackagingDeclaration({
   actualOutputQty,
+  formulationId,
   onSave,
   disabled = false
 }: PackagingDeclarationProps) {
@@ -47,7 +49,9 @@ export default function PackagingDeclaration({
         .order('sku_code');
 
       if (err) throw err;
-      setSkus(data || []);
+      const available = data || [];
+      setSkus(available);
+      await autoPopulateLines(available);
     } catch (err) {
       console.error('Failed to fetch packaging SKUs:', err);
       setError('Failed to load packaging SKUs');
@@ -56,20 +60,55 @@ export default function PackagingDeclaration({
     }
   }
 
-  function addLine() {
-    setLines([
-      ...lines,
-      {
-        id: `temp-${Date.now()}`,
-        packaging_sku_id: '',
-        bags_used: 0,
-        implied_tonnes: 0,
-      },
-    ]);
-  }
+  async function autoPopulateLines(availableSkus: PackagingSKU[]) {
+    if (actualOutputQty <= 0 || availableSkus.length === 0 || lines.length > 0) return;
 
-  function removeLine(id: string) {
-    setLines(lines.filter((l) => l.id !== id));
+    const initial: PackagingLine[] = [];
+
+    // Try to match production BOM packaging items to active SKUs
+    if (formulationId) {
+      try {
+        const { data: bomItems, error } = await supabase
+          .from('production_bom_packaging')
+          .select('item_code')
+          .eq('formulation_id', formulationId);
+
+        if (error) throw error;
+
+        for (const item of bomItems || []) {
+          const sku = availableSkus.find((s) => s.sku_code === item.item_code && s.bag_size_kg > 0);
+          if (sku) {
+            const bags = Math.max(1, Math.round((actualOutputQty * 1000) / sku.bag_size_kg));
+            initial.push({
+              id: `bom-${item.item_code}-${Date.now()}`,
+              packaging_sku_id: sku.id,
+              bags_used: bags,
+              implied_tonnes: (bags * sku.bag_size_kg) / 1000,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch BOM packaging:', err);
+      }
+    }
+
+    // Fallback: use the first active SKU with a bag size
+    if (initial.length === 0) {
+      const defaultSku = availableSkus.find((s) => s.bag_size_kg > 0);
+      if (defaultSku) {
+        const bags = Math.max(1, Math.round((actualOutputQty * 1000) / defaultSku.bag_size_kg));
+        initial.push({
+          id: `default-${Date.now()}`,
+          packaging_sku_id: defaultSku.id,
+          bags_used: bags,
+          implied_tonnes: (bags * defaultSku.bag_size_kg) / 1000,
+        });
+      }
+    }
+
+    if (initial.length > 0) {
+      setLines(initial);
+    }
   }
 
   function updateLine(id: string, field: keyof PackagingLine, value: any) {
@@ -201,7 +240,7 @@ export default function PackagingDeclaration({
       {/* Packaging Lines */}
       <div className="space-y-2 max-h-64 overflow-y-auto">
         {lines.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-4">No packaging declared yet</p>
+          <p className="text-xs text-amber-600 text-center py-4">No packaging SKUs available. Check packaging SKU setup.</p>
         ) : (
           lines.map((line) => (
             <div key={line.id} className="grid grid-cols-5 gap-2 p-2 bg-white rounded border border-slate-200">
@@ -239,29 +278,10 @@ export default function PackagingDeclaration({
                   {line.implied_tonnes.toFixed(3)}
                 </div>
               </div>
-              <div className="flex items-end">
-                <button
-                  onClick={() => removeLine(line.id)}
-                  disabled={disabled || saving}
-                  className="w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  Remove
-                </button>
-              </div>
             </div>
           ))
         )}
       </div>
-
-      {/* Add Line Button */}
-      <button
-        onClick={addLine}
-        disabled={disabled || saving || lines.length === 0 && skus.length === 0}
-        className="w-full px-3 py-2 text-sm text-teal-600 hover:bg-teal-50 rounded border border-teal-200 font-medium transition-colors disabled:opacity-50"
-      >
-        <Plus className="w-4 h-4 inline mr-1" />
-        Add Packaging Line
-      </button>
 
       {/* Error Message */}
       {error && (

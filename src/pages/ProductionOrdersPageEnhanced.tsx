@@ -1164,6 +1164,7 @@ export default function ProductionOrdersPage() {
         {selected && (
           <PackagingDeclaration
             actualOutputQty={output.actual_qty}
+            formulationId={selected.formulation_id}
             onSave={handlePackagingDeclarationSave}
             disabled={saving}
           />
