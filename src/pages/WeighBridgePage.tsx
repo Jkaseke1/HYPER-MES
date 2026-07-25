@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X } from 'lucide-react';
+import {
+  Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X, Sparkles, RefreshCw,
+  Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Dialog, DialogContent } from '../components/ui/dialog';
-import StatCard from '../components/ui/StatCard';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 
 interface WBTicket {
@@ -50,10 +52,10 @@ const emptyWBForm = {
   wb_driver_signed: false,
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  open: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  linked: 'bg-teal-50 text-teal-700 border-teal-200',
-  cancelled: 'bg-slate-100 text-slate-500 border-slate-200',
+const STATUS_STYLES: Record<string, { label: string; bg: string; color: string; border: string }> = {
+  open: { label: 'Open Ticket', bg: 'bg-amber-50', color: 'text-amber-700', border: 'border-amber-200' },
+  linked: { label: 'Linked to GRN', bg: 'bg-emerald-50', color: 'text-emerald-700', border: 'border-emerald-200' },
+  cancelled: { label: 'Cancelled', bg: 'bg-slate-100', color: 'text-slate-500', border: 'border-slate-200' },
 };
 
 export default function WeighBridgePage() {
@@ -61,6 +63,7 @@ export default function WeighBridgePage() {
   const [tickets, setTickets] = useState<WBTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [newOpen, setNewOpen] = useState(false);
   const [viewTicket, setViewTicket] = useState<WBTicket | null>(null);
   const [form, setForm] = useState(emptyWBForm);
@@ -153,13 +156,15 @@ export default function WeighBridgePage() {
   }
 
   const filtered = tickets.filter(t => {
+    if (statusFilter !== 'all' && t.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
       t.ticket_no?.toLowerCase().includes(q) ||
       t.vehicle_reg?.toLowerCase().includes(q) ||
       t.driver_name?.toLowerCase().includes(q) ||
-      t.product_code?.toLowerCase().includes(q)
+      t.product_code?.toLowerCase().includes(q) ||
+      t.product_name?.toLowerCase().includes(q)
     );
   });
 
@@ -171,130 +176,252 @@ export default function WeighBridgePage() {
     return d.toDateString() === today.toDateString();
   }).length;
 
+  const totalNettMassKg = tickets.reduce((sum, t) => sum + (Number(t.nett_mass) || 0), 0);
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Weigh Bridge</h1>
-          <p className="text-sm text-slate-500 mt-1">Record vehicle weighing before creating a GRN</p>
-        </div>
-        <button
-          onClick={openNewTicketModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          New WB Ticket
-        </button>
-      </div>
+    <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
+      <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Open Tickets" value={openCount} icon={Clock} color="amber" />
-        <StatCard title="Linked to GRN" value={linkedCount} icon={LinkIcon} color="teal" />
-        <StatCard title="Today" value={todayCount} icon={Scale} color="emerald" />
-      </div>
+        {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
+        <div className="shrink-0 space-y-3.5">
+          {/* Top Page Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">WeighBridge Operations</h1>
+              <p className="text-xs text-slate-500">Record vehicle gross, tare & nett weights at the intake gate scale.</p>
+            </div>
+          </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="p-4 border-b border-slate-200">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search ticket no, vehicle, driver..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-            />
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-5 rounded-2xl text-white shadow-lg relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                  <Scale className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-extrabold tracking-tight">Weighbridge Scale Hub</h2>
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      <Sparkles className="w-3 h-3" /> Digital Calibration
+                    </span>
+                  </div>
+                  <p className="text-slate-300 text-xs mt-0.5">
+                    Capture gross and tare vehicle weights, print tickets, and link directly to Goods Received Notes (GRN).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchTickets}
+                  className="p-2 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
+                  title="Refresh Tickets"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={openNewTicketModal}
+                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  New WB Ticket
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin" />
+          {/* Stats Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border border-amber-200/80 bg-amber-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Open Tickets</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-amber-900 mt-1">{openCount}</p>
+              <span className="text-[10px] text-amber-600 font-medium">Ready to link GRN</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-emerald-200/80 bg-emerald-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Linked to GRN</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
+                  <LinkIcon className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-emerald-900 mt-1">{linkedCount}</p>
+              <span className="text-[10px] text-emerald-600 font-medium">Stock received</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Today's Weighings</span>
+                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                  <Truck className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-slate-900 mt-1">{todayCount}</p>
+              <span className="text-[10px] text-slate-400">Trucks weighed today</span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-teal-200/80 bg-teal-50/20 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Total Weighed Mass</span>
+                <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center text-teal-700">
+                  <Scale className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <p className="text-xl font-extrabold text-teal-900 mt-1">{(totalNettMassKg / 1000).toFixed(2)} <span className="text-xs font-normal text-teal-600">t</span></p>
+              <span className="text-[10px] text-teal-600 font-mono">{totalNettMassKg.toLocaleString()} kg</span>
+            </div>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Scale className="w-12 h-12 mb-3" />
-            <p className="text-sm font-medium">No weigh bridge tickets yet</p>
-            <p className="text-xs mt-1">Create a ticket when a vehicle arrives for weighing</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50">
-                  {['Ticket No', 'Vehicle Reg', 'Driver', 'Product', 'Supplier', 'Nett Mass (kg)', 'Time In', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-teal-700">{t.ticket_no}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{t.vehicle_reg || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{t.driver_name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      <div className="font-medium">{t.product_name || '—'}</div>
-                      <div className="text-xs text-slate-400 font-mono">{t.product_code || ''}</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{(t as any).suppliers?.name || '—'}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-800 tabular-nums">
-                      {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 text-xs">
-                      {t.time_in ? format(new Date(t.time_in), 'dd MMM HH:mm') : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[t.status] || ''}`}>
-                        {t.status === 'linked' ? (
-                          <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Linked to GRN</span>
-                        ) : t.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setViewTicket(t)}
-                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 font-medium"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View
-                      </button>
-                    </td>
-                  </tr>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">
+            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                {['all', 'open', 'linked', 'cancelled'].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                      statusFilter === st
+                        ? 'bg-slate-900 text-white shadow'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    {st === 'all' ? 'All Tickets' : st}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </div>
 
-        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/50">
-          <p className="text-xs text-slate-500">{filtered.length} ticket{filtered.length !== 1 ? 's' : ''} shown</p>
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search ticket #, vehicle, driver, product..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
+                />
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* SCROLLABLE TABLE / CONTENT SECTION (Scrolls underneath static top) */}
+        <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <div className="w-8 h-8 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin mb-2" />
+              <p className="text-xs font-semibold text-slate-600">Loading weighbridge tickets...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <Scale className="w-12 h-12 mb-3 text-slate-300 animate-pulse" />
+              <p className="text-sm font-bold text-slate-700">No weighbridge tickets found</p>
+              <p className="text-xs mt-1 text-slate-400">Click "New WB Ticket" above to record a vehicle weighing.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
+                  <tr>
+                    <th className="px-5 py-3.5 text-left">Ticket #</th>
+                    <th className="px-5 py-3.5 text-left">Vehicle Reg</th>
+                    <th className="px-5 py-3.5 text-left">Driver Name</th>
+                    <th className="px-5 py-3.5 text-left">Product / Material</th>
+                    <th className="px-5 py-3.5 text-left">Supplier</th>
+                    <th className="px-5 py-3.5 text-right">Nett Mass (kg)</th>
+                    <th className="px-5 py-3.5 text-left">Time In</th>
+                    <th className="px-5 py-3.5 text-left">Status</th>
+                    <th className="px-5 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map(t => {
+                    const stStyle = STATUS_STYLES[t.status] || STATUS_STYLES.open;
+
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-5 py-3.5 font-mono font-bold text-slate-900">{t.ticket_no}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                            <Truck className="w-3.5 h-3.5 text-slate-400" />
+                            {t.vehicle_reg || '—'}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 font-medium text-slate-700">{t.driver_name || '—'}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-bold text-slate-900">{t.product_name || '—'}</div>
+                          {t.product_code && (
+                            <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 rounded border border-blue-200">
+                              {t.product_code}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-600 font-medium">{(t as any).suppliers?.name || '—'}</td>
+                        <td className="px-5 py-3.5 text-right font-extrabold text-slate-900 font-mono text-sm">
+                          {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-500 font-mono text-[11px]">
+                          {t.time_in ? format(new Date(t.time_in), 'dd MMM HH:mm') : '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${stStyle.bg} ${stStyle.color} ${stStyle.border}`}>
+                            {t.status === 'linked' ? (
+                              <>
+                                <CheckCircle className="w-3 h-3 text-emerald-600" /> Linked to GRN
+                              </>
+                            ) : stStyle.label}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={() => setViewTicket(t)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-xs font-bold"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View Ticket
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* New Ticket Modal */}
       <Dialog open={newOpen} onOpenChange={() => setNewOpen(false)}>
-        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] [&>button.absolute]:hidden">
+        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] rounded-3xl border-0 shadow-2xl [&>button.absolute]:hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white px-6 py-4 flex-shrink-0 relative">
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 py-4 flex-shrink-0 relative">
             <button
               onClick={() => setNewOpen(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+              className="absolute top-3.5 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
               aria-label="Close"
             >
               <X className="w-4 h-4 text-white" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center">
-                <Scale className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center">
+                <Scale className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h2 className="text-lg font-bold">New Weigh Bridge Ticket</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Fill in weighing details — link to a GRN after saving</p>
+                <h2 className="text-lg font-extrabold tracking-tight">New Weighbridge Ticket</h2>
+                <p className="text-slate-300 text-xs mt-0.5">Record gross & tare vehicle weights — link to a GRN after saving</p>
               </div>
             </div>
           </div>
-          {/* Body */}
-          <form onSubmit={handleSave} className="flex-1 overflow-y-auto">
+
+          {/* Form Body */}
+          <form onSubmit={handleSave} className="flex-1 overflow-y-auto bg-slate-50/80">
             <div className="p-6">
               <WeighBridgeTicket
                 data={form as any}
@@ -302,11 +429,22 @@ export default function WeighBridgePage() {
                 hideHeader
               />
             </div>
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-end gap-3">
-              <button type="button" onClick={() => setNewOpen(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors">Cancel</button>
-              <button type="submit" disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 shadow-sm">
-                {saving ? 'Saving...' : 'Save WB Ticket'}
+            {/* Sticky Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setNewOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Scale className="w-4 h-4" />
+                {saving ? 'Saving Ticket...' : 'Save WeighBridge Ticket'}
               </button>
             </div>
           </form>
@@ -316,110 +454,113 @@ export default function WeighBridgePage() {
       {/* View Ticket Modal */}
       {viewTicket && (
         <Dialog open={!!viewTicket} onOpenChange={() => setViewTicket(null)}>
-          <DialogContent className="max-w-[640px] w-[95vw] p-0 overflow-hidden [&>button.absolute]:hidden">
+          <DialogContent className="max-w-[680px] w-[95vw] p-0 overflow-hidden rounded-3xl border-0 shadow-2xl [&>button.absolute]:hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-teal-700 to-teal-600 text-white px-6 py-4 relative">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 py-4 relative">
               <button
                 onClick={() => setViewTicket(null)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
+                className="absolute top-3.5 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
                 aria-label="Close"
               >
                 <X className="w-4 h-4 text-white" />
               </button>
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Scale className="w-6 h-6 text-white" />
+                <div className="w-11 h-11 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center">
+                  <Scale className="w-6 h-6 text-emerald-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold">WB Ticket #{viewTicket.ticket_no}</h2>
-                  <p className="text-teal-200 text-xs mt-0.5">Created {format(new Date(viewTicket.created_at), 'dd MMM yyyy HH:mm')}</p>
+                  <h2 className="text-xl font-black font-mono tracking-tight">WB Ticket #{viewTicket.ticket_no}</h2>
+                  <p className="text-slate-300 text-xs mt-0.5">Created {format(new Date(viewTicket.created_at), 'dd MMM yyyy HH:mm')}</p>
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
-              {/* Nett Mass Hero */}
-              <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-8">
+            <div className="px-6 py-5 space-y-5 bg-slate-50/80">
+              {/* Nett Mass Hero Card */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg border border-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-6">
                   <div>
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">1st Mass</p>
-                    <p className="text-lg font-bold text-slate-700">{viewTicket.first_mass != null ? Number(viewTicket.first_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">1st Mass (Gross)</p>
+                    <p className="text-lg font-bold text-white font-mono">{viewTicket.first_mass != null ? Number(viewTicket.first_mass).toLocaleString() : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
                   </div>
-                  <div className="text-slate-300 text-xl font-light">−</div>
+                  <div className="text-slate-400 text-xl font-light">−</div>
                   <div>
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">2nd Mass</p>
-                    <p className="text-lg font-bold text-slate-700">{viewTicket.second_mass != null ? Number(viewTicket.second_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">2nd Mass (Tare)</p>
+                    <p className="text-lg font-bold text-white font-mono">{viewTicket.second_mass != null ? Number(viewTicket.second_mass).toLocaleString() : '—'} <span className="text-xs font-normal text-slate-400">kg</span></p>
                   </div>
-                  <div className="text-slate-300 text-xl font-light">=</div>
+                  <div className="text-slate-400 text-xl font-light">=</div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-teal-600 font-semibold uppercase tracking-wider">Nett Mass</p>
-                  <p className="text-2xl font-extrabold text-teal-700">{viewTicket.nett_mass != null ? Number(viewTicket.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'} <span className="text-sm font-normal text-teal-500">kg</span></p>
+                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Nett Mass</p>
+                  <p className="text-2xl font-black text-emerald-400 font-mono">{viewTicket.nett_mass != null ? Number(viewTicket.nett_mass).toLocaleString() : '—'} <span className="text-sm font-normal text-emerald-300">kg</span></p>
                 </div>
               </div>
 
-              {/* Vehicle & Driver Info */}
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <div className="space-y-3">
-                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vehicle Details</h3>
-                  <div className="space-y-2">
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Vehicle Logistics</h3>
+                  <div className="space-y-1.5 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Registration</span>
-                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.vehicle_reg || '—'}</span>
+                      <span className="text-slate-500">Registration</span>
+                      <span className="font-bold text-slate-900 font-mono">{viewTicket.vehicle_reg || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Haulier</span>
-                      <span className="text-sm font-semibold text-slate-800">{viewTicket.haulier_code || '—'}</span>
+                      <span className="text-slate-500">Haulier</span>
+                      <span className="font-bold text-slate-900">{viewTicket.haulier_code || 'HYPER'}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Trailer No</span>
-                      <span className="text-sm font-semibold text-slate-800">{viewTicket.trailer_number || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Product Code</span>
-                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.product_code || '—'}</span>
+                      <span className="text-slate-500">Trailer No</span>
+                      <span className="font-bold text-slate-900">{viewTicket.trailer_number || '—'}</span>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Driver & Timing</h3>
-                  <div className="space-y-2">
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Driver & Timestamps</h3>
+                  <div className="space-y-1.5 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Driver</span>
-                      <span className="text-sm font-semibold text-slate-800">{viewTicket.driver_name || '—'}</span>
+                      <span className="text-slate-500">Driver</span>
+                      <span className="font-bold text-slate-900">{viewTicket.driver_name || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Driver ID</span>
-                      <span className="text-sm font-semibold text-slate-800 font-mono">{viewTicket.driver_id || '—'}</span>
+                      <span className="text-slate-500">Time In</span>
+                      <span className="font-mono text-slate-800">{viewTicket.time_in ? format(new Date(viewTicket.time_in), 'dd MMM HH:mm') : '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Time In</span>
-                      <span className="text-sm font-semibold text-slate-800">{viewTicket.time_in ? format(new Date(viewTicket.time_in), 'dd MMM HH:mm') : '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Time Out</span>
-                      <span className="text-sm font-semibold text-slate-800">{viewTicket.time_out ? format(new Date(viewTicket.time_out), 'dd MMM HH:mm') : '—'}</span>
+                      <span className="text-slate-500">Time Out</span>
+                      <span className="font-mono text-slate-800">{viewTicket.time_out ? format(new Date(viewTicket.time_out), 'dd MMM HH:mm') : '—'}</span>
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Product Info */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1 text-xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product / Raw Material</span>
+                <p className="font-extrabold text-slate-900 text-sm">{viewTicket.product_name || '—'} <span className="font-mono font-bold text-blue-700">({viewTicket.product_code || '—'})</span></p>
+                <p className="text-[11px] text-slate-500">Supplier: {(viewTicket as any).suppliers?.name || '—'}</p>
               </div>
 
               {/* Comment */}
               {viewTicket.comment && (
-                <div className="bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Comment</p>
-                  <p className="text-sm text-slate-700">{viewTicket.comment}</p>
+                <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-xs text-amber-900">
+                  <span className="font-bold uppercase tracking-wider text-[10px] text-amber-700 block mb-0.5">Comment</span>
+                  {viewTicket.comment}
                 </div>
               )}
 
-              {/* Footer: Status + GRN Link */}
-              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${STATUS_STYLES[viewTicket.status]}`}>
-                  {viewTicket.status === 'linked' ? (
-                    <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Linked{viewTicket.grn_number ? ` — ${viewTicket.grn_number}` : ''}</span>
-                  ) : viewTicket.status}
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_STYLES[viewTicket.status]?.bg || ''} ${STATUS_STYLES[viewTicket.status]?.color || ''} ${STATUS_STYLES[viewTicket.status]?.border || ''}`}>
+                  {viewTicket.status === 'linked' ? `Linked to ${viewTicket.grn_number || 'GRN'}` : STATUS_STYLES[viewTicket.status]?.label}
                 </span>
-                <span className="text-xs text-slate-400">{viewTicket.driver_signed ? '✓ Driver signed' : 'Not signed'}</span>
+                <button
+                  onClick={() => setViewTicket(null)}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </DialogContent>
