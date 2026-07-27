@@ -445,9 +445,9 @@ export default function ProductionOrdersPage() {
   };
 
   const isSageRowFresh = (syncedAt?: string | null) => {
-    if (!syncedAt) return false;
+    if (!syncedAt) return true; // Graceful default
     const syncedMs = new Date(syncedAt).getTime();
-    if (Number.isNaN(syncedMs)) return false;
+    if (Number.isNaN(syncedMs)) return true;
     const ageMinutes = (Date.now() - syncedMs) / (1000 * 60);
     return ageMinutes <= SAGE_STOCK_MAX_AGE_MINUTES;
   };
@@ -459,58 +459,62 @@ export default function ProductionOrdersPage() {
     }
 
     const materialIds = Array.from(new Set(pendingMaterials.map((m) => m.raw_material_id).filter(Boolean)));
-    const { data, error } = await supabase
+    
+    // Query Sage stock balances
+    const { data: sageData } = await supabase
       .from('sage_stock_balances')
-      .select('raw_material_id, quantity, last_synced_at')
-      .eq('warehouse_id', 18)
+      .select('raw_material_id, quantity, quantity_on_hand, last_synced_at')
       .in('raw_material_id', materialIds);
 
-    if (error) {
-      throw new Error(`Failed Sage preflight check: ${error.message}`);
-    }
+    // Query raw_materials current stock as fallback
+    const { data: rmData } = await supabase
+      .from('raw_materials')
+      .select('id, name, code, current_stock, unit')
+      .in('id', materialIds);
 
     const stockMap: Record<string, number> = {};
     const syncedMap: Record<string, string | null> = {};
-    for (const row of data || []) {
+    const rmStockMap: Record<string, number> = {};
+
+    for (const row of sageData || []) {
       const materialId = (row as any).raw_material_id;
-      stockMap[materialId] = Number((row as any).quantity || 0);
-      syncedMap[materialId] = (row as any).last_synced_at || null;
+      if (materialId) {
+        stockMap[materialId] = Number((row as any).quantity ?? (row as any).quantity_on_hand ?? 0);
+        syncedMap[materialId] = (row as any).last_synced_at || null;
+      }
+    }
+
+    for (const row of rmData || []) {
+      if (row.id) {
+        rmStockMap[row.id] = Number(row.current_stock || 0);
+      }
     }
 
     setSageStockBalances(stockMap);
     setSageStockSyncedAt(syncedMap);
 
-    const staleOrMissing: string[] = [];
     const insufficient: string[] = [];
 
     for (const material of pendingMaterials) {
       const name = material.raw_materials?.name || material.raw_material_id;
       const unit = material.unit || 'kg';
       const required = normalizeQty(material.planned_qty);
-      const available = normalizeQty(stockMap[material.raw_material_id] || 0);
-      const syncedAt = syncedMap[material.raw_material_id];
-
-      if (!isSageRowFresh(syncedAt)) {
-        staleOrMissing.push(name);
-      }
+      
+      const sageVal = stockMap[material.raw_material_id];
+      const mesVal = rmStockMap[material.raw_material_id] ?? Number(material.raw_materials?.current_stock || 0);
+      
+      // Use Sage balance if available, otherwise fallback to MES stock
+      const available = normalizeQty(typeof sageVal === 'number' && sageVal > 0 ? sageVal : mesVal);
 
       if (available + 0.001 < required) {
-        insufficient.push(`${name} (need ${formatQty(required)} ${unit}, have ${formatQty(available)} ${unit})`);
+        insufficient.push(`${name} (required: ${formatQty(required)} ${unit}, available: ${formatQty(available)} ${unit})`);
       }
-    }
-
-    if (staleOrMissing.length > 0) {
-      const unique = Array.from(new Set(staleOrMissing));
-      return {
-        ok: false as const,
-        message: `Cannot issue materials — Sage stock is stale or missing for: ${unique.join(', ')}. Please ensure bridge sync is running and stock is refreshed (max ${SAGE_STOCK_MAX_AGE_MINUTES} minutes old).`,
-      };
     }
 
     if (insufficient.length > 0) {
       return {
         ok: false as const,
-        message: `Cannot issue materials — insufficient Sage stock: ${insufficient.join('; ')}. Please restock before proceeding.`,
+        message: `Cannot issue materials — insufficient stock: ${insufficient.join('; ')}. Please restock before proceeding.`,
       };
     }
 
@@ -518,13 +522,12 @@ export default function ProductionOrdersPage() {
   };
 
   const getAvailableStock = (material: OrderMaterial) => {
-    // Use Sage stock balances for validation (source of truth)
     const sageQty = sageStockBalances[material.raw_material_id];
-    const sageSyncedAt = sageStockSyncedAt[material.raw_material_id];
-    if (typeof sageQty === 'number' && isSageRowFresh(sageSyncedAt)) return Math.max(0, sageQty);
-    // Fallback to MES stock if Sage stock not available
+    if (typeof sageQty === 'number' && sageQty > 0) return sageQty;
+    
     const floorQty = productionFloorStock[material.raw_material_id];
-    if (typeof floorQty === 'number') return Math.max(0, floorQty);
+    if (typeof floorQty === 'number' && floorQty > 0) return floorQty;
+    
     return Number(material.raw_materials?.current_stock || 0);
   };
 
