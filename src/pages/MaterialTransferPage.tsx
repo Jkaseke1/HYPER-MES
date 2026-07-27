@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck, Trash2 } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -416,72 +416,71 @@ export default function MaterialTransferPage() {
 
       {/* Create Transfer Modal */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="w-[96vw] max-w-6xl p-0 max-h-[94vh] overflow-hidden">
-          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
-            <div className="flex items-center justify-between pr-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <Truck className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight">New Material Transfer</h2>
-                  <p className="text-slate-400 text-xs">Transfer raw materials from warehouse to production</p>
-                </div>
+        <DialogContent className="w-[94vw] max-w-5xl p-0 max-h-[85vh] flex flex-col overflow-hidden bg-white rounded-2xl shadow-2xl border border-slate-200">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-md">
+                <Truck className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">
-                Draft
-              </span>
+              <div>
+                <h2 className="text-lg font-extrabold tracking-tight">New Material Transfer Request</h2>
+                <p className="text-slate-400 text-xs">Transfer raw materials from warehouse into production buffer</p>
+              </div>
             </div>
-            <button
-              onClick={() => setShowCreate(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
-              <Eye className="w-4 h-4 text-white" />
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                Draft Transfer
+              </span>
+              <button
+                onClick={() => setShowCreate(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors text-slate-400 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="p-4 md:p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 overflow-y-auto max-h-[calc(94vh-72px)]">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
             {/* Shared Header Fields */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-              <div className="xl:col-span-8 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                    <p className="text-sm font-semibold text-slate-800">Shared Transfer Info</p>
+                    <Calendar className="w-4 h-4 text-teal-600" />
+                    <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Transfer Details & Purpose</p>
                   </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">All Items</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Transfer Date *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Transfer Date *</label>
                     <input
                       type="date"
                       value={sharedForm.transfer_date}
                       onChange={(e) => setSharedForm({ ...sharedForm, transfer_date: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none bg-white"
                       required
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Purpose *</label>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Purpose / Reason *</label>
                     <input
                       type="text"
                       value={sharedForm.purpose}
                       onChange={(e) => setSharedForm({ ...sharedForm, purpose: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      placeholder="e.g., For Batch BATCH-2026-123"
+                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none bg-white"
+                      placeholder="e.g., For Batch BATCH-2026-000003"
                       required
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Production Order (Optional)</label>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Production Order (Optional)</label>
                     <select
                       value={sharedForm.production_order_id}
                       onChange={(e) => setSharedForm({ ...sharedForm, production_order_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none bg-white"
                     >
                       <option value="">Select order (optional)</option>
                       {productionOrders.map((order) => (
@@ -492,112 +491,113 @@ export default function MaterialTransferPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Notes</label>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Notes</label>
                     <input
                       type="text"
                       value={sharedForm.notes}
                       onChange={(e) => setSharedForm({ ...sharedForm, notes: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none bg-white"
                       placeholder="Additional notes..."
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="xl:col-span-4 rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
+              {/* Transfer Route Visual Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm flex flex-col justify-between">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
-                    <ArrowRight className="w-4 h-4 text-slate-600" />
-                    <p className="text-sm font-semibold text-slate-800">Transfer Route</p>
+                    <ArrowRight className="w-4 h-4 text-teal-600" />
+                    <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Transfer Route</p>
                   </div>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">Auto</span>
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">Auto Route</span>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                    <p className="text-xs text-slate-500 mb-1">From Warehouse</p>
-                    <p className="text-sm font-semibold text-slate-800">Raw Materials Warehouse</p>
+                <div className="space-y-2 text-xs">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">From Source</p>
+                    <p className="text-xs font-bold text-slate-900 mt-0.5">Raw Materials Warehouse (RM - 18)</p>
                   </div>
                   <div className="flex justify-center">
-                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                    <ArrowRight className="w-4 h-4 text-teal-600" />
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                    <p className="text-xs text-slate-500 mb-1">To Location</p>
-                    <p className="text-sm font-semibold text-slate-800">Production Floor (via Buffer)</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">To Destination</p>
+                    <p className="text-xs font-bold text-slate-900 mt-0.5">Production Floor (via Buffer)</p>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Transfer Line Items */}
-            <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/50 to-white shadow-sm p-3 space-y-2.5">
-              <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+            <div className="rounded-2xl border border-teal-200/80 bg-white p-4 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Package className="w-4 h-4 text-indigo-600" />
-                  <p className="text-sm font-semibold text-slate-800">Materials to Transfer</p>
+                  <Package className="w-4 h-4 text-teal-600" />
+                  <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Materials to Transfer</p>
                 </div>
                 <button
                   onClick={addTransferLine}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Material
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  Add Material Line
                 </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {transferLines.map((line, index) => {
                   const material = rawMaterials.find(m => m.id === line.raw_material_id);
                   const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
                   const insufficient = line.quantity > rmBalance;
                   return (
-                    <div key={line.id} className="grid grid-cols-12 gap-2 items-start p-2.5 rounded-lg border border-slate-200 bg-white">
-                      <div className="col-span-1 flex items-center justify-center pt-2">
-                        <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                    <div key={line.id} className="grid grid-cols-12 gap-3 items-center p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                      <div className="col-span-1 flex items-center justify-center">
+                        <span className="text-xs font-extrabold text-slate-400">#{index + 1}</span>
                       </div>
                       <div className="col-span-6 space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-500">Raw Material *</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Raw Material *</label>
                         <select
                           value={line.raw_material_id}
                           onChange={(e) => updateTransferLine(line.id, 'raw_material_id', e.target.value)}
-                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-500 bg-white outline-none"
                         >
-                          <option value="">Select material</option>
+                          <option value="">Select raw material</option>
                           {rawMaterials.map((mat) => {
                             const bal = rmWarehouseBalances[mat.id] ?? 0;
                             return (
                               <option key={mat.id} value={mat.id}>
-                                {mat.name} ({mat.code}) - Stock: {bal.toLocaleString()} {mat.unit}
+                                {mat.name} ({mat.code}) — Stock: {bal.toLocaleString()} {mat.unit}
                               </option>
                             );
                           })}
                         </select>
                       </div>
-                      <div className="col-span-3 space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-500">Quantity *</label>
+                      <div className="col-span-4 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transfer Qty (kg) *</label>
                         <input
                           type="number"
                           value={line.quantity || ''}
                           onChange={(e) => updateTransferLine(line.id, 'quantity', e.target.value ? parseFloat(e.target.value) : 0)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white ${
-                            insufficient ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                          className={`w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-teal-500 outline-none bg-white ${
+                            insufficient ? 'border-red-400 bg-red-50 text-red-900' : 'border-slate-300'
                           }`}
                           placeholder="0.00"
                           step="0.01"
                         />
                         {line.raw_material_id && insufficient && (
-                          <p className="text-[10px] text-red-600 mt-0.5">⚠ Exceeds stock ({rmBalance.toLocaleString()} {material?.unit})</p>
+                          <p className="text-[10px] text-red-600 font-bold mt-0.5">⚠ Exceeds RM Stock ({rmBalance.toLocaleString()} {material?.unit})</p>
                         )}
                       </div>
-                      <div className="col-span-2 flex items-end justify-end pt-5">
+                      <div className="col-span-1 flex items-center justify-center pt-4">
                         <button
                           onClick={() => removeTransferLine(line.id)}
                           disabled={transferLines.length === 1}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="p-2 hover:bg-red-100 text-red-600 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           title="Remove line"
                         >
-                          <Trash2 className="w-4 h-4 text-red-600" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -605,11 +605,16 @@ export default function MaterialTransferPage() {
                 })}
               </div>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-3 pt-2">
+          <div className="sticky bottom-0 z-30 bg-white border-t border-slate-200 px-6 py-3.5 flex items-center justify-between rounded-b-2xl shadow-lg">
+            <span className="text-xs text-slate-500 font-medium">
+              {transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Material Line(s) Ready
+            </span>
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowCreate(false)}
-                className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
+                className="px-5 py-2.5 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 text-xs font-bold transition-colors"
               >
                 Cancel
               </button>
@@ -620,155 +625,165 @@ export default function MaterialTransferPage() {
                   !sharedForm.purpose ||
                   transferLines.filter(l => l.raw_material_id && l.quantity > 0).length === 0
                 }
-                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center text-sm font-medium"
+                className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs transition-all shadow-md disabled:opacity-50"
               >
-                {saving ? 'Creating...' : `Create ${transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Transfer(s)`}
+                {saving ? 'Creating Transfers...' : `Create ${transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Transfer(s)`}
               </button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Success Message */}
+      {/* Success Message Banner */}
       {successMessage && (
-        <div className="fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 z-50">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <p className="text-sm font-medium text-green-800">{successMessage}</p>
+        <div className="fixed top-4 right-4 bg-emerald-500 text-slate-950 font-bold border border-emerald-400 rounded-2xl p-4 flex items-center gap-3 shadow-2xl z-50">
+          <CheckCircle className="w-5 h-5 text-slate-950" />
+          <p className="text-xs">{successMessage}</p>
         </div>
       )}
 
-      {/* View Transfer Modal */}
+      {/* View Transfer Details & Approval Modal */}
       <Dialog open={viewTransfer !== null} onOpenChange={() => setViewTransfer(null)}>
-        <DialogContent className="max-w-4xl p-0">
-          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
-            <div className="flex items-center justify-between pr-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center shadow-lg">
-                  <Eye className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight">Transfer Details</h2>
-                  <p className="text-slate-400 text-xs">View material transfer information</p>
-                </div>
+        <DialogContent className="w-[94vw] max-w-5xl p-0 max-h-[85vh] flex flex-col overflow-hidden bg-white rounded-2xl shadow-2xl border border-slate-200">
+          <div className="shrink-0 border-b bg-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                <Eye className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">
-                {viewTransfer?.status || 'pending'}
-              </span>
+              <div>
+                <h2 className="text-lg font-extrabold tracking-tight">Material Transfer Audit & Approval</h2>
+                <p className="text-slate-400 text-xs">Verify transfer parameters, buffer status, and sign-off</p>
+              </div>
             </div>
-            <button
-              onClick={() => setViewTransfer(null)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
-              <Eye className="w-4 h-4 text-white" />
-            </button>
+            <div className="flex items-center gap-3">
+              <StatusBadge status={viewTransfer?.status || 'pending'} />
+              <button
+                onClick={() => setViewTransfer(null)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors text-slate-400 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="p-5 space-y-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
             {viewTransfer && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Material</p>
-                    <p className="mt-1 text-sm font-bold text-slate-900">{viewTransfer.raw_materials?.name || '-'}</p>
-                    <p className="text-xs text-slate-500">{viewTransfer.raw_materials?.code || ''}</p>
+                {/* Top Stat Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Material Name</p>
+                    <p className="mt-1 text-base font-black text-slate-900">{viewTransfer.raw_materials?.name || '-'}</p>
+                    <p className="text-xs font-mono font-bold text-teal-700">{viewTransfer.raw_materials?.code || ''}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Quantity</p>
-                    <p className="mt-1 text-xl font-bold text-slate-900">
-                      {Math.abs(viewTransfer.quantity || 0).toLocaleString()} {viewTransfer.unit || 'kg'}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Transfer Quantity</p>
+                    <p className="mt-1 text-2xl font-black text-slate-900 font-mono">
+                      {Math.abs(viewTransfer.quantity || 0).toLocaleString()} <span className="text-xs font-semibold text-slate-600">{viewTransfer.unit || 'kg'}</span>
                     </p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Status</p>
-                    <div className="mt-1">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Current Status</p>
+                    <div className="mt-1.5">
                       <StatusBadge status={viewTransfer.status || 'pending'} />
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                    <ArrowRight className="w-4 h-4 text-teal-600" />
-                    <h3 className="text-sm font-semibold text-slate-800">Transfer Route</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-600">From Warehouse</label>
-                      <p className="text-sm text-slate-800">{viewTransfer.warehouses?.name || '-'}</p>
+                {/* 2-Column Main Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column: Route & Info */}
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-sm">
+                      <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                        <ArrowRight className="w-4 h-4 text-teal-600" />
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Transfer Route</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-slate-400 block font-medium">From Warehouse:</span>
+                          <span className="font-bold text-slate-900">{viewTransfer.warehouses?.name || 'Raw Materials Warehouse'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block font-medium">To Location:</span>
+                          <span className="font-bold text-slate-900">{viewTransfer.to_location || 'Production Floor'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block font-medium">Transfer Date:</span>
+                          <span className="font-bold text-slate-900">
+                            {viewTransfer.transfer_date || viewTransfer.created_at ? format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy') : '-'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block font-medium">Purpose:</span>
+                          <span className="font-bold text-slate-900">{viewTransfer.purpose || '-'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-600">To Location</label>
-                      <p className="text-sm text-slate-800">{viewTransfer.to_location || 'Production Floor'}</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-600">Transfer Date</label>
-                      <p className="text-sm text-slate-800">
-                        {viewTransfer.transfer_date || viewTransfer.created_at ? format(new Date(viewTransfer.transfer_date || viewTransfer.created_at), 'dd MMM yyyy') : '-'}
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-600">Purpose</label>
-                      <p className="text-sm text-slate-800">{viewTransfer.purpose || '-'}</p>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                    <Factory className="w-4 h-4 text-indigo-600" />
-                    <h3 className="text-sm font-semibold text-slate-800">Additional Information</h3>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-600">Notes</label>
-                    <p className="text-sm text-slate-800">{viewTransfer.notes || 'No additional notes'}</p>
-                  </div>
-                  {viewTransfer.rejection_reason && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-red-800 mb-1">Rejection Reason</p>
-                      <p className="text-sm text-red-700">{viewTransfer.rejection_reason}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-sm">
+                      <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                        <Factory className="w-4 h-4 text-indigo-600" />
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Notes & Remarks</h3>
+                      </div>
+                      <p className="text-xs text-slate-800 font-medium">{viewTransfer.notes || 'No additional notes recorded.'}</p>
+                      {viewTransfer.rejection_reason && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 mt-2">
+                          <p className="text-xs font-bold text-red-800 mb-1">Rejection Reason</p>
+                          <p className="text-xs text-red-700 font-medium">{viewTransfer.rejection_reason}</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-
-                {viewTransfer.status === 'in_buffer' && (
-                  <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm p-3">
-                    <MaterialTransferApprovalButtons
-                      transferId={viewTransfer.id}
-                      currentStatus={viewTransfer.status}
-                      quantity={viewTransfer.quantity}
-                      rawMaterialId={viewTransfer.raw_material_id}
-                      fromWarehouseId={viewTransfer.from_warehouse_id}
-                      onApproved={() => {
-                        fetchData();
-                        setViewTransfer(null);
-                      }}
-                      onRejected={() => {
-                        fetchData();
-                        setViewTransfer(null);
-                      }}
-                    />
                   </div>
-                )}
 
-                <div className="rounded-xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-3 space-y-2.5">
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                    <Calendar className="w-4 h-4 text-slate-600" />
-                    <h3 className="text-sm font-semibold text-slate-800">Approval History</h3>
+                  {/* Right Column: Approval Action & History Timeline */}
+                  <div className="space-y-4">
+                    {/* Approval Action Panel */}
+                    {viewTransfer.status === 'in_buffer' && (
+                      <div className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm p-5 space-y-3">
+                        <div className="text-xs font-extrabold uppercase tracking-wider text-teal-800 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-teal-600" /> Accept Stock to Production Floor
+                        </div>
+                        <MaterialTransferApprovalButtons
+                          transferId={viewTransfer.id}
+                          currentStatus={viewTransfer.status}
+                          quantity={viewTransfer.quantity}
+                          rawMaterialId={viewTransfer.raw_material_id}
+                          fromWarehouseId={viewTransfer.from_warehouse_id}
+                          onApproved={() => {
+                            fetchData();
+                            setViewTransfer(null);
+                          }}
+                          onRejected={() => {
+                            fetchData();
+                            setViewTransfer(null);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Approval Timeline Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+                      <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                        <Calendar className="w-4 h-4 text-slate-600" />
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Approval Audit History</h3>
+                      </div>
+                      <ApprovalHistory entityType="material_transfer" entityId={viewTransfer.id} />
+                    </div>
                   </div>
-                  <ApprovalHistory entityType="material_transfer" entityId={viewTransfer.id} />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    onClick={() => setViewTransfer(null)}
-                    className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
-                  >
-                    Close
-                  </button>
                 </div>
               </>
             )}
+          </div>
+
+          <div className="sticky bottom-0 z-30 bg-white border-t border-slate-200 px-6 py-3.5 flex justify-end rounded-b-2xl shadow-lg">
+            <button
+              onClick={() => setViewTransfer(null)}
+              className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors"
+            >
+              Close Window
+            </button>
           </div>
         </DialogContent>
       </Dialog>
