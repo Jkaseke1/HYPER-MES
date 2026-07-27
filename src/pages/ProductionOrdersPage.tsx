@@ -1325,99 +1325,127 @@ export default function ProductionOrdersPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center shrink-0">
-                <Package className="w-4 h-4 text-teal-600" />
+          {/* Top Summary Cards Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="rounded-2xl border border-teal-200/80 bg-gradient-to-br from-teal-500/10 via-emerald-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
+              <div className="w-10 h-10 rounded-xl bg-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-teal-500/20">
+                <Package className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Expected Output</p>
-                <p className="mt-0.5 text-xl font-bold text-teal-900">{Number(form.planned_qty || 0).toFixed(2)} kg</p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                <Layers className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Estimated Bags</p>
-                <p className="mt-0.5 text-xl font-bold text-blue-900">
-                  {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 25) || 0)}
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-teal-800">Expected Output</p>
+                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {Number(form.planned_qty || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-semibold text-teal-700">kg</span>
                 </p>
+                <p className="text-[11px] font-medium text-slate-500">{(Number(form.planned_qty || 0) / 1000).toFixed(3)} Tonnes</p>
               </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-slate-500/10 flex items-center justify-center shrink-0">
-                <ClipboardList className="w-4 h-4 text-slate-600" />
+
+            <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                <Layers className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">BOM Ingredients</p>
-                <p className="mt-0.5 text-xl font-bold text-slate-900">{bomPreview.length}</p>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-blue-800">Estimated Bags</p>
+                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 50) || 0)} <span className="text-xs font-semibold text-blue-700">Bags</span>
+                </p>
+                <p className="text-[11px] font-medium text-slate-500">Bag Unit Size: {form.unit_size || 50} kg</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-br from-purple-500/10 via-slate-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
+              <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-purple-800">BOM Ingredients</p>
+                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {bomPreview.length} <span className="text-xs font-semibold text-purple-700">Raw Items</span>
+                </p>
+                <p className="text-[11px] font-medium text-slate-500">Auto-scaled to batch size</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+          {/* Core Order Setup Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-600" />
-                <h3 className="text-sm font-semibold text-slate-800">Order Setup</h3>
+                <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">1</div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Primary Production Batch Details</h3>
               </div>
-              <Badge variant="outline" className="text-[11px]">Core Details</Badge>
+              <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
+                Auto-Sequenced
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className={labelCls}>Batch Number</label>
-                <input
-                  type="text"
-                  value={form.batch_number}
-                  onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
-                  className={inputCls}
-                  required
-                />
+                <label className={labelCls}>Batch Sequence #</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.batch_number}
+                    onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
+                    className={`${inputCls} font-mono font-bold bg-slate-50 text-teal-900 border-teal-300`}
+                    required
+                    readOnly
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-teal-600 bg-teal-100 px-2 py-0.5 rounded">
+                    LOCKED
+                  </div>
+                </div>
               </div>
+
               <div>
-                <label className={labelCls}>Formulation</label>
+                <label className={labelCls}>Product Formulation *</label>
                 <select
                   value={form.formulation_id}
                   onChange={(e) => onFormulationChange(e.target.value)}
-                  className={inputCls}
+                  className={`${inputCls} font-bold text-slate-900 focus:ring-2 focus:ring-teal-500`}
                   required
                 >
                   <option value="">Select formulation</option>
                   {formulations.map((f) => (
-                    <option key={f.id} value={f.id}>{f.code} - {f.name}</option>
+                    <option key={f.id} value={f.id}>{f.code} — {f.name}</option>
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className={labelCls}>Production Line *</label>
                 <select
                   value={form.machine_id}
                   onChange={(e) => setForm({ ...form, machine_id: e.target.value })}
-                  className={`${inputCls} ${!form.machine_id ? 'border-red-300' : ''}`}
+                  className={`${inputCls} font-medium ${!form.machine_id ? 'border-amber-300 bg-amber-50/50' : 'border-slate-300'}`}
                   required
                 >
                   <option value="">Select production line (required)</option>
                   {productionLines.map((m) => (
-                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                    <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className={labelCls}>Planned Quantity</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.planned_qty}
-                  onChange={(e) => setForm({ ...form, planned_qty: parseFloat(e.target.value) || 0 })}
-                  className={inputCls}
-                  required
-                />
+                <label className={labelCls}>Planned Batch Quantity *</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.planned_qty}
+                    onChange={(e) => setForm({ ...form, planned_qty: parseFloat(e.target.value) || 0 })}
+                    className={`${inputCls} font-mono font-bold text-base pr-16`}
+                    required
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                    {form.unit || 'kg'}
+                  </div>
+                </div>
               </div>
+
               <div>
-                <label className={labelCls}>Unit</label>
+                <label className={labelCls}>Measurement Unit</label>
                 <select
                   value={form.unit}
                   onChange={(e) => setForm({ ...form, unit: e.target.value })}
@@ -1426,35 +1454,34 @@ export default function ProductionOrdersPage() {
                   <option value="kg">Kilograms (kg)</option>
                   <option value="ton">Tonnes (ton)</option>
                   <option value="bags">Bags</option>
-                  <option value="liters">Liters</option>
                 </select>
               </div>
+
               <div>
-                <label className={labelCls}>Unit Size (Bag)</label>
+                <label className={labelCls}>Bag Unit Size (kg)</label>
                 <select
                   value={form.unit_size}
                   onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
-                  className={inputCls}
+                  className={`${inputCls} font-bold`}
                 >
-                  <option value="5">5 kg</option>
-                  <option value="8">8 kg</option>
-                  <option value="10">10 kg</option>
-                  <option value="20">20 kg</option>
-                  <option value="25">25 kg</option>
-                  <option value="40">40 kg</option>
-                  <option value="50">50 kg</option>
+                  <option value="50">50 kg Bag</option>
+                  <option value="25">25 kg Bag</option>
+                  <option value="20">20 kg Bag</option>
+                  <option value="10">10 kg Bag</option>
+                  <option value="5">5 kg Bag</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+          {/* Scheduling & Workforce Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-semibold text-slate-800">Scheduling & Workforce</h3>
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold text-xs">2</div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Scheduling, Shift & Workforce Allocation</h3>
               </div>
-              <Badge variant="outline" className="text-[11px]">Dates, Shift & Team</Badge>
+              <span className="text-xs font-semibold text-slate-500">Optional Shift Setup</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1465,14 +1492,15 @@ export default function ProductionOrdersPage() {
                   onChange={(e) => setForm({ ...form, priority: e.target.value as any })}
                   className={inputCls}
                 >
-                  <option value="low">Low</option>
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
+                  <option value="normal">Normal Priority</option>
+                  <option value="high">High Priority</option>
                   <option value="urgent">Urgent</option>
+                  <option value="low">Low Priority</option>
                 </select>
               </div>
+
               <div>
-                <label className={labelCls}>Operator</label>
+                <label className={labelCls}>Plant Operator</label>
                 <select
                   value={form.operator_id}
                   onChange={(e) => setForm({ ...form, operator_id: e.target.value })}
@@ -1484,6 +1512,19 @@ export default function ProductionOrdersPage() {
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className={labelCls}>Shift</label>
+                <select
+                  value={form.shift}
+                  onChange={(e) => setForm({ ...form, shift: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="Day Shift">Day Shift (07:00 – 17:00)</option>
+                  <option value="Night Shift">Night Shift (17:00 – 05:00)</option>
+                </select>
+              </div>
+
               <div>
                 <label className={labelCls}>Planned Start Date</label>
                 <input
@@ -1493,6 +1534,7 @@ export default function ProductionOrdersPage() {
                   className={inputCls}
                 />
               </div>
+
               <div>
                 <label className={labelCls}>Planned End Date</label>
                 <input
@@ -1502,74 +1544,18 @@ export default function ProductionOrdersPage() {
                   className={inputCls}
                 />
               </div>
+
               <div>
-                <label className={labelCls}>Production Plan (Optional)</label>
-                <select
-                  value={form.plan_id}
-                  onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">Select production plan</option>
-                  {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>{plan.plan_number}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Shift</label>
-                <select
-                  value={form.shift}
-                  onChange={(e) => setForm({ ...form, shift: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="Day Shift">Day Shift</option>
-                  <option value="Night Shift">Night Shift</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Operators</label>
-                <input
-                  type="text"
-                  value={form.operators}
-                  onChange={(e) => setForm({ ...form, operators: e.target.value })}
-                  className={inputCls}
-                  placeholder="e.g. A. Muza / K. Saini"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Labour Force</label>
+                <label className={labelCls}>Labour Force (Crew)</label>
                 <input
                   type="number"
                   min="0"
                   value={form.labour_force}
                   onChange={(e) => setForm({ ...form, labour_force: e.target.value })}
                   className={inputCls}
-                  placeholder="e.g. 5"
+                  placeholder="e.g. 5 workers"
                 />
               </div>
-              <div>
-                <label className={labelCls}>Week Number</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="53"
-                  value={form.week_number}
-                  onChange={(e) => setForm({ ...form, week_number: e.target.value })}
-                  className={inputCls}
-                  placeholder="e.g. 15"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className={labelCls}>Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className={inputCls}
-                rows={3}
-                placeholder="Add any notes or special instructions..."
-              />
             </div>
           </div>
 
