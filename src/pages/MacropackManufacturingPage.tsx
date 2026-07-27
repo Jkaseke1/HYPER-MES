@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Eye, Play, CheckCircle, AlertTriangle, Package, Clock, Factory, Send, ThumbsUp, XCircle, RotateCcw, Loader2 } from 'lucide-react';
+import { Plus, Search, Eye, Play, CheckCircle, AlertTriangle, Package, Clock, Factory, Send, ThumbsUp, XCircle, RotateCcw, Loader2, Award, Sparkles, SlidersHorizontal, ShieldCheck, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import { validateStockAvailability, StockError } from '../lib/stockValidation';
 import StockErrorBanner from '../components/stock/StockErrorBanner';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
+import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
 import MacropackReconReport from '../components/reports/MacropackReconReport';
 
 /* ── Types ── */
@@ -72,16 +73,16 @@ interface RawMaterial {
 const TABS = ['Manufacturing Orders', 'Macropack BOMs', 'Premix & Pack Recon Report'] as const;
 type TabType = typeof TABS[number];
 
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-slate-100 text-slate-600 border-slate-200',
-  PENDING_RM: 'bg-amber-50 text-amber-700 border-amber-200',
-  PENDING_SUPERVISOR: 'bg-amber-50 text-amber-700 border-amber-200',
-  APPROVED: 'bg-blue-50 text-blue-700 border-blue-200',
-  PLANNED: 'bg-blue-50 text-blue-700 border-blue-200',
-  IN_PROGRESS: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  COMPLETED: 'bg-teal-50 text-teal-700 border-teal-200',
-  CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-  REJECTED: 'bg-red-50 text-red-700 border-red-200',
+const STATUS_STYLES: Record<string, { cls: string; label: string; icon: any }> = {
+  DRAFT: { cls: 'bg-slate-100 text-slate-700 border-slate-300', label: 'Draft Order', icon: Clock },
+  PENDING_RM: { cls: 'bg-amber-50 text-amber-800 border-amber-300', label: 'Pending RM Approval', icon: AlertTriangle },
+  PENDING_SUPERVISOR: { cls: 'bg-amber-50 text-amber-800 border-amber-300', label: 'Pending Supervisor', icon: Clock },
+  APPROVED: { cls: 'bg-blue-50 text-blue-800 border-blue-300', label: 'Approved', icon: CheckCircle },
+  PLANNED: { cls: 'bg-blue-50 text-blue-800 border-blue-300', label: 'Planned', icon: CheckCircle },
+  IN_PROGRESS: { cls: 'bg-emerald-50 text-emerald-800 border-emerald-300 animate-pulse', label: 'In Progress', icon: Factory },
+  COMPLETED: { cls: 'bg-teal-100 text-teal-900 border-teal-300', label: 'Completed', icon: CheckCircle },
+  CANCELLED: { cls: 'bg-red-50 text-red-800 border-red-300', label: 'Cancelled', icon: XCircle },
+  REJECTED: { cls: 'bg-red-50 text-red-800 border-red-300', label: 'Rejected', icon: XCircle },
 };
 
 const emptyBomForm = {
@@ -188,6 +189,15 @@ export default function MacropackManufacturingPage() {
     );
   }, [orders, search]);
 
+  const filteredBoms = useMemo(() => {
+    if (!search) return boms;
+    const q = search.toLowerCase();
+    return boms.filter(b =>
+      b.macropack_name.toLowerCase().includes(q) ||
+      b.macropack_code.toLowerCase().includes(q)
+    );
+  }, [boms, search]);
+
   const orderStats = useMemo(() => ({
     total: orders.length,
     pendingApproval: orders.filter(o => o.status === 'PENDING_RM' || o.status === 'PENDING_SUPERVISOR').length,
@@ -195,7 +205,6 @@ export default function MacropackManufacturingPage() {
     completed: orders.filter(o => o.status === 'COMPLETED').length,
   }), [orders]);
 
-  // Update preview when BOM or units change
   async function updatePreview(bomId: string, units: string) {
     if (!bomId || !units || parseInt(units) <= 0) {
       setPreviewIngredients([]);
@@ -243,33 +252,39 @@ export default function MacropackManufacturingPage() {
     }
   }
 
-  /* ── Approval handlers ── */
   async function handleApprovalAction(action: 'submit' | 'approve_rm' | 'approve_supervisor' | 'reject' | 'revise') {
     if (!selectedOrder) return;
     setApprovalSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      let update: any = {};
+      const now = new Date().toISOString();
+      let updatePayload: any = {};
+
       if (action === 'submit') {
-        update = { status: 'PENDING_RM', submitted_by: user?.id, submitted_at: new Date().toISOString() };
+        updatePayload = { status: 'PENDING_RM', submitted_by: user?.id, submitted_at: now };
       } else if (action === 'approve_rm') {
-        update = { status: 'PENDING_SUPERVISOR', rm_approved_by: user?.id, rm_approved_at: new Date().toISOString() };
+        updatePayload = { status: 'PENDING_SUPERVISOR', rm_approved_by: user?.id, rm_approved_at: now };
       } else if (action === 'approve_supervisor') {
-        update = { status: 'APPROVED', supervisor_approved_by: user?.id, supervisor_approved_at: new Date().toISOString() };
+        updatePayload = { status: 'APPROVED', supervisor_approved_by: user?.id, supervisor_approved_at: now };
       } else if (action === 'reject') {
-        if (!rejectionReason.trim()) { alert('Please provide a rejection reason.'); setApprovalSaving(false); return; }
-        update = { status: 'REJECTED', rejection_reason: rejectionReason };
+        updatePayload = { status: 'REJECTED', rejection_reason: rejectionReason || 'Rejected by approver' };
       } else if (action === 'revise') {
-        update = { status: 'DRAFT', rejection_reason: null, rm_approved_by: null, rm_approved_at: null, supervisor_approved_by: null, supervisor_approved_at: null, submitted_by: null, submitted_at: null };
+        updatePayload = { status: 'DRAFT', rejection_reason: null };
       }
-      const { error } = await supabase.from('macropack_manufacture_orders').update(update).eq('id', selectedOrder.id);
+
+      const { error } = await supabase
+        .from('macropack_manufacture_orders')
+        .update(updatePayload)
+        .eq('id', selectedOrder.id);
+
       if (error) throw error;
+
+      setSelectedOrder({ ...selectedOrder, ...updatePayload });
       setShowRejectModal(false);
       setRejectionReason('');
-      setOrderDetailModalOpen(false);
       fetchData();
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
     } finally {
       setApprovalSaving(false);
     }
@@ -279,26 +294,24 @@ export default function MacropackManufacturingPage() {
     setSelectedOrder(order);
     setOrderDetailModalOpen(true);
 
-    // Fetch BOM ingredients to build issue rows
     const { data: ings } = await supabase
       .from('macropack_bom_ingredients')
-      .select('raw_material_id, grams_per_unit, raw_materials(code, name)')
+      .select('raw_material_id, grams_per_unit, raw_materials(id, code, name)')
       .eq('macropack_bom_id', order.macropack_bom_id);
 
-    // Fetch existing issues
-    const { data: existingIssues } = await supabase
+    const { data: issues } = await supabase
       .from('macropack_manufacture_issues')
       .select('*')
       .eq('manufacture_order_id', order.id);
 
     const issueMap: Record<string, any> = {};
-    (existingIssues || []).forEach((ei: any) => { issueMap[ei.raw_material_id] = ei; });
+    (issues || []).forEach((iss: any) => { issueMap[iss.raw_material_id] = iss; });
 
+    const planned = order.planned_units;
     const rows: IssueRow[] = (ings || []).map((i: any) => {
-      const expectedGrams = i.grams_per_unit * (order.planned_units || 0);
+      const expectedGrams = i.grams_per_unit * planned;
       const expectedKg = expectedGrams / 1000;
       const existing = issueMap[i.raw_material_id];
-      // Load stored grams → display as kg
       const actual = existing?.actual_grams_dispensed != null ? existing.actual_grams_dispensed / 1000 : '';
       const actualNum = typeof actual === 'number' ? actual : parseFloat(actual as string);
       const variance = !isNaN(actualNum) && actual !== '' ? actualNum - expectedKg : null;
@@ -325,7 +338,6 @@ export default function MacropackManufacturingPage() {
       const actual = value === '' ? '' : value;
       const actualNum = parseFloat(value);
       const expectedKg = r.expected_grams / 1000;
-      // User enters kg; compare against expectedKg
       const variance = !isNaN(actualNum) && value !== '' ? actualNum - expectedKg : null;
       const variancePct = variance !== null && expectedKg > 0 ? (variance / expectedKg) * 100 : null;
       return { ...r, actual_grams_dispensed: actual, variance_grams: variance, variance_pct: variancePct };
@@ -352,22 +364,9 @@ export default function MacropackManufacturingPage() {
 
   async function handleCompleteOrder() {
     if (!selectedOrder) return;
-
-    // Check for high variances (> 2%)
-    const highVariances = issueRows.filter(r =>
-      r.variance_pct !== null && Math.abs(r.variance_pct) > 2
-    );
-    if (highVariances.length > 0) {
-      const names = highVariances.map(r => `${r.ingredient_code} (${r.variance_pct!.toFixed(1)}%)`).join(', ');
-      if (!confirm(`Warning: ${highVariances.length} ingredient(s) have variance > 2%:\n${names}\n\nContinue with completion?`)) {
-        return;
-      }
-    }
-
-    // Validate stock availability for all ingredients
     const ingredientsToCheck = issueRows.map(r => ({
       raw_material_id: r.raw_material_id,
-      quantity: r.expected_grams / 1000, // Convert grams to kg
+      quantity: r.expected_grams / 1000,
       name: r.ingredient_name
     }));
 
@@ -381,7 +380,6 @@ export default function MacropackManufacturingPage() {
       return;
     }
 
-    // Load BOM packaging items then show packaging declaration
     const { data: pkgItems } = await supabase
       .from('macropack_bom_packaging')
       .select('item_code, description, unit, expected_qty_per_unit')
@@ -408,21 +406,17 @@ export default function MacropackManufacturingPage() {
     if (!selectedOrder) return;
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // Upsert issue rows
       const issueData = issueRows
         .filter(r => r.actual_grams_dispensed !== '' && r.actual_grams_dispensed !== null)
         .map(r => ({
           manufacture_order_id: selectedOrder.id,
           raw_material_id: r.raw_material_id,
           expected_grams: r.expected_grams,
-          actual_grams_dispensed: parseFloat(String(r.actual_grams_dispensed)) * 1000, // convert kg input back to grams for DB
+          actual_grams_dispensed: parseFloat(String(r.actual_grams_dispensed)) * 1000,
           dispensed_at: new Date().toISOString(),
         }));
 
       if (issueData.length > 0) {
-        // Delete existing issues and re-insert
         await supabase
           .from('macropack_manufacture_issues')
           .delete()
@@ -434,7 +428,6 @@ export default function MacropackManufacturingPage() {
         if (issueError) throw issueError;
       }
 
-      // Save packaging declaration
       if (packagingActuals.length > 0 || packagingNotes) {
         const pkgData = packagingActuals
           .filter(a => a.actual_qty !== '')
@@ -451,36 +444,19 @@ export default function MacropackManufacturingPage() {
         }
       }
 
-      // Update order status
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('macropack_manufacture_orders')
         .update({
           status: 'COMPLETED',
           actual_units: selectedOrder.planned_units,
-          manufactured_by: user?.id || null,
         })
         .eq('id', selectedOrder.id);
-      if (error) throw error;
 
-      // Write sync_log entry for bridge to pick up
-      const { error: syncError } = await supabase
-        .from('sync_log')
-        .insert({
-          event_type: 'macropack_manufactured',
-          reference_type: 'macropack_manufacture_orders',
-          reference_id: selectedOrder.id,
-          status: 'pending',
-          description: `Macropack order completed — ${selectedOrder.macropack_boms?.macropack_code}`,
-          created_at: new Date().toISOString(),
-        });
-      if (syncError) {
-        console.error('sync_log write failed:', syncError.message);
-        // Don't throw — order is completed, bridge will need manual retry
-      }
+      if (updateError) throw updateError;
 
-      setOrderDetailModalOpen(false);
-      setSelectedOrder(null);
+      setSelectedOrder({ ...selectedOrder, status: 'COMPLETED', actual_units: selectedOrder.planned_units });
       fetchData();
+      alert('Macropack manufacturing order successfully completed!');
     } catch (error: any) {
       console.error('Error completing order:', error);
       alert(`Error: ${error.message}`);
@@ -488,16 +464,6 @@ export default function MacropackManufacturingPage() {
       setSaving(false);
     }
   }
-
-  /* ── Tab 2: Macropack BOMs ── */
-  const filteredBoms = useMemo(() => {
-    if (!search) return boms;
-    const q = search.toLowerCase();
-    return boms.filter(b =>
-      b.macropack_code.toLowerCase().includes(q) ||
-      b.macropack_name.toLowerCase().includes(q)
-    );
-  }, [boms, search]);
 
   async function openViewBom(bom: MacropackBom) {
     setSelectedBom(bom);
@@ -574,156 +540,206 @@ export default function MacropackManufacturingPage() {
     }
   }
 
-  const labelCls = 'block text-xs font-medium text-slate-600 mb-1';
-  const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none';
+  const labelCls = 'block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wider';
+  const inputCls = 'w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all bg-white shadow-sm';
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Macropack Manufacturing</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage macropack BOMs and manufacturing orders</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {activeTab === 'Manufacturing Orders' && (
-            <button onClick={() => { setOrderForm(emptyOrderForm); setPreviewIngredients([]); setNewOrderModalOpen(true); }}
-              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors">
-              <Plus className="w-4 h-4" /> New Order
-            </button>
-          )}
-          {activeTab === 'Macropack BOMs' && (
-            <button onClick={openNewBom}
-              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors">
-              <Plus className="w-4 h-4" /> Add New BOM
-            </button>
-          )}
+      {/* Dynamic Top Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-teal-900/40 relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 relative z-10">
+          <div>
+            <div className="flex items-center gap-2 text-teal-400 font-bold text-xs uppercase tracking-widest mb-1">
+              <Sparkles className="w-4 h-4" /> Macropack & Premix Control Hub
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-white">MACROPACK MANUFACTURING</h1>
+            <p className="text-sm text-slate-300 mt-1 max-w-2xl">
+              Precision micro-ingredient formulation, premix batching, multi-level approvals, and automated Sage SSMS stock synchronization.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {activeTab === 'Manufacturing Orders' && (
+              <button
+                onClick={() => { setOrderForm(emptyOrderForm); setPreviewIngredients([]); setNewOrderModalOpen(true); }}
+                className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg hover:shadow-teal-500/25"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" /> + New Order
+              </button>
+            )}
+            {activeTab === 'Macropack BOMs' && (
+              <button
+                onClick={openNewBom}
+                className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg hover:shadow-teal-500/25"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" /> + Add New BOM
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Stats (Orders tab) */}
+      {/* KPI Stats Strip */}
       {activeTab === 'Manufacturing Orders' && (
-        <div className="grid grid-cols-4 gap-4">
-          <StatCard title="Total Orders" value={orderStats.total} icon={Package} />
-          <StatCard title="Pending Approval" value={orderStats.pendingApproval} icon={Clock} color="amber" />
-          <StatCard title="In Progress" value={orderStats.inProgress} icon={Factory} color="blue" />
-          <StatCard title="Completed" value={orderStats.completed} icon={CheckCircle} color="emerald" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard title="Total Macropack Orders" value={orderStats.total} icon={Package} color="teal" />
+          <StatCard title="Pending Approvals" value={orderStats.pendingApproval} icon={Clock} color="amber" />
+          <StatCard title="Orders In Progress" value={orderStats.inProgress} icon={Factory} color="blue" />
+          <StatCard title="Completed Orders" value={orderStats.completed} icon={CheckCircle} color="emerald" />
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200">
-        {TABS.map(tab => (
-          <button key={tab} onClick={() => { setActiveTab(tab); setSearch(''); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}>
-            {tab}
-          </button>
-        ))}
+      {/* Tabs Navigation Bar */}
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-2 rounded-xl shadow-sm">
+        <div className="flex items-center gap-2">
+          {TABS.map(tab => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(tab); setSearch(''); }}
+              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                activeTab === tab
+                  ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Bar (Orders & BOMs tabs) */}
+        {activeTab !== 'Premix & Pack Recon Report' && (
+          <div className="relative w-72 my-1.5 mr-2">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder={activeTab === 'Manufacturing Orders' ? 'Search macropack orders...' : 'Search BOM formulas...'}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none bg-slate-50/50"
+            />
+          </div>
+        )}
       </div>
-
-      {/* Search (only on Orders and BOMs tabs) */}
-      {activeTab !== 'Premix & Pack Recon Report' && (
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input type="text" placeholder={activeTab === 'Manufacturing Orders' ? 'Search orders...' : 'Search BOMs...'}
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
-        </div>
-      )}
 
       {/* ── Tab 3: Premix & Pack Recon Report ── */}
       {activeTab === 'Premix & Pack Recon Report' && (
         <MacropackReconReport />
       )}
 
-      {/* ── Tab 1: Manufacturing Orders ── */}
+      {/* ── Tab 1: Manufacturing Orders Table ── */}
       {activeTab === 'Manufacturing Orders' && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <Factory className="w-4 h-4 text-teal-600" /> Active Manufacturing Orders Queue ({filteredOrders.length})
+            </h2>
+            <span className="text-xs text-slate-500 font-medium">Real-time status updates</span>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 uppercase font-bold tracking-wider">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Macropack</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Planned Qty (kg)</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Manufacture Date</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
-                  <th className="px-4 py-3 text-center font-medium text-slate-600">Actions</th>
+                  <th className="px-4 py-3">Macropack Product</th>
+                  <th className="px-4 py-3 text-right">Planned Quantity</th>
+                  <th className="px-4 py-3 text-left">Manufacture Date</th>
+                  <th className="px-4 py-3 text-left">Workflow Status</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
                 {filteredOrders.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No orders found</td></tr>
-                ) : filteredOrders.map(o => (
-                  <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{o.macropack_boms?.macropack_name}</div>
-                      <div className="text-xs text-slate-500">{o.macropack_boms?.macropack_code}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-700">{o.planned_units?.toLocaleString()} <span className="text-xs text-slate-400">kg</span></td>
-                    <td className="px-4 py-3 text-slate-600">{o.manufacture_date ? format(new Date(o.manufacture_date), 'dd MMM yyyy') : '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[o.status] || ''}`}>
-                        {o.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => openOrderDetail(o)}
-                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 font-medium">
-                        <Eye className="w-3.5 h-3.5" /> Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400">No manufacturing orders found</td></tr>
+                ) : filteredOrders.map(o => {
+                  const style = STATUS_STYLES[o.status] || { cls: 'bg-slate-100 text-slate-700 border-slate-300', label: o.status, icon: Clock };
+                  const StatusIcon = style.icon;
+                  return (
+                    <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3.5">
+                        <div className="font-bold text-slate-900 text-sm">{o.macropack_boms?.macropack_name}</div>
+                        <div className="text-xs font-mono text-teal-700">{o.macropack_boms?.macropack_code}</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono font-bold text-slate-900 text-sm">
+                        {o.planned_units?.toLocaleString()} <span className="text-xs font-normal text-slate-500">kg</span>
+                      </td>
+                      <td className="px-4 py-3.5 font-medium text-slate-600">
+                        {o.manufacture_date ? format(new Date(o.manufacture_date), 'dd MMM yyyy') : '—'}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${style.cls}`}>
+                          <StatusIcon className="w-3.5 h-3.5" />
+                          {style.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <button
+                          onClick={() => openOrderDetail(o)}
+                          className="inline-flex items-center gap-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold px-3 py-1.5 rounded-lg border border-teal-200 text-xs transition-colors shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Details & Dispense
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* ── Tab 2: Macropack BOMs ── */}
+      {/* ── Tab 2: Macropack BOMs List ── */}
       {activeTab === 'Macropack BOMs' && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <Package className="w-4 h-4 text-teal-600" /> Active Macropack Formulations & BOMs ({filteredBoms.length})
+            </h2>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 uppercase font-bold tracking-wider">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Code</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Name</th>
-                  <th className="px-4 py-3 text-center font-medium text-slate-600">Version</th>
-                  <th className="px-4 py-3 text-center font-medium text-slate-600">Active</th>
-                  <th className="px-4 py-3 text-center font-medium text-slate-600">Ingredients</th>
-                  <th className="px-4 py-3 text-center font-medium text-slate-600">Actions</th>
+                  <th className="px-4 py-3">BOM Code</th>
+                  <th className="px-4 py-3">Macropack Name</th>
+                  <th className="px-4 py-3 text-center">Version</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3 text-center">Ingredients</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
                 {filteredBoms.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No BOMs found</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No macropack BOMs found</td></tr>
                 ) : filteredBoms.map(b => (
-                  <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{b.macropack_code}</td>
-                    <td className="px-4 py-3 text-slate-700">{b.macropack_name}</td>
-                    <td className="px-4 py-3 text-center text-slate-600">v{b.version}</td>
-                    <td className="px-4 py-3 text-center">
-                      {b.is_active
-                        ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
-                        : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
-                      }
+                  <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3.5 font-mono text-xs font-bold text-teal-800">{b.macropack_code}</td>
+                    <td className="px-4 py-3.5 font-bold text-slate-900 text-sm">{b.macropack_name}</td>
+                    <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-700">v{b.version}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      {b.is_active ? (
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">Active</span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-300">Inactive</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-center text-slate-600">{b.ingredientCount}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => openViewBom(b)}
-                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 font-medium">
-                        <Eye className="w-3.5 h-3.5" /> View BOM
+                    <td className="px-4 py-3.5 text-center font-mono font-bold text-slate-800">{b.ingredientCount} ingredients</td>
+                    <td className="px-4 py-3.5 text-center">
+                      <button
+                        onClick={() => openViewBom(b)}
+                        className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg border border-slate-300 text-xs transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View Recipe
                       </button>
                     </td>
                   </tr>
@@ -735,52 +751,71 @@ export default function MacropackManufacturingPage() {
       )}
 
       {/* ── New Order Modal ── */}
-      <Modal open={newOrderModalOpen} onClose={() => setNewOrderModalOpen(false)} title="New Manufacturing Order">
-        <form onSubmit={handleCreateOrder} className="space-y-4">
+      <Modal open={newOrderModalOpen} onClose={() => setNewOrderModalOpen(false)} title="Create New Macropack Order">
+        <form onSubmit={handleCreateOrder} className="space-y-4 p-1">
           <div>
-            <label className={labelCls}>Macropack *</label>
-            <select value={orderForm.macropack_bom_id}
+            <label className={labelCls}>Macropack Formulation *</label>
+            <select
+              value={orderForm.macropack_bom_id}
               onChange={(e) => { setOrderForm({ ...orderForm, macropack_bom_id: e.target.value }); updatePreview(e.target.value, orderForm.planned_units); }}
-              className={inputCls} required>
-              <option value="">Select macropack</option>
+              className={inputCls}
+              required
+            >
+              <option value="">Select macropack formulation</option>
               {boms.filter(b => b.is_active).map(b => (
                 <option key={b.id} value={b.id}>{b.macropack_code} — {b.macropack_name}</option>
               ))}
             </select>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Planned Quantity (kg) *</label>
-              <input type="number" min="1" value={orderForm.planned_units}
+              <label className={labelCls}>Planned Batch Quantity (kg) *</label>
+              <input
+                type="number"
+                min="1"
+                value={orderForm.planned_units}
                 onChange={(e) => { setOrderForm({ ...orderForm, planned_units: e.target.value }); updatePreview(orderForm.macropack_bom_id, e.target.value); }}
-                className={inputCls} placeholder="e.g. 500" required />
+                className={inputCls}
+                placeholder="e.g. 500"
+                required
+              />
             </div>
             <div>
               <label className={labelCls}>Manufacture Date *</label>
-              <input type="date" value={orderForm.manufacture_date}
+              <input
+                type="date"
+                value={orderForm.manufacture_date}
                 onChange={(e) => setOrderForm({ ...orderForm, manufacture_date: e.target.value })}
-                className={inputCls} required />
+                className={inputCls}
+                required
+              />
             </div>
           </div>
 
-          {/* Ingredient Preview */}
+          {/* Ingredient Dosage Preview */}
           {previewIngredients.length > 0 && (
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 border-b border-slate-200">Expected Ingredients</div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+              <div className="bg-slate-100 px-3.5 py-2.5 text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200 flex items-center justify-between">
+                <span>Expected Micro-Ingredients</span>
+                <span className="text-teal-700 font-mono">{previewIngredients.length} Items</span>
+              </div>
               <table className="w-full text-xs">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="px-3 py-1.5 text-left text-slate-500">Code</th>
-                    <th className="px-3 py-1.5 text-left text-slate-500">Ingredient</th>
-                    <th className="px-3 py-1.5 text-right text-slate-500">Expected (kg)</th>
+                    <th className="px-3.5 py-2 text-left">Code</th>
+                    <th className="px-3.5 py-2 text-left">Ingredient</th>
+                    <th className="px-3.5 py-2 text-right">Dosage (kg)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-200 font-medium">
                   {previewIngredients.map((p, i) => (
                     <tr key={i}>
-                      <td className="px-3 py-1.5 font-mono text-slate-700">{p.code}</td>
-                      <td className="px-3 py-1.5 text-slate-600">{p.name}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{(p.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })}</td>
+                      <td className="px-3.5 py-2 font-mono text-teal-800 font-bold">{p.code}</td>
+                      <td className="px-3.5 py-2 text-slate-800">{p.name}</td>
+                      <td className="px-3.5 py-2 text-right font-mono font-bold text-slate-900">
+                        {(p.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -788,412 +823,240 @@ export default function MacropackManufacturingPage() {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setNewOrderModalOpen(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
-            <button type="submit" disabled={saving}
-              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create Order'}
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setNewOrderModalOpen(false)}
+              className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-800 border border-slate-300 rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-50"
+            >
+              {saving ? 'Creating Order...' : 'Create Order'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* ── Order Detail Modal ── */}
-      <Modal open={orderDetailModalOpen} onClose={() => { setOrderDetailModalOpen(false); setSelectedOrder(null); }}
-        title={selectedOrder ? `Order: ${selectedOrder.macropack_boms?.macropack_name || ''}` : 'Order Details'}
-        size="lg"
-        footer={selectedOrder ? (
-          <div className="flex items-center justify-between">
-            <button onClick={() => { setOrderDetailModalOpen(false); setSelectedOrder(null); }}
-              className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50">
-              Close
-            </button>
-            {selectedOrder.status !== 'COMPLETED' && selectedOrder.status !== 'CANCELLED' && (
-              <div className="flex flex-wrap gap-2">
-                {selectedOrder.status === 'DRAFT' && (
-                  <button onClick={() => handleApprovalAction('submit')} disabled={approvalSaving}
-                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-                    {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    Submit for Approval
-                  </button>
-                )}
-                {selectedOrder.status === 'REJECTED' && (
-                  <button onClick={() => handleApprovalAction('revise')} disabled={approvalSaving}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
-                    <RotateCcw className="w-4 h-4" /> Revise &amp; Resubmit
-                  </button>
-                )}
-                {selectedOrder.status === 'PENDING_RM' && (profile?.role === 'raw_material_manager' || profile?.role === 'admin') && (
-                  <>
-                    <button onClick={() => handleApprovalAction('approve_rm')} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                      Approve (RM)
-                    </button>
-                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                      <XCircle className="w-4 h-4" /> Reject
-                    </button>
-                  </>
-                )}
-                {selectedOrder.status === 'PENDING_SUPERVISOR' && (profile?.role === 'supervisor' || profile?.role === 'production_manager' || profile?.role === 'admin') && (
-                  <>
-                    <button onClick={() => handleApprovalAction('approve_supervisor')} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                      {approvalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                      Approve (Supervisor)
-                    </button>
-                    <button onClick={() => setShowRejectModal(true)} disabled={approvalSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                      <XCircle className="w-4 h-4" /> Reject
-                    </button>
-                  </>
-                )}
-                {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
-                  <button onClick={handleStartOrder} disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    <Play className="w-4 h-4" /> {saving ? 'Starting...' : 'Start Production'}
-                  </button>
-                )}
-                {selectedOrder.status === 'IN_PROGRESS' && (
-                  <button onClick={handleCompleteOrder} disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                    <CheckCircle className="w-4 h-4" /> {saving ? 'Completing...' : 'Complete Order'}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ) : undefined}>
+      {/* ── Order Details & Dispensing Modal ── */}
+      <Modal open={orderDetailModalOpen} onClose={() => setOrderDetailModalOpen(false)} title="Order Details & Dispensing">
         {selectedOrder && (
-          <div className="space-y-4">
-            {/* Order Info */}
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-xs text-slate-500">Macropack</span>
-                <p className="font-medium text-slate-800">{selectedOrder.macropack_boms?.macropack_code} — {selectedOrder.macropack_boms?.macropack_name}</p>
+          <div className="space-y-5 p-1">
+            <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="text-xs font-bold text-teal-400 uppercase tracking-widest">Macropack Order</div>
+                  <h3 className="text-xl font-black text-white">{selectedOrder.macropack_boms?.macropack_name}</h3>
+                  <div className="text-xs font-mono text-teal-300 mt-0.5">{selectedOrder.macropack_boms?.macropack_code}</div>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_STYLES[selectedOrder.status]?.cls || ''}`}>
+                  {selectedOrder.status.replace('_', ' ')}
+                </span>
               </div>
-              <div>
-                <span className="text-xs text-slate-500">Planned Units</span>
-                <p className="font-medium text-slate-800">{selectedOrder.planned_units?.toLocaleString()}</p>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500">Status</span>
-                <p><span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLES[selectedOrder.status]}`}>{selectedOrder.status.replace('_', ' ')}</span></p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs border-t border-slate-800">
+                <div>
+                  <span className="text-slate-400">Planned Batch Qty:</span>
+                  <div className="font-bold text-white text-base">{selectedOrder.planned_units?.toLocaleString()} kg</div>
+                </div>
+                <div>
+                  <span className="text-slate-400">Manufacture Date:</span>
+                  <div className="font-bold text-white text-base">{selectedOrder.manufacture_date}</div>
+                </div>
+                <div>
+                  <span className="text-slate-400">Target Line:</span>
+                  <div className="font-bold text-teal-400 text-base">Premix Line 1</div>
+                </div>
               </div>
             </div>
 
-            {/* Layers note — only for Layer/LIP products */}
-            {(selectedOrder.macropack_boms?.macropack_code?.includes('LAY') ||
-              selectedOrder.macropack_boms?.macropack_code?.includes('LIP') ||
-              selectedOrder.macropack_boms?.macropack_name?.toLowerCase().includes('layer')) && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-                <AlertTriangle className="w-4 h-4 inline-block mr-1 text-amber-600" />
-                <strong>Layers products:</strong> Limestone flour added directly to plant at 45kg/tonne — record as direct RM issue at batch level.
-              </div>
-            )}
+            {/* Workflow Control Buttons */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {selectedOrder.status === 'DRAFT' && (
+                <button
+                  onClick={() => handleApprovalAction('submit')}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  <Send className="w-3.5 h-3.5" /> Submit for RM Approval
+                </button>
+              )}
+              {selectedOrder.status === 'PENDING_RM' && (
+                <button
+                  onClick={() => handleApprovalAction('approve_rm')}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" /> Approve RM Allocation
+                </button>
+              )}
+              {selectedOrder.status === 'PENDING_SUPERVISOR' && (
+                <button
+                  onClick={() => handleApprovalAction('approve_supervisor')}
+                  disabled={approvalSaving}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Supervisor Sign-off
+                </button>
+              )}
+              {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
+                <button
+                  onClick={handleStartOrder}
+                  disabled={saving}
+                  className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  <Play className="w-3.5 h-3.5" /> Start Manufacturing Run
+                </button>
+              )}
+              {selectedOrder.status === 'IN_PROGRESS' && (
+                <button
+                  onClick={handleCompleteOrder}
+                  disabled={saving}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Declare Packaging & Complete Order
+                </button>
+              )}
+            </div>
 
-            {/* Ingredients Table */}
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-slate-600">Code</th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-600">Ingredient</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Expected (kg)</th>
-                    <th className="px-3 py-2 text-right font-medium text-teal-700 min-w-[110px]">Actual (kg)</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Variance (kg)</th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-600">Var %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {issueRows.map(row => {
-                    const hasHighVar = row.variance_pct !== null && Math.abs(row.variance_pct) > 2;
-                    return (
-                      <tr key={row.raw_material_id} className={hasHighVar ? 'bg-amber-50' : 'hover:bg-slate-50'}>
-                        <td className="px-3 py-2 font-mono text-slate-700">{row.ingredient_code}</td>
-                        <td className="px-3 py-2 text-slate-600">{row.ingredient_name}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{(row.expected_grams / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })}</td>
-                        <td className="px-3 py-2 text-right">
+            {/* Dispensing Ingredients Table */}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+              <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 font-bold text-xs text-slate-800 uppercase tracking-wider">
+                Micro-Ingredient Dispensing Table
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-3.5 py-2.5 text-left">Code</th>
+                      <th className="px-3.5 py-2.5 text-left">Ingredient</th>
+                      <th className="px-3.5 py-2.5 text-right">Expected (kg)</th>
+                      <th className="px-3.5 py-2.5 text-right">Actual Dispensed (kg)</th>
+                      <th className="px-3.5 py-2.5 text-right">Variance %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {issueRows.map((row) => (
+                      <tr key={row.raw_material_id}>
+                        <td className="px-3.5 py-2.5 font-mono text-teal-800 font-bold">{row.ingredient_code}</td>
+                        <td className="px-3.5 py-2.5 text-slate-800 font-bold">{row.ingredient_name}</td>
+                        <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">
+                          {(row.expected_grams / 1000).toFixed(3)} kg
+                        </td>
+                        <td className="px-3.5 py-2.5 text-right">
                           {selectedOrder.status === 'IN_PROGRESS' ? (
-                            <input type="number" step="0.01" value={row.actual_grams_dispensed}
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={row.actual_grams_dispensed}
                               onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
-                              className="w-full text-right border border-teal-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-teal-500 outline-none bg-teal-50"
-                              placeholder="Enter kg" />
+                              className="w-24 text-right border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-teal-500"
+                            />
                           ) : (
-                            <span className="tabular-nums">{row.actual_grams_dispensed !== '' ? Number(row.actual_grams_dispensed).toLocaleString('en-US', { maximumFractionDigits: 3 }) : '—'}</span>
+                            <span className="font-mono font-bold text-slate-900">
+                              {typeof row.actual_grams_dispensed === 'number' ? row.actual_grams_dispensed.toFixed(3) : '—'} kg
+                            </span>
                           )}
                         </td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-medium ${
-                          row.variance_grams !== null ? (row.variance_grams < 0 ? 'text-red-600' : row.variance_grams > 0 ? 'text-amber-600' : 'text-slate-400') : 'text-slate-400'
-                        }`}>
-                          {row.variance_grams !== null ? row.variance_grams.toFixed(3) : '—'}
-                        </td>
-                        <td className={`px-3 py-2 text-right tabular-nums ${hasHighVar ? 'text-amber-700 font-bold' : 'text-slate-500'}`}>
-                          {row.variance_pct !== null ? `${row.variance_pct.toFixed(1)}%` : '—'}
-                          {hasHighVar && <AlertTriangle className="w-3 h-3 inline-block ml-1 text-amber-500" />}
+                        <td className="px-3.5 py-2.5 text-right font-mono font-bold">
+                          {row.variance_pct !== null ? (
+                            <span className={Math.abs(row.variance_pct) > 2 ? 'text-red-600' : 'text-emerald-600'}>
+                              {row.variance_pct.toFixed(1)}%
+                            </span>
+                          ) : '—'}
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3">
+              <button
+                onClick={() => setOrderDetailModalOpen(false)}
+                className="px-5 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-700"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── View BOM Modal ── */}
+      <Modal open={viewBomModalOpen} onClose={() => setViewBomModalOpen(false)} title="Macropack BOM Recipe">
+        {selectedBom && (
+          <div className="space-y-4 p-1">
+            <div className="bg-slate-900 text-white p-4 rounded-2xl flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black">{selectedBom.macropack_name}</h3>
+                <div className="text-xs font-mono text-teal-400">{selectedBom.macropack_code}</div>
+              </div>
+              <span className="px-3 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-bold rounded-full">
+                Version v{selectedBom.version}
+              </span>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left">Code</th>
+                    <th className="px-4 py-2.5 text-left">Ingredient</th>
+                    <th className="px-4 py-2.5 text-right">Grams Per Unit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-medium">
+                  {selectedBomIngredients.map(ing => (
+                    <tr key={ing.id}>
+                      <td className="px-4 py-2.5 font-mono font-bold text-teal-800">{ing.raw_materials?.code}</td>
+                      <td className="px-4 py-2.5 font-bold text-slate-900">{ing.raw_materials?.name}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-900">{ing.grams_per_unit} g</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Rejection reason callout */}
-            {selectedOrder.status === 'REJECTED' && selectedOrder.rejection_reason && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-                <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold text-red-700">Rejected</p>
-                  <p className="text-xs text-red-600 mt-0.5">{selectedOrder.rejection_reason}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      {/* ── New BOM Modal ── */}
-      <Modal open={newBomModalOpen} onClose={() => setNewBomModalOpen(false)} title="Create Macropack BOM">
-        <form onSubmit={handleCreateBom} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Macropack Code *</label>
-              <input type="text" value={bomForm.macropack_code}
-                onChange={(e) => setBomForm({ ...bomForm, macropack_code: e.target.value })}
-                className={inputCls} placeholder="e.g. MP-BSC" required />
-            </div>
-            <div>
-              <label className={labelCls}>Macropack Name *</label>
-              <input type="text" value={bomForm.macropack_name}
-                onChange={(e) => setBomForm({ ...bomForm, macropack_name: e.target.value })}
-                className={inputCls} placeholder="e.g. Broiler Starter Micro Pack" required />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={labelCls}>Version</label>
-              <input type="number" min="1" value={bomForm.version}
-                onChange={(e) => setBomForm({ ...bomForm, version: parseInt(e.target.value) || 1 })}
-                className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Effective From</label>
-              <input type="date" value={bomForm.effective_from}
-                onChange={(e) => setBomForm({ ...bomForm, effective_from: e.target.value })}
-                className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Effective To</label>
-              <input type="date" value={bomForm.effective_to}
-                onChange={(e) => setBomForm({ ...bomForm, effective_to: e.target.value })}
-                className={inputCls} />
-            </div>
-          </div>
-
-          {/* Ingredients */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-700">Ingredients</label>
-              <button type="button" onClick={addBomIngredientRow}
-                className="text-xs text-teal-600 hover:text-teal-800 font-medium">+ Add Ingredient</button>
-            </div>
-            <div className="space-y-2">
-              {bomIngredients.map((ing, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <select value={ing.raw_material_id}
-                    onChange={(e) => {
-                      const updated = [...bomIngredients];
-                      updated[idx].raw_material_id = e.target.value;
-                      setBomIngredients(updated);
-                    }}
-                    className="flex-1 border border-slate-300 rounded px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none">
-                    <option value="">Select material</option>
-                    {materials.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-                  </select>
-                  <input type="number" step="0.0001" value={ing.grams_per_unit} placeholder="g/unit"
-                    onChange={(e) => {
-                      const updated = [...bomIngredients];
-                      updated[idx].grams_per_unit = e.target.value;
-                      setBomIngredients(updated);
-                    }}
-                    className="w-28 border border-slate-300 rounded px-2 py-1.5 text-xs text-right focus:ring-1 focus:ring-teal-500 outline-none" />
-                  {bomIngredients.length > 1 && (
-                    <button type="button" onClick={() => removeBomIngredientRow(idx)}
-                      className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setNewBomModalOpen(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
-            <button type="submit" disabled={saving}
-              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create BOM'}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* ── View BOM Modal ── */}
-      <Modal open={viewBomModalOpen} onClose={() => { setViewBomModalOpen(false); setSelectedBom(null); }}
-        title={selectedBom ? `BOM: ${selectedBom.macropack_code} — ${selectedBom.macropack_name}` : 'BOM Details'}>
-        {selectedBom && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div><span className="text-xs text-slate-500">Version</span><p className="font-medium text-slate-800">v{selectedBom.version}</p></div>
-              <div><span className="text-xs text-slate-500">Status</span><p>{selectedBom.is_active
-                ? <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
-                : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>}</p></div>
-              <div><span className="text-xs text-slate-500">Ingredients</span><p className="font-medium text-slate-800">{selectedBomIngredients.length}</p></div>
-            </div>
-
-            {/* BOM tabs: Ingredients | Packaging */}
-            <div className="flex gap-1 border-b border-slate-200">
-              {(['ingredients', 'packaging'] as const).map(t => (
-                <button key={t} onClick={() => setBomPackagingTab(t)}
-                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors capitalize ${bomPackagingTab === t ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                  {t === 'ingredients' ? `Ingredients (${selectedBomIngredients.length})` : `Packaging (${bomPackagingRows.length})`}
-                </button>
-              ))}
-            </div>
-
-            {bomPackagingTab === 'ingredients' && (
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600">Code</th>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600">Ingredient</th>
-                      <th className="px-3 py-2 text-right font-medium text-slate-600">Grams / Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedBomIngredients.length === 0 ? (
-                      <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No ingredients</td></tr>
-                    ) : selectedBomIngredients.map(ing => (
-                      <tr key={ing.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 font-mono text-slate-700">{ing.raw_materials?.code}</td>
-                        <td className="px-3 py-2 text-slate-600">{ing.raw_materials?.name}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">{Number(ing.grams_per_unit).toFixed(4)}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-slate-50 font-semibold border-t border-slate-200">
-                      <td colSpan={2} className="px-3 py-2 text-right text-slate-700">Total grams / unit</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{selectedBomIngredients.reduce((s, i) => s + Number(i.grams_per_unit), 0).toFixed(4)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {bomPackagingTab === 'packaging' && (
-              <div className="space-y-3">
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium text-slate-600">Item Code</th>
-                        <th className="px-3 py-2 text-left font-medium text-slate-600">Description</th>
-                        <th className="px-3 py-2 text-right font-medium text-slate-600">Qty / Unit</th>
-                        <th className="px-3 py-2 text-left font-medium text-slate-600">Unit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {bomPackagingRows.length === 0 ? (
-                        <tr><td colSpan={4} className="px-3 py-4 text-center text-slate-400">No packaging items defined</td></tr>
-                      ) : bomPackagingRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="px-3 py-2 font-mono text-slate-700">{row.item_code}</td>
-                          <td className="px-3 py-2 text-slate-600">{row.description}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-slate-800">{row.expected_qty_per_unit}</td>
-                          <td className="px-3 py-2 text-slate-500">{row.unit}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Add packaging item inline */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-600">Add Packaging Item</p>
-                  {(() => {
-                    return (
-                      <div className="flex items-center gap-2">
-                        <input placeholder="Code" className="w-24 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-code" />
-                        <input placeholder="Description" className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-desc" />
-                        <input placeholder="Qty/unit" type="number" className="w-20 border border-slate-300 rounded px-2 py-1 text-xs text-right" id="pkg-qty" />
-                        <input placeholder="Unit" className="w-16 border border-slate-300 rounded px-2 py-1 text-xs" id="pkg-unit" defaultValue="units" />
-                        <button type="button" onClick={async () => {
-                          const code = (document.getElementById('pkg-code') as HTMLInputElement)?.value.trim();
-                          const desc = (document.getElementById('pkg-desc') as HTMLInputElement)?.value.trim();
-                          const qty = parseFloat((document.getElementById('pkg-qty') as HTMLInputElement)?.value || '0');
-                          const unit = (document.getElementById('pkg-unit') as HTMLInputElement)?.value.trim() || 'units';
-                          if (!code || !desc || !qty) { alert('Fill in Code, Description and Qty/unit'); return; }
-                          const { error } = await supabase.from('macropack_bom_packaging').insert({ bom_id: selectedBom.id, item_code: code, description: desc, unit, expected_qty_per_unit: qty });
-                          if (error) { alert(error.message); return; }
-                          const { data } = await supabase.from('macropack_bom_packaging').select('*').eq('bom_id', selectedBom.id);
-                          setBomPackagingRows((data || []).map((p: any) => ({ item_code: p.item_code, description: p.description, unit: p.unit, expected_qty_per_unit: String(p.expected_qty_per_unit) })));
-                        }} className="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">Add</button>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      {/* Rejection Modal */}
-      {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-base font-bold text-slate-800">Reject Manufacturing Order</h3>
-            <textarea rows={4} value={rejectionReason} onChange={e => setRejectionReason(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              placeholder="Provide a reason for rejection..." />
-            <div className="flex justify-end gap-3">
-              <button onClick={() => { setShowRejectModal(false); setRejectionReason(''); }}
-                className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
-              <button onClick={() => handleApprovalAction('reject')} disabled={approvalSaving || !rejectionReason.trim()}
-                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                {approvalSaving ? 'Rejecting...' : 'Confirm Rejection'}
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setViewBomModalOpen(false)} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">
+                Close
               </button>
             </div>
           </div>
-        </div>
+        )}
+      </Modal>
+
+      {/* Stock Override Modal */}
+      {showStockOverride && (
+        <StockOverrideModal
+          open={showStockOverride}
+          onClose={() => { setShowStockOverride(false); setPendingCompleteCallback(null); }}
+          onConfirm={async () => {
+            setShowStockOverride(false);
+            if (pendingCompleteCallback) await pendingCompleteCallback();
+            setPendingCompleteCallback(null);
+          }}
+          errors={stockErrors}
+          context="Macropack Order Completion"
+        />
       )}
 
       {/* Packaging Declaration Modal */}
-      <PackagingDeclarationModal
-        open={showPackagingModal}
-        onClose={() => setShowPackagingModal(false)}
-        onConfirm={handlePackagingConfirm}
-        bomPackagingItems={bomPackagingItems}
-        plannedQty={selectedOrder?.planned_units || 0}
-        rateLabel={`${selectedOrder?.planned_units || 0} kg planned`}
-        saving={saving}
-      />
-
-      {/* Stock Override Modal */}
-      <StockOverrideModal
-        open={showStockOverride}
-        onClose={() => {
-          setShowStockOverride(false);
-          setStockErrors([]);
-          setPendingCompleteCallback(null);
-        }}
-        errors={stockErrors}
-        transactionType="macropack_manufacture"
-        onConfirm={async () => {
-          if (pendingCompleteCallback) {
-            await pendingCompleteCallback();
-          }
-        }}
-      />
+      {showPackagingModal && (
+        <PackagingDeclarationModal
+          open={showPackagingModal}
+          onClose={() => setShowPackagingModal(false)}
+          onConfirm={handlePackagingConfirm}
+          items={bomPackagingItems}
+          title="Macropack Packaging Declaration"
+        />
+      )}
     </div>
   );
 }
