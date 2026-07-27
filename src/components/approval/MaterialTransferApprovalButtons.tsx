@@ -43,28 +43,28 @@ export default function MaterialTransferApprovalButtons({
 
   function renderStepIndicator(current: string) {
     return (
-      <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-        <div className="flex items-center justify-between text-xs">
-          <div className={`flex items-center gap-2 ${
-            current === 'pending' ? 'text-amber-600 font-semibold' : 
-            current === 'in_buffer' || current === 'received' ? 'text-emerald-600' : 'text-slate-400'
+      <div className="mb-3.5 p-3 bg-slate-50 border border-slate-200/80 rounded-xl overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs font-semibold">
+          <div className={`flex items-center gap-1.5 ${
+            current === 'pending' ? 'text-amber-600 font-bold' : 
+            current === 'in_buffer' || current === 'received' ? 'text-emerald-600 font-bold' : 'text-slate-400'
           }`}>
-            <Package className="w-4 h-4" />
+            <Package className="w-3.5 h-3.5" />
             <span>1. RM Warehouse</span>
           </div>
-          <ArrowRight className="w-4 h-4 text-slate-300" />
-          <div className={`flex items-center gap-2 ${
-            current === 'in_buffer' ? 'text-amber-600 font-semibold' : 
-            current === 'received' ? 'text-emerald-600' : 'text-slate-400'
+          <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <div className={`flex items-center gap-1.5 ${
+            current === 'in_buffer' ? 'text-amber-600 font-bold' : 
+            current === 'received' ? 'text-emerald-600 font-bold' : 'text-slate-400'
           }`}>
-            <Package className="w-4 h-4" />
+            <Package className="w-3.5 h-3.5" />
             <span>2. Buffer</span>
           </div>
-          <ArrowRight className="w-4 h-4 text-slate-300" />
-          <div className={`flex items-center gap-2 ${
-            current === 'received' ? 'text-emerald-600 font-semibold' : 'text-slate-400'
+          <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <div className={`flex items-center gap-1.5 ${
+            current === 'received' ? 'text-emerald-600 font-bold' : 'text-slate-400'
           }`}>
-            <Factory className="w-4 h-4" />
+            <Factory className="w-3.5 h-3.5" />
             <span>3. Production</span>
           </div>
         </div>
@@ -204,12 +204,12 @@ export default function MaterialTransferApprovalButtons({
       {/* Step indicator */}
       {renderStepIndicator(status)}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2.5">
         {canApproveStep2 && (
           <button
             onClick={handleStep2Approve}
             disabled={processing}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
           >
             {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Accept to Production
@@ -219,7 +219,7 @@ export default function MaterialTransferApprovalButtons({
         <button
           onClick={() => setShowRejectModal(true)}
           disabled={processing}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
         >
           <X className="w-4 h-4" />
           Reject
