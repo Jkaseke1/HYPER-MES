@@ -1331,7 +1331,7 @@ export default function ProductionOrdersPage() {
                 <Package className="w-4 h-4 text-teal-600" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Planned Output</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Expected Output</p>
                 <p className="mt-0.5 text-xl font-bold text-teal-900">{Number(form.planned_qty || 0).toFixed(2)} kg</p>
               </div>
             </div>

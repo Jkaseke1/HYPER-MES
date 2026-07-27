@@ -9,7 +9,7 @@ import { validateStockAvailability, StockError } from '../lib/stockValidation';
 import StockErrorBanner from '../components/stock/StockErrorBanner';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
-import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
+import MacropackReconReport from '../components/reports/MacropackReconReport';
 
 /* ── Types ── */
 interface MacropackBom {
@@ -69,7 +69,7 @@ interface RawMaterial {
 }
 
 /* ── Constants ── */
-const TABS = ['Manufacturing Orders', 'Macropack BOMs'] as const;
+const TABS = ['Manufacturing Orders', 'Macropack BOMs', 'Premix & Pack Recon Report'] as const;
 type TabType = typeof TABS[number];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -631,13 +631,20 @@ export default function MacropackManufacturingPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input type="text" placeholder={activeTab === 'Manufacturing Orders' ? 'Search orders...' : 'Search BOMs...'}
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
-      </div>
+      {/* Search (only on Orders and BOMs tabs) */}
+      {activeTab !== 'Premix & Pack Recon Report' && (
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input type="text" placeholder={activeTab === 'Manufacturing Orders' ? 'Search orders...' : 'Search BOMs...'}
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" />
+        </div>
+      )}
+
+      {/* ── Tab 3: Premix & Pack Recon Report ── */}
+      {activeTab === 'Premix & Pack Recon Report' && (
+        <MacropackReconReport />
+      )}
 
       {/* ── Tab 1: Manufacturing Orders ── */}
       {activeTab === 'Manufacturing Orders' && (
