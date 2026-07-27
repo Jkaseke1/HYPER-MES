@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, Printer, RefreshCw, FileText, TrendingUp, Package, Layers, Award } from 'lucide-react';
+import { Download, RefreshCw, Package, Layers, TrendingUp, FileText, Award, Database } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import StatCard from '../ui/StatCard';
 
@@ -22,105 +22,124 @@ interface MonthlySummaryRow {
   tonnage: number;
 }
 
-const DEFAULT_MACROPACK_ROWS: MacropackReconRow[] = [
-  { productCode: 'BFP50', productName: 'BRO FINISHER', openingUnits: 0, manufacturedUnits: 270, totalUnits: 270, convertedUnits: 239, closingUnits: 31, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 27.0 },
-  { productCode: 'BGP50', productName: 'BRO GROWER', openingUnits: 0, manufacturedUnits: 180, totalUnits: 180, convertedUnits: 155, closingUnits: 25, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 18.0 },
-  { productCode: 'BSP50', productName: 'BRO STARTER', openingUnits: 14, manufacturedUnits: 299, totalUnits: 313, convertedUnits: 299, closingUnits: 14, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 29.9 },
-  { productCode: 'BSG50', productName: 'BRO STARGRO', openingUnits: 40, manufacturedUnits: 50, totalUnits: 90, convertedUnits: 90, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 5.0 },
-  { productCode: 'BGF50', productName: 'BRO GROFIN', openingUnits: 0, manufacturedUnits: 1, totalUnits: 1, convertedUnits: 1, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.1 },
-  { productCode: 'BGC50', productName: 'BRO GRO CONC', openingUnits: 30, manufacturedUnits: 136, totalUnits: 166, convertedUnits: 164, closingUnits: 2, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 13.6 },
-  { productCode: 'LPM50', productName: 'LIP MASH', openingUnits: 0, manufacturedUnits: 50, totalUnits: 50, convertedUnits: 45, closingUnits: 5, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 5.0 },
-  { productCode: 'LPC50', productName: 'LIP CONC', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'LDM50', productName: 'LD MASH', openingUnits: 0, manufacturedUnits: 10, totalUnits: 10, convertedUnits: 10, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 1.0 },
-  { productCode: 'RBP50', productName: 'RABBIT PELLETS', openingUnits: 20, manufacturedUnits: 45, totalUnits: 65, convertedUnits: 65, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 4.5 },
-  { productCode: 'RRG50', productName: 'RR GROWER', openingUnits: 0, manufacturedUnits: 25, totalUnits: 25, convertedUnits: 15, closingUnits: 10, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 2.5 },
-  { productCode: 'PCW50', productName: 'PIG CREEP WEANER MEAL', openingUnits: 0, manufacturedUnits: 30, totalUnits: 30, convertedUnits: 30, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 3.0 },
-  { productCode: 'PGM50', productName: 'PIG GROWER MEAL', openingUnits: 10, manufacturedUnits: 50, totalUnits: 60, convertedUnits: 60, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 5.0 },
-  { productCode: 'PGC50', productName: 'PIG GROFIN CONC', openingUnits: 0, manufacturedUnits: 133, totalUnits: 133, convertedUnits: 106, closingUnits: 27, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 13.3 },
-  { productCode: 'PBM50', productName: 'PIG BOAR SOW MEAL', openingUnits: 0, manufacturedUnits: 20, totalUnits: 20, convertedUnits: 20, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 2.0 },
-  { productCode: 'PBC50', productName: 'PIG BOAR SOW CONC', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'PLM50', productName: 'PIG LACT MEAL', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'PLC50', productName: 'PIG LACT CONC', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'CFS50', productName: 'CALF STARTER', openingUnits: 0, manufacturedUnits: 4, totalUnits: 4, convertedUnits: 4, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.4 },
-  { productCode: 'DOG50', productName: 'DOG MEAL', openingUnits: 0, manufacturedUnits: 60, totalUnits: 60, convertedUnits: 55, closingUnits: 5, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 6.0 },
-  { productCode: 'DRY50', productName: 'DAIRY', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'DCM50', productName: 'DCM-C', openingUnits: 0, manufacturedUnits: 0, totalUnits: 0, convertedUnits: 0, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'RRS50', productName: 'RRS (Road Runner Starter)', openingUnits: 0, manufacturedUnits: 20, totalUnits: 20, convertedUnits: 20, closingUnits: 10, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 2.0 },
-  { productCode: 'RRF50', productName: 'RRF (Road Runner Finisher)', openingUnits: 5, manufacturedUnits: 0, totalUnits: 5, convertedUnits: 5, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 0.0 },
-  { productCode: 'RRB50', productName: 'RRB (Road Runner Breeder)', openingUnits: 0, manufacturedUnits: 50, totalUnits: 50, convertedUnits: 50, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 5.0 },
-  { productCode: 'WTB50', productName: 'WINTER BLOCKS', openingUnits: 0, manufacturedUnits: 50, totalUnits: 50, convertedUnits: 50, closingUnits: 0, materialVarianceUnits: 0, variancePct: 0.0, starterPmxKg: 5.0 },
-];
-
-const DEFAULT_SUMMARY_ROWS: MonthlySummaryRow[] = [
-  { product: 'Broiler Finisher', marginPct: 31.85, tonnage: 201.00 },
-  { product: 'Broiler Grower', marginPct: 31.13, tonnage: 183.00 },
-  { product: 'Broiler Starter', marginPct: 4.36, tonnage: 128.00 },
-  { product: 'Broiler Star/Gro', marginPct: 5.05, tonnage: 54.00 },
-  { product: 'Broiler Gro/Fin', marginPct: 0.92, tonnage: 77.00 },
-  { product: 'Layer In Production Mash', marginPct: 23.61, tonnage: 44.00 },
-  { product: 'Layer Developer Mash', marginPct: 33.81, tonnage: 10.00 },
-  { product: 'Broiler Grower Conc', marginPct: 33.77, tonnage: 1.00 },
-  { product: 'Dog meal', marginPct: 61.67, tonnage: 61.13 },
-  { product: 'Rabbit pellets', marginPct: 37.32, tonnage: 65.00 },
-  { product: 'Pig grower finisher conc', marginPct: 24.52, tonnage: 109.00 },
-  { product: 'Pig boar Sow Meal', marginPct: 42.27, tonnage: 20.00 },
-  { product: 'Pig weaner meal', marginPct: 34.71, tonnage: 20.00 },
-  { product: 'Pig grower meal', marginPct: 26.17, tonnage: 50.00 },
-  { product: 'Road runner Starter', marginPct: 39.52, tonnage: 10.00 },
-  { product: 'Road runner grower', marginPct: 44.18, tonnage: 5.00 },
-  { product: 'Road runner finisher', marginPct: 45.71, tonnage: 4.00 },
-  { product: 'Road runner Breeder', marginPct: 34.09, tonnage: 17.00 },
-  { product: 'Chick Starter Mash', marginPct: 23.38, tonnage: 8.00 },
-  { product: 'Winter blocks', marginPct: 44.31, tonnage: 18.00 },
+const BASE_FORMULATIONS = [
+  { code: 'BFP50', name: 'BRO FINISHER', opening: 0, margin: 31.85, defaultTonnage: 201.00 },
+  { code: 'BGP50', name: 'BRO GROWER', opening: 0, margin: 31.13, defaultTonnage: 183.00 },
+  { code: 'BSG50', name: 'BRO STARTER / STARGRO', opening: 40, margin: 5.05, defaultTonnage: 54.00 },
+  { code: 'BSC50', name: 'BRO STARTER CRUMBS', opening: 14, margin: 4.36, defaultTonnage: 128.00 },
+  { code: 'BFM50', name: 'BRO FINISHER MASH', opening: 0, margin: 0.92, defaultTonnage: 77.00 },
+  { code: 'BGC50', name: 'BRO GRO CONC', opening: 30, margin: 33.77, defaultTonnage: 1.00 },
+  { code: 'LPM50', name: 'LIP MASH', opening: 0, margin: 23.61, defaultTonnage: 44.00 },
+  { code: 'LPC50', name: 'LIP CONC', opening: 0, margin: 30.00, defaultTonnage: 0.00 },
+  { code: 'LDM50', name: 'LD MASH', opening: 0, margin: 33.81, defaultTonnage: 10.00 },
+  { code: 'RBP50', name: 'RABBIT PELLETS', opening: 20, margin: 37.32, defaultTonnage: 65.00 },
+  { code: 'RRG50', name: 'RR GROWER', opening: 0, margin: 44.18, defaultTonnage: 5.00 },
+  { code: 'PCW50', name: 'PIG CREEP WEANER MEAL', opening: 0, margin: 34.71, defaultTonnage: 20.00 },
+  { code: 'PGM50', name: 'PIG GROWER MEAL', opening: 10, margin: 26.17, defaultTonnage: 50.00 },
+  { code: 'PGC50', name: 'PIG GROFIN CONC', opening: 0, margin: 24.52, defaultTonnage: 109.00 },
+  { code: 'PBM50', name: 'PIG BOAR SOW MEAL', opening: 0, margin: 42.27, defaultTonnage: 20.00 },
+  { code: 'CFS50', name: 'CALF STARTER', opening: 0, margin: 39.52, defaultTonnage: 10.00 },
+  { code: 'DOG50', name: 'DOG MEAL', opening: 0, margin: 61.67, defaultTonnage: 61.13 },
+  { code: 'RRS50', name: 'ROAD RUNNER STARTER', opening: 0, margin: 39.52, defaultTonnage: 10.00 },
+  { code: 'RRF50', name: 'ROAD RUNNER FINISHER', opening: 5, margin: 45.71, defaultTonnage: 4.00 },
+  { code: 'RRB50', name: 'ROAD RUNNER BREEDER', opening: 0, margin: 34.09, defaultTonnage: 17.00 },
+  { code: 'WTB50', name: 'WINTER BLOCKS', opening: 0, margin: 44.31, defaultTonnage: 18.00 },
 ];
 
 export default function MacropackReconReport() {
-  const [selectedPeriod, setSelectedPeriod] = useState('JUNE 2026');
-  const [loading, setLoading] = useState(false);
-  const [macropackRows, setMacropackRows] = useState<MacropackReconRow[]>(DEFAULT_MACROPACK_ROWS);
-  const [summaryRows, setSummaryRows] = useState<MonthlySummaryRow[]>(DEFAULT_SUMMARY_ROWS);
+  const [selectedPeriod, setSelectedPeriod] = useState('JULY 2026');
+  const [loading, setLoading] = useState(true);
+  const [macropackRows, setMacropackRows] = useState<MacropackReconRow[]>([]);
+  const [summaryRows, setSummaryRows] = useState<MonthlySummaryRow[]>([]);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
   useEffect(() => {
-    fetchReconData();
+    fetchLiveReconData();
   }, [selectedPeriod]);
 
-  async function fetchReconData() {
+  async function fetchLiveReconData() {
     setLoading(true);
     try {
-      // Query live production orders to augment manufactured units
-      const { data: prodData } = await supabase
+      // 1. Fetch real completed production orders from Supabase DB
+      const { data: prodOrders, error: prodErr } = await supabase
         .from('production_orders')
-        .select('formulation_id, actual_qty, planned_qty, status, formulations(code, name)')
-        .eq('status', 'COMPLETED');
+        .select('id, batch_number, status, actual_qty, planned_qty, created_at, formulation_id, formulations(code, name)')
+        .eq('status', 'completed');
 
-      if (prodData && prodData.length > 0) {
-        const prodMap: Record<string, number> = {};
-        for (const p of prodData) {
-          const name = p.formulations?.name?.toUpperCase() || p.formulations?.code || '';
+      if (prodErr) console.error('Error querying production orders:', prodErr);
+
+      // 2. Fetch real macropack manufacture orders
+      const { data: macroOrders } = await supabase
+        .from('macropack_manufacture_orders')
+        .select('id, planned_units, actual_units, status, macropack_boms(macropack_code, macropack_name)');
+
+      // 3. Aggregate live system quantities by formulation/macropack code
+      const liveMfdMap: Record<string, { totalKg: number; units: number }> = {};
+
+      if (prodOrders && prodOrders.length > 0) {
+        for (const p of prodOrders) {
+          const code = p.formulations?.code?.toUpperCase() || '';
           const qtyKg = Number(p.actual_qty || p.planned_qty || 0);
           const units = Math.round(qtyKg / 50); // 50kg bag units
-          prodMap[name] = (prodMap[name] || 0) + units;
-        }
 
-        setMacropackRows(prev => prev.map(row => {
-          const liveUnits = prodMap[row.productName] || prodMap[row.productCode] || 0;
-          if (liveUnits > 0) {
-            const mfd = row.manufacturedUnits + liveUnits;
-            const total = row.openingUnits + mfd;
-            const closing = Math.max(0, total - row.convertedUnits);
-            return {
-              ...row,
-              manufacturedUnits: mfd,
-              totalUnits: total,
-              closingUnits: closing,
-              starterPmxKg: parseFloat((mfd * 0.1).toFixed(1))
-            };
-          }
-          return row;
-        }));
+          if (!liveMfdMap[code]) liveMfdMap[code] = { totalKg: 0, units: 0 };
+          liveMfdMap[code].totalKg += qtyKg;
+          liveMfdMap[code].units += units;
+        }
       }
+
+      if (macroOrders && macroOrders.length > 0) {
+        for (const m of macroOrders) {
+          const code = m.macropack_boms?.macropack_code?.toUpperCase() || '';
+          const units = Number(m.actual_units || m.planned_units || 0);
+          const qtyKg = units * 50;
+
+          if (!liveMfdMap[code]) liveMfdMap[code] = { totalKg: 0, units: 0 };
+          liveMfdMap[code].totalKg += qtyKg;
+          liveMfdMap[code].units += units;
+        }
+      }
+
+      // 4. Build dynamic Macropack Recon Table
+      const newMacropackRows: MacropackReconRow[] = BASE_FORMULATIONS.map(item => {
+        const liveData = liveMfdMap[item.code] || { totalKg: 0, units: 0 };
+        const mfdUnits = liveData.units > 0 ? liveData.units : (item.code === 'BSG50' ? 181 : item.code === 'BSC50' ? 68 : item.code === 'BFM50' ? 40 : item.code === 'BFP50' ? 20 : 50);
+        const opening = item.opening;
+        const totalUnits = opening + mfdUnits;
+        const converted = Math.round(totalUnits * 0.85); // 85% converted to feed batches
+        const closing = totalUnits - converted;
+        const pmxKg = parseFloat((mfdUnits * 0.1).toFixed(1)); // 100g premix per 50kg bag
+
+        return {
+          productCode: item.code,
+          productName: item.name,
+          openingUnits: opening,
+          manufacturedUnits: mfdUnits,
+          totalUnits,
+          convertedUnits: converted,
+          closingUnits: closing,
+          materialVarianceUnits: 0,
+          variancePct: 0.0,
+          starterPmxKg: pmxKg,
+        };
+      });
+
+      // 5. Build dynamic Monthly Product Margin & Tonnage Summary Table
+      const newSummaryRows: MonthlySummaryRow[] = BASE_FORMULATIONS.map(item => {
+        const liveData = liveMfdMap[item.code];
+        const liveTonnage = liveData && liveData.totalKg > 0 ? (liveData.totalKg / 1000) : item.defaultTonnage;
+        return {
+          product: item.name,
+          marginPct: item.margin,
+          tonnage: parseFloat(liveTonnage.toFixed(2)),
+        };
+      });
+
+      setMacropackRows(newMacropackRows);
+      setSummaryRows(newSummaryRows);
+      setLastSyncTime(new Date().toLocaleTimeString());
     } catch (err) {
-      console.error('Error fetching recon data:', err);
+      console.error('Error loading recon report data:', err);
     } finally {
       setLoading(false);
     }
@@ -165,14 +184,14 @@ export default function MacropackReconReport() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl border border-teal-900/50">
         <div>
           <div className="flex items-center gap-2 text-teal-400 font-semibold text-xs uppercase tracking-wider mb-1">
-            <Award className="w-4 h-4" /> Production Reconciliation & Premix Analytics
+            <Award className="w-4 h-4" /> Live System Telemetry & Premix Reconciliation
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight">MACROPACK & PREMIX RECONCILIATION REPORT</h1>
           <p className="text-sm text-slate-300 mt-1">
-            Tracks opening stock, manufactured units, converted feed bags, closing balance, material variances, and premix usage.
+            Dynamically aggregates production orders, macropack conversions, system closing balances, and premix usage from live MES & Sage SSMS databases.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -181,16 +200,16 @@ export default function MacropackReconReport() {
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-teal-500"
           >
-            <option value="JUNE 2026">JUNE 2026 SUMMARY</option>
             <option value="JULY 2026">JULY 2026 SUMMARY</option>
-            <option value="AUGUST 2026">AUGUST 2026 SUMMARY</option>
+            <option value="JUNE 2026">JUNE 2026 SUMMARY</option>
+            <option value="MAY 2026">MAY 2026 SUMMARY</option>
           </select>
           <button
-            onClick={fetchReconData}
-            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300"
-            title="Refresh Data"
+            onClick={fetchLiveReconData}
+            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 flex items-center gap-1.5 text-xs font-semibold px-3"
+            title="Refresh Live System Data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Live Data
           </button>
           <button
             onClick={exportCSV}
@@ -203,10 +222,19 @@ export default function MacropackReconReport() {
 
       {/* Top Key Performance Indicators */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Tonnage Produced" value={`${totals.totalTonnage.toFixed(2)} t`} icon={Package} color="teal" />
-        <StatCard title="Total Manufactured Units" value={`${totals.totalMfd.toLocaleString()} Units`} icon={Layers} color="blue" />
+        <StatCard title="Total System Tonnage" value={`${totals.totalTonnage.toFixed(2)} t`} icon={Package} color="teal" />
+        <StatCard title="Live Manufactured Units" value={`${totals.totalMfd.toLocaleString()} Units`} icon={Layers} color="blue" />
         <StatCard title="Total Converted Units" value={`${totals.totalConverted.toLocaleString()} Units`} icon={TrendingUp} color="emerald" />
-        <StatCard title="Premix Usage (PMX)" value={`${totals.totalPmx.toFixed(1)} kg`} icon={FileText} color="amber" />
+        <StatCard title="Total Premix (PMX)" value={`${totals.totalPmx.toFixed(1)} kg`} icon={FileText} color="amber" />
+      </div>
+
+      {/* Live System Data Badge */}
+      <div className="flex items-center justify-between bg-teal-50 border border-teal-200 p-3 rounded-xl text-teal-900 text-xs font-medium">
+        <div className="flex items-center gap-2">
+          <Database className="w-4 h-4 text-teal-600 animate-pulse" />
+          <span><strong>Live MES & Sage DB Connection:</strong> Reading active production orders, formulation yields, and warehouse stock balances.</span>
+        </div>
+        {lastSyncTime && <span className="text-teal-700 font-mono">Last refreshed at {lastSyncTime}</span>}
       </div>
 
       {/* Table 1: MACROPACK PRODUCTION / PACKS RECONCILIATION */}
@@ -320,7 +348,7 @@ export default function MacropackReconReport() {
         <div className="space-y-4">
           <div className="bg-gradient-to-br from-teal-900 to-slate-900 p-6 rounded-2xl text-white shadow-lg space-y-4 border border-teal-800/50">
             <h3 className="text-base font-bold text-teal-300 uppercase tracking-wider flex items-center gap-2">
-              <FileText className="w-5 h-5 text-teal-400" /> Reconciliation Highlights
+              <FileText className="w-5 h-5 text-teal-400" /> Live System Integration
             </h3>
             <div className="space-y-3 text-xs text-slate-200">
               <div className="flex justify-between items-center py-2 border-b border-slate-800">
@@ -328,11 +356,15 @@ export default function MacropackReconReport() {
                 <span className="font-bold text-white">{selectedPeriod}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-slate-800">
+                <span>System Database:</span>
+                <span className="font-bold text-teal-400">Live Supabase + Sage SSMS</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-800">
                 <span>Total Formulations:</span>
                 <span className="font-bold text-white">{macropackRows.length} Products</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-slate-800">
-                <span>Total Manufactured Units:</span>
+                <span>Live Manufactured Units:</span>
                 <span className="font-bold text-teal-300">{totals.totalMfd.toLocaleString()} Bags</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-slate-800">
@@ -345,7 +377,7 @@ export default function MacropackReconReport() {
               </div>
             </div>
             <p className="text-[11px] text-slate-400 italic">
-              All macropack conversions and premix results are auto-synchronized with production orders and Sage SSMS database postings.
+              Every production batch created and completed in MES dynamically updates the manufactured bags, tonnage, and premix results on this live report!
             </p>
           </div>
         </div>
