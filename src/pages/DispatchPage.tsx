@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale,
   Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box, ArrowRight,
-  Pencil, Sparkles, Printer, RefreshCw
+  Pencil, Sparkles, Printer, RefreshCw, Building, ShieldCheck, DollarSign, Check, Phone, FileCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -16,6 +16,7 @@ import ApprovalButtons from '../components/approval/ApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import { validateFGStockAvailability, StockError } from '../lib/stockValidation';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
+import DeliveryNoteModal from '../components/dispatch/DeliveryNoteModal';
 
 type Tab = 'all' | 'pending' | 'loading' | 'dispatched' | 'in_transit' | 'delivered';
 const TABS: { key: Tab; label: string }[] = [
@@ -46,6 +47,10 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; bo
   cancelled: { label: 'Cancelled', color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', icon: AlertTriangle },
 };
 
+// Preset drivers and fleet for fast entry
+const FLEET_TRUCKS = ['ABG 1234', 'AES 5678', 'AFG 9012', 'AHL 3456', 'AGE 7890'];
+const FLEET_DRIVERS = ['P. Tembo', 'S. Mujele', 'J. Kaseke', 'M. Moyo', 'T. Ndlovu'];
+
 export default function DispatchPage() {
   const [orders, setOrders] = useState<DispatchOrder[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -56,7 +61,42 @@ export default function DispatchPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [viewOrder, setViewOrder] = useState<DispatchOrder | null>(null);
   const [viewItems, setViewItems] = useState<DispatchItem[]>([]);
-  const initForm = { branch_id: '', warehouse_id: '', dispatch_date: format(new Date(), 'yyyy-MM-dd'), vehicle_number: '', driver_name: '', delivery_notes: '' };
+
+  // D-Note Modal State
+  const [showDNote, setShowDNote] = useState(false);
+  const [dnoteOrder, setDNoteOrder] = useState<DispatchOrder | null>(null);
+  const [dnoteItems, setDNoteItems] = useState<DispatchItem[]>([]);
+
+  // Branch Confirmation Modal State
+  const [showBranchConfirmModal, setShowBranchConfirmModal] = useState(false);
+  const [branchConfirmOrder, setBranchConfirmOrder] = useState<DispatchOrder | null>(null);
+  const [branchNotes, setBranchNotes] = useState('');
+
+  // Accounts Approval Modal State
+  const [showAccountsApproveModal, setShowAccountsApproveModal] = useState(false);
+  const [accountsApproveOrder, setAccountsApproveOrder] = useState<DispatchOrder | null>(null);
+  const [accountsNotes, setAccountsNotes] = useState('');
+
+  const initForm = {
+    dispatch_type: 'branch_transfer' as 'branch_transfer' | 'customer_direct',
+    customer_name: '',
+    customer_code: '',
+    branch_id: '',
+    warehouse_id: '',
+    dispatch_date: format(new Date(), 'yyyy-MM-dd'),
+    vehicle_number: '',
+    driver_name: '',
+    driver_phone: '',
+    is_hired_truck: false,
+    transporter_name: '',
+    trailer_number: '',
+    physical_dnote_number: '',
+    hfdn_reference: '',
+    order_number: '',
+    vat_number: '',
+    delivery_notes: '',
+  };
+
   const [form, setForm] = useState(initForm);
   const [items, setItems] = useState([{ ...EMPTY_ITEM }]);
   const [saving, setSaving] = useState(false);
@@ -117,8 +157,10 @@ export default function DispatchPage() {
     const s = search.toLowerCase();
     return (
       o.dispatch_number.toLowerCase().includes(s) ||
-      o.driver_name.toLowerCase().includes(s) ||
-      o.vehicle_number.toLowerCase().includes(s) ||
+      o.driver_name?.toLowerCase().includes(s) ||
+      o.vehicle_number?.toLowerCase().includes(s) ||
+      o.physical_dnote_number?.toLowerCase().includes(s) ||
+      o.customer_name?.toLowerCase().includes(s) ||
       (o.branches as any)?.name?.toLowerCase().includes(s)
     );
   });
@@ -136,14 +178,25 @@ export default function DispatchPage() {
     setSaving(true);
     try {
       if (editingOrderId) {
-        const { error: updateError } = await supabase.from('dispatch_orders').update({ ...form, total_weight: totalWeight }).eq('id', editingOrderId);
+        const { error: updateError } = await supabase.from('dispatch_orders').update({ 
+          ...form, 
+          branch_id: form.dispatch_type === 'branch_transfer' ? form.branch_id : null,
+          total_weight: totalWeight 
+        }).eq('id', editingOrderId);
         if (updateError) throw updateError;
         await supabase.from('dispatch_items').delete().eq('dispatch_order_id', editingOrderId);
         const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
       } else {
         const generatedNumber = await generateDispatchNumber();
-        const { data, error } = await supabase.from('dispatch_orders').insert({ ...form, dispatch_number: generatedNumber, status: 'pending', total_weight: totalWeight, total_value: 0 }).select().single();
+        const { data, error } = await supabase.from('dispatch_orders').insert({ 
+          ...form, 
+          branch_id: form.dispatch_type === 'branch_transfer' ? form.branch_id : null,
+          dispatch_number: generatedNumber, 
+          status: 'pending', 
+          total_weight: totalWeight, 
+          total_value: 0 
+        }).select().single();
         if (!error && data) {
           const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
           if (rows.length) await supabase.from('dispatch_items').insert(rows);
@@ -167,11 +220,22 @@ export default function DispatchPage() {
     setViewOrder(null);
     const { data: editItems } = await supabase.from('dispatch_items').select('*, formulations(id, name, sage_code)').eq('dispatch_order_id', order.id);
     setForm({
-      branch_id: order.branch_id,
-      warehouse_id: order.warehouse_id,
+      dispatch_type: order.dispatch_type || 'branch_transfer',
+      customer_name: order.customer_name || '',
+      customer_code: order.customer_code || '',
+      branch_id: order.branch_id || '',
+      warehouse_id: order.warehouse_id || '',
       dispatch_date: format(new Date(order.dispatch_date), 'yyyy-MM-dd'),
       vehicle_number: order.vehicle_number || '',
       driver_name: order.driver_name || '',
+      driver_phone: order.driver_phone || '',
+      is_hired_truck: order.is_hired_truck || false,
+      transporter_name: order.transporter_name || '',
+      trailer_number: order.trailer_number || '',
+      physical_dnote_number: order.physical_dnote_number || '',
+      hfdn_reference: order.hfdn_reference || '',
+      order_number: order.order_number || '',
+      vat_number: order.vat_number || '',
       delivery_notes: order.delivery_notes || '',
     });
     if (editItems && editItems.length > 0) {
@@ -232,6 +296,13 @@ export default function DispatchPage() {
     if (data) setViewItems(data as DispatchItem[]);
   };
 
+  const openDNoteModal = async (order: DispatchOrder) => {
+    setDNoteOrder(order);
+    const { data } = await supabase.from('dispatch_items').select('*, formulations(name, code, sage_code)').eq('dispatch_order_id', order.id);
+    if (data) setDNoteItems(data as DispatchItem[]);
+    setShowDNote(true);
+  };
+
   const updateStatus = async (id: string, status: string) => {
     if (status === 'delivered' && viewOrder?.id === id) {
       const itemsToCheck = viewItems
@@ -283,25 +354,75 @@ export default function DispatchPage() {
     fetchOrders();
   };
 
-  const deleteOrder = async (order: DispatchOrder) => {
-    if (order.status !== 'pending') {
-      alert('Cannot delete — this dispatch has been processed. Only pending dispatches can be deleted.');
-      return;
-    }
-
-    if (!window.confirm(`Delete dispatch order ${order.dispatch_number}? This action cannot be undone.`)) {
-      return;
-    }
-
+  // Branch Confirm Delivery Action
+  const handleConfirmBranchDelivery = async () => {
+    if (!branchConfirmOrder) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('dispatch_orders').delete().eq('id', order.id);
+      const updates = {
+        status: 'delivered',
+        delivered_at: new Date().toISOString(),
+        branch_confirmation_status: 'confirmed',
+        branch_confirmed_at: new Date().toISOString(),
+        branch_confirmation_notes: branchNotes,
+      };
+      const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', branchConfirmOrder.id);
       if (error) throw error;
-      setViewOrder(null);
+      
+      alert('Branch delivery confirmed successfully!');
+      setShowBranchConfirmModal(false);
+      setBranchConfirmOrder(null);
+      setBranchNotes('');
       fetchOrders();
-    } catch (error: any) {
-      console.error('Error deleting dispatch order:', error);
-      alert(`Failed to delete dispatch order: ${error.message}`);
+    } catch (err: any) {
+      alert(`Failed to confirm branch delivery: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Accounts Approve & Post Action
+  const handleAccountsApprovePosting = async () => {
+    if (!accountsApproveOrder) return;
+    setSaving(true);
+    try {
+      const updates = {
+        accounts_posting_status: 'approved',
+        accounts_approved_at: new Date().toISOString(),
+        accounts_approval_notes: accountsNotes,
+      };
+      const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', accountsApproveOrder.id);
+      if (error) throw error;
+
+      // Register Sage review event
+      await supabase.from('sage_posting_reviews').insert({
+        sync_event_id: accountsApproveOrder.id,
+        event_type: 'dispatch_delivered',
+        event_description: `Dispatch ${accountsApproveOrder.dispatch_number} Approved for Sage Posting`,
+        sage_code: 'DSP-POST',
+        transaction_type: accountsApproveOrder.dispatch_type === 'customer_direct' ? 'INV' : 'WHT',
+        sage_tx_code: accountsApproveOrder.dispatch_type === 'customer_direct' ? 'INV' : 'WHT',
+        quantity: accountsApproveOrder.total_weight,
+        unit_cost: 0,
+        total_value: accountsApproveOrder.total_value || 0,
+        warehouse_id: 17,
+        warehouse_code: 'DEB',
+        reference: accountsApproveOrder.dispatch_number,
+        reference2: accountsApproveOrder.physical_dnote_number || '',
+        description: `Dispatch Posting (${accountsApproveOrder.dispatch_type})`,
+        transaction_date: format(new Date(), 'yyyy-MM-dd'),
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+      });
+
+      alert('Accounts approval completed! Ready for posting / customer invoice.');
+      setShowAccountsApproveModal(false);
+      setAccountsApproveOrder(null);
+      setAccountsNotes('');
+      fetchOrders();
+    } catch (err: any) {
+      alert(`Failed to approve accounts posting: ${err.message}`);
+    } finally {
       setSaving(false);
     }
   };
@@ -321,13 +442,12 @@ export default function DispatchPage() {
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
       <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
 
-        {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
+        {/* STATIC FIXED TOP SECTION */}
         <div className="shrink-0 space-y-3.5">
-          {/* Top Page Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Dispatch Management</h1>
-              <p className="text-xs text-slate-500">Plan, track and deliver finished goods to branches.</p>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Dispatch Logistics & D-Note Hub</h1>
+              <p className="text-xs text-slate-500">Driver assignments, hired trucks, official D-Notes, branch receipt & accounts invoicing.</p>
             </div>
           </div>
 
@@ -343,11 +463,11 @@ export default function DispatchPage() {
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-extrabold tracking-tight">Dispatch Logistics Hub</h2>
                     <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      <Sparkles className="w-3 h-3" /> Sage Integrated
+                      <Sparkles className="w-3 h-3" /> Official D-Note & Sage Integrated
                     </span>
                   </div>
                   <p className="text-slate-300 text-xs mt-0.5">
-                    Schedule finished feed transfers, monitor active transit routes, and automate Sage stock delivery postings.
+                    Manage Drivers, Hired Transporters, Official D-Notes, Branch Confirmations, and Accounts Invoicing.
                   </p>
                 </div>
               </div>
@@ -451,7 +571,7 @@ export default function DispatchPage() {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search dispatch #, branch, driver, vehicle..."
+                  placeholder="Search dispatch #, D-Note #, driver, truck..."
                   className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
                 />
               </div>
@@ -459,7 +579,7 @@ export default function DispatchPage() {
           </div>
         </div>
 
-        {/* SCROLLABLE TABLE / CONTENT SECTION (Scrolls underneath static top) */}
+        {/* SCROLLABLE TABLE / CONTENT SECTION */}
         <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
           
           {/* Desktop Table View */}
@@ -467,12 +587,12 @@ export default function DispatchPage() {
             <table className="w-full text-xs">
               <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
                 <tr>
-                  <th className="text-left px-5 py-3.5">Dispatch # & Date</th>
-                  <th className="text-left px-5 py-3.5">Destination Branch</th>
-                  <th className="text-left px-5 py-3.5">Vehicle & Driver</th>
+                  <th className="text-left px-5 py-3.5">Dispatch & D-Note #</th>
+                  <th className="text-left px-5 py-3.5">Type & Destination</th>
+                  <th className="text-left px-5 py-3.5">Transporter, Driver & Truck</th>
                   <th className="text-left px-5 py-3.5">Weight (kg)</th>
-                  <th className="text-left px-5 py-3.5">Active Stage</th>
-                  <th className="text-right px-5 py-3.5">Actions</th>
+                  <th className="text-left px-5 py-3.5">Approval Status</th>
+                  <th className="text-right px-5 py-3.5">Actions & D-Note</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -489,21 +609,35 @@ export default function DispatchPage() {
                             {o.dispatch_number.split('-').pop()?.slice(0, 3)}
                           </div>
                           <div>
-                            <p className="font-bold text-slate-900 font-mono">{o.dispatch_number}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-bold text-slate-900 font-mono">{o.dispatch_number}</p>
+                              {o.physical_dnote_number && (
+                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded font-mono">
+                                  #{o.physical_dnote_number}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
                           </div>
                         </div>
                       </td>
 
                       <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                          <span className="font-bold text-slate-800">{(o.branches as any)?.name || '-'}</span>
-                          {(o.branches as any)?.sage_code && (
-                            <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                              {(o.branches as any)?.sage_code}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                              o.dispatch_type === 'customer_direct' 
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                                : 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                            }`}>
+                              {o.dispatch_type === 'customer_direct' ? 'Customer Direct' : 'Branch Transfer'}
                             </span>
-                          )}
+                          </div>
+                          <p className="font-bold text-slate-800">
+                            {o.dispatch_type === 'customer_direct' 
+                              ? (o.customer_name || 'Direct Customer') 
+                              : ((o.branches as any)?.name || '-')}
+                          </p>
                         </div>
                       </td>
 
@@ -512,10 +646,15 @@ export default function DispatchPage() {
                           <div className="flex items-center gap-1.5 text-slate-800 font-bold">
                             <Truck className="w-3.5 h-3.5 text-slate-400" />
                             {o.vehicle_number || 'Unassigned'}
+                            {o.is_hired_truck && (
+                              <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1 rounded">
+                                HIRED: {o.transporter_name || 'Third Party'}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                             <User className="w-3.5 h-3.5 text-slate-400" />
-                            {o.driver_name || 'No driver assigned'}
+                            {o.driver_name || 'No driver'} {o.driver_phone ? `(${o.driver_phone})` : ''}
                           </div>
                         </div>
                       </td>
@@ -526,38 +665,82 @@ export default function DispatchPage() {
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
-                          <Icon className="w-3.5 h-3.5" /> {meta.label}
-                        </span>
+                      <td className="px-5 py-3.5 space-y-1">
+                        <div>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
+                            <Icon className="w-3 h-3" /> {meta.label}
+                          </span>
+                        </div>
+
+                        {/* Branch Confirmation Status */}
+                        {o.dispatch_type === 'branch_transfer' && (
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <span className="text-slate-400">Branch:</span>
+                            <span className={`font-bold ${o.branch_confirmation_status === 'confirmed' ? 'text-emerald-700' : 'text-amber-600'}`}>
+                              {o.branch_confirmation_status === 'confirmed' ? '✓ Received' : 'Awaiting Receipt'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Accounts Approval Status */}
+                        <div className="flex items-center gap-1 text-[10px]">
+                          <span className="text-slate-400">Accounts:</span>
+                          <span className={`font-bold ${o.accounts_posting_status === 'approved' ? 'text-emerald-700' : 'text-blue-600'}`}>
+                            {o.accounts_posting_status === 'approved' ? '✓ Posted / Invoiced' : 'Pending Posting'}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Official D-Note Button */}
                           <button
-                            onClick={() => { setPickingSlipOrder(o); openView(o); setShowPickingSlip(true); }}
-                            className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 transition-colors"
-                            title="Picking Slip"
+                            onClick={() => openDNoteModal(o)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-900 text-white hover:bg-blue-950 font-bold text-[11px] shadow-sm transition-colors"
+                            title="Official Delivery Note"
                           >
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-3.5 h-3.5 text-amber-400" />
+                            D-Note
                           </button>
+
+                          {/* Branch Confirm Button */}
+                          {o.dispatch_type === 'branch_transfer' && o.branch_confirmation_status !== 'confirmed' && (o.status === 'in_transit' || o.status === 'dispatched' || o.status === 'delivered') && (
+                            <button
+                              onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 font-bold text-[11px]"
+                              title="Branch Delivery Confirmation"
+                            >
+                              <Check className="w-3 h-3 text-emerald-700" /> Confirm Branch
+                            </button>
+                          )}
+
+                          {/* Accounts Approve Posting Button */}
+                          {o.accounts_posting_status !== 'approved' && (
+                            <button
+                              onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-300 font-bold text-[11px]"
+                              title="Accounts Approve & Post"
+                            >
+                              <DollarSign className="w-3 h-3 text-purple-700" /> Post / Invoice
+                            </button>
+                          )}
 
                           {flow && (
                             <button
                               onClick={() => updateStatus(o.id, flow.next)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm transition-all active:scale-95"
+                              className="p-1.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm transition-all"
+                              title={flow.label}
                             >
                               <flow.icon className="w-3.5 h-3.5" />
-                              {flow.label}
                             </button>
                           )}
 
                           <button
                             onClick={() => openView(o)}
-                            className="inline-flex items-center gap-1 p-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"
                             title="View Dispatch Timeline"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -579,74 +762,15 @@ export default function DispatchPage() {
               </tbody>
             </table>
           </div>
-
-          {/* Mobile Responsive Cards View */}
-          <div className="grid grid-cols-1 gap-3 p-3 md:hidden">
-            {filtered.map((o) => {
-              const meta = STATUS_META[o.status] || STATUS_META.pending;
-              const Icon = meta.icon;
-              const flow = nextStatus(o.status);
-
-              return (
-                <div key={o.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div>
-                      <span className="font-extrabold text-slate-900 font-mono text-sm">{o.dispatch_number}</span>
-                      <p className="text-[10px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
-                    </div>
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
-                      <Icon className="w-3 h-3" /> {meta.label}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Destination</span>
-                      <p className="font-bold text-slate-800">{o.branches?.name || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Total Weight</span>
-                      <p className="font-bold text-slate-900 font-mono">{o.total_weight.toLocaleString()} kg</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Vehicle</span>
-                      <p className="font-medium text-slate-700">{o.vehicle_number || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Driver</span>
-                      <p className="font-medium text-slate-700">{o.driver_name || '-'}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                    {flow && (
-                      <button
-                        onClick={() => updateStatus(o.id, flow.next)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500 text-white"
-                      >
-                        <flow.icon className="w-3.5 h-3.5" /> {flow.label}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => openView(o)}
-                      className="p-2 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> Details
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
         </div>
 
       </div>
 
-      {/* Create / Edit Modal */}
+      {/* CREATE / EDIT DISPATCH MODAL */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-5xl w-[98vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-5xl flex flex-col border-0 shadow-2xl rounded-3xl overflow-hidden [&>button.absolute]:hidden">
-          {/* Dark Header Banner */}
+          
+          {/* Header Banner */}
           <div className="shrink-0 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 py-4 relative">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -655,9 +779,9 @@ export default function DispatchPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-extrabold tracking-tight">
-                    {editingOrderId ? `Edit Dispatch Order (${dispatchNumber})` : 'New Dispatch Order'}
+                    {editingOrderId ? `Edit Dispatch Order (${dispatchNumber})` : 'New Dispatch Logistics Order'}
                   </h2>
-                  <p className="text-slate-300 text-xs">Schedule finished feed delivery to branch warehouse</p>
+                  <p className="text-slate-300 text-xs">Assign Driver, Hired Transporter, Vehicle & Generate D-Note</p>
                 </div>
               </div>
               <button
@@ -670,58 +794,95 @@ export default function DispatchPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-slate-50/80 space-y-5">
-            {/* KPI Summary strip */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3.5 bg-white border border-teal-200 rounded-2xl flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Total Dispatch Weight</span>
-                  <p className="text-xl font-extrabold text-slate-900 mt-0.5">{totalWeight.toLocaleString()} <span className="text-xs font-normal text-slate-500">kg</span></p>
-                </div>
-                <Scale className="w-6 h-6 text-teal-600" />
-              </div>
-              <div className="p-3.5 bg-white border border-slate-200 rounded-2xl flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Line Items</span>
-                  <p className="text-xl font-extrabold text-slate-900 mt-0.5">{items.filter(i => i.formulation_id).length}</p>
-                </div>
-                <Package className="w-6 h-6 text-slate-400" />
-              </div>
-            </div>
+            
+            {/* DISPATCH DESTINATION TYPE SELECTOR */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wider block">
+                1. Select Dispatch Type & Destination
+              </label>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, dispatch_type: 'branch_transfer' })}
+                  className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                    form.dispatch_type === 'branch_transfer'
+                      ? 'bg-indigo-50/80 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    form.dispatch_type === 'branch_transfer' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-xs">Branch Transfer (IBT)</p>
+                    <p className="text-[10px] text-slate-500">Inter-branch inventory transfer requiring receiving confirmation</p>
+                  </div>
+                </button>
 
-            {/* Logistics & Route Setup */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600" />
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Logistics & Route Setup</h3>
-                </div>
-                <Badge variant="outline" className="text-[10px]">Destination</Badge>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, dispatch_type: 'customer_direct' })}
+                  className={`p-3.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                    form.dispatch_type === 'customer_direct'
+                      ? 'bg-amber-50/80 border-amber-500 text-amber-950 ring-2 ring-amber-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    form.dispatch_type === 'customer_direct' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-xs">Customer Direct Sales</p>
+                    <p className="text-[10px] text-slate-500">Direct delivery to client; D-Note triggers Accounts Customer Invoice</p>
+                  </div>
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Dispatch #</label>
-                  <input
-                    type="text"
-                    value={dispatchNumber || 'Auto-generated'}
-                    disabled
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-mono text-slate-500 font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Destination Branch *</label>
-                  <select
-                    value={form.branch_id}
-                    onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                  >
-                    <option value="">Select destination branch...</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.sage_code || 'No Code'})</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Destination inputs based on type */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+                {form.dispatch_type === 'branch_transfer' ? (
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[11px] font-bold text-slate-600 uppercase">Destination Branch *</label>
+                    <select
+                      value={form.branch_id}
+                      onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    >
+                      <option value="">Select destination branch...</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.sage_code || 'No Code'})</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">Customer Name *</label>
+                      <input
+                        type="text"
+                        value={form.customer_name}
+                        onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
+                        placeholder="e.g. Farmer Direct Ltd"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">Customer Code</label>
+                      <input
+                        type="text"
+                        value={form.customer_code}
+                        onChange={(e) => setForm({ ...form, customer_code: e.target.value })}
+                        placeholder="e.g. CUST-091"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-slate-600 uppercase">Source Warehouse</label>
@@ -747,33 +908,140 @@ export default function DispatchPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* DRIVER, TRUCK & HIRED TRANSPORTER LOGISTICS */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Transporter, Driver & Truck Info</h3>
+                </div>
+
+                {/* Hired Truck Toggle */}
+                <label className="inline-flex items-center gap-2 cursor-pointer bg-amber-50 px-3 py-1 rounded-xl border border-amber-200 text-amber-900 font-bold text-xs">
+                  <input
+                    type="checkbox"
+                    checked={form.is_hired_truck}
+                    onChange={(e) => setForm({ ...form, is_hired_truck: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                  />
+                  Hired / Third-Party Truck?
+                </label>
+              </div>
+
+              {form.is_hired_truck && (
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-2">
+                  <span className="font-extrabold text-amber-800 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-amber-700" /> Hired Transporter Details
+                  </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-amber-900 uppercase">Transporter Company Name *</label>
+                      <input
+                        type="text"
+                        value={form.transporter_name}
+                        onChange={(e) => setForm({ ...form, transporter_name: e.target.value })}
+                        placeholder="e.g. Swift Freight Logistics / Bolloré"
+                        className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-amber-900 uppercase">Driver Contact / Phone</label>
+                      <input
+                        type="text"
+                        value={form.driver_phone}
+                        onChange={(e) => setForm({ ...form, driver_phone: e.target.value })}
+                        placeholder="e.g. +263 77 123 4567"
+                        className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Vehicle Reg Number *</label>
+                  <input
+                    type="text"
+                    list="truck-list"
+                    value={form.vehicle_number}
+                    onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })}
+                    placeholder="e.g. ABG 1234"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold bg-white"
+                  />
+                  <datalist id="truck-list">
+                    {FLEET_TRUCKS.map(t => <option key={t} value={t} />)}
+                  </datalist>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Trailer Reg Number</label>
+                  <input
+                    type="text"
+                    value={form.trailer_number}
+                    onChange={(e) => setForm({ ...form, trailer_number: e.target.value })}
+                    placeholder="e.g. TR-9021"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Driver Name *</label>
+                  <input
+                    type="text"
+                    list="driver-list"
+                    value={form.driver_name}
+                    onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
+                    placeholder="e.g. P. Tembo / S. Mujele"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold bg-white"
+                  />
+                  <datalist id="driver-list">
+                    {FLEET_DRIVERS.map(d => <option key={d} value={d} />)}
+                  </datalist>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Physical D-Note Serial # (Book)</label>
+                  <input
+                    type="text"
+                    value={form.physical_dnote_number}
+                    onChange={(e) => setForm({ ...form, physical_dnote_number: e.target.value })}
+                    placeholder="e.g. 35877"
+                    className="w-full border border-rose-300 rounded-xl px-3 py-2 text-xs font-bold text-rose-700 font-mono bg-rose-50/40"
+                  />
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Vehicle Number</label>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">HFDN Ref Number</label>
                   <input
-                    value={form.vehicle_number}
-                    onChange={(e) => setForm({ ...form, vehicle_number: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
-                    placeholder="e.g. ABG 1234"
+                    type="text"
+                    value={form.hfdn_reference}
+                    onChange={(e) => setForm({ ...form, hfdn_reference: e.target.value })}
+                    placeholder="e.g. 16+0947.5"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono bg-white"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Driver Name</label>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Order / Invoice Ref</label>
                   <input
-                    value={form.driver_name}
-                    onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
-                    placeholder="e.g. John Doe"
+                    type="text"
+                    value={form.order_number}
+                    onChange={(e) => setForm({ ...form, order_number: e.target.value })}
+                    placeholder="e.g. ORD-2026-90"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs bg-white"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Delivery Notes</label>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase">Delivery Notes / Remarks</label>
                   <input
                     value={form.delivery_notes}
                     onChange={(e) => setForm({ ...form, delivery_notes: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs bg-white"
-                    placeholder="Instructions..."
+                    placeholder="Special instructions..."
                   />
                 </div>
               </div>
@@ -784,9 +1052,10 @@ export default function DispatchPage() {
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-emerald-600" />
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Dispatch Products & Quantities</h3>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">3. Dispatch Products & Quantities</h3>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setItems([...items, { ...EMPTY_ITEM }])}
                   className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-1 rounded-lg"
                 >
@@ -840,7 +1109,7 @@ export default function DispatchPage() {
                     </div>
 
                     <div className="md:col-span-2 space-y-1">
-                      <label className="block text-[10px] font-bold text-emerald-700 uppercase">Qty (kg)</label>
+                      <label className="block text-[10px] font-bold text-emerald-700 uppercase">Qty</label>
                       <input
                         type="number"
                         value={item.quantity || ''}
@@ -857,8 +1126,8 @@ export default function DispatchPage() {
                         onChange={(e) => updateItem(idx, 'unit', e.target.value)}
                         className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white"
                       >
-                        <option value="kg">kg</option>
                         <option value="bags">bags</option>
+                        <option value="kg">kg</option>
                         <option value="tons">tons</option>
                       </select>
                     </div>
@@ -869,28 +1138,30 @@ export default function DispatchPage() {
           </div>
 
           <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700">Total Dispatch: <strong className="text-emerald-700 font-mono text-sm">{totalWeight.toLocaleString()} kg</strong></span>
+            <span className="text-xs font-bold text-slate-700">Total Weight: <strong className="text-emerald-700 font-mono text-sm">{totalWeight.toLocaleString()} kg</strong></span>
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => setShowCreate(false)}
                 className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleCreate}
-                disabled={saving || !form.branch_id}
+                disabled={saving || (form.dispatch_type === 'branch_transfer' && !form.branch_id) || (form.dispatch_type === 'customer_direct' && !form.customer_name)}
                 className="px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 shadow-md disabled:opacity-50 flex items-center gap-2"
               >
                 <Truck className="w-4 h-4" />
-                {saving ? 'Saving...' : editingOrderId ? 'Update Dispatch' : 'Save & Create Dispatch'}
+                {saving ? 'Saving...' : editingOrderId ? 'Update Dispatch' : 'Save & Generate D-Note'}
               </button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* View Detail Modal with Active Movement Tracker */}
+      {/* VIEW DETAIL MODAL */}
       <Dialog open={!!viewOrder} onOpenChange={(v) => { if (!v) setViewOrder(null); }}>
         <DialogContent className="max-w-6xl w-[98vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-6xl flex flex-col border-0 shadow-2xl rounded-3xl overflow-hidden [&>button.absolute]:hidden">
           {viewOrder && (
@@ -905,12 +1176,14 @@ export default function DispatchPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-xl font-black font-mono tracking-tight">{viewOrder.dispatch_number}</h2>
-                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30">
-                          {(viewOrder.branches as any)?.name || 'Branch'}
-                        </span>
+                        {viewOrder.physical_dnote_number && (
+                          <span className="bg-rose-500/20 text-rose-300 text-xs font-extrabold px-2 py-0.5 rounded border border-rose-500/30 font-mono">
+                            D-Note Book #{viewOrder.physical_dnote_number}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-300 mt-0.5">
-                        Dispatch Date: {format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')} • Vehicle: {viewOrder.vehicle_number || 'Unassigned'}
+                        Date: {format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')} • Driver: {viewOrder.driver_name || 'N/A'} • Vehicle: {viewOrder.vehicle_number || 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -925,65 +1198,32 @@ export default function DispatchPage() {
 
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6 bg-slate-50/80 space-y-6">
-
-                {/* ACTIVE MOVEMENT TRACKER / STAGE TIMELINE */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Route className="w-4 h-4 text-indigo-600" />
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Stage & Transit Movement Progress</h3>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border-indigo-200">
-                      Step {currentStatusIndex + 1} of 5
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-5 gap-2 relative">
-                    {STAGES.map((stage, idx) => {
-                      const isPast = idx < currentStatusIndex;
-                      const isCurrent = idx === currentStatusIndex;
-                      const Icon = stage.icon;
-
-                      return (
-                        <div key={stage.key} className="flex flex-col items-center text-center space-y-2 relative z-10">
-                          <div
-                            className={`w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all shadow-sm ${
-                              isCurrent
-                                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 border-teal-600 text-white ring-4 ring-emerald-500/20 scale-105'
-                                : isPast
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                                : 'bg-slate-100 border-slate-200 text-slate-400'
-                            }`}
-                          >
-                            <Icon className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className={`text-xs font-extrabold ${isCurrent ? 'text-emerald-900' : isPast ? 'text-slate-800' : 'text-slate-400'}`}>
-                              {stage.label}
-                            </p>
-                            <p className="text-[10px] text-slate-400 hidden sm:block">{stage.desc}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Action Bar */}
+                
+                {/* Action Bar with Official D-Note Printer */}
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => { setPickingSlipOrder(viewOrder); setShowPickingSlip(true); }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                      onClick={() => openDNoteModal(viewOrder)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-900 text-white hover:bg-blue-950 shadow-md"
                     >
-                      <FileText className="w-3.5 h-3.5" /> Print Picking Slip
+                      <FileText className="w-4 h-4 text-amber-400" /> Print Official D-Note
                     </button>
-                    {viewOrder.status === 'pending' && (
+
+                    {viewOrder.dispatch_type === 'branch_transfer' && viewOrder.branch_confirmation_status !== 'confirmed' && (
                       <button
-                        onClick={() => handleEdit(viewOrder)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300"
+                        onClick={() => { setBranchConfirmOrder(viewOrder); setBranchNotes(viewOrder.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300"
                       >
-                        <Pencil className="w-3.5 h-3.5" /> Edit Order
+                        <Check className="w-4 h-4 text-emerald-700" /> Confirm Branch Receipt
+                      </button>
+                    )}
+
+                    {viewOrder.accounts_posting_status !== 'approved' && (
+                      <button
+                        onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-300"
+                      >
+                        <DollarSign className="w-4 h-4 text-purple-700" /> Accounts Approve Posting
                       </button>
                     )}
                   </div>
@@ -991,53 +1231,13 @@ export default function DispatchPage() {
                   {nextStatus(viewOrder.status) && (
                     <button
                       onClick={() => updateStatus(viewOrder.id, nextStatus(viewOrder.status)!.next)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg"
                     >
                       <ArrowRight className="w-4 h-4" />
                       Advance to {nextStatus(viewOrder.status)!.label}
                     </button>
                   )}
                 </div>
-
-                {/* Transport & Route Details Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Destination Branch</span>
-                    <p className="font-extrabold text-slate-900">{viewOrder.branches?.name || '-'}</p>
-                    <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 inline-block mt-1">
-                      {viewOrder.branches?.sage_code || 'No Code'}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Source Warehouse</span>
-                    <p className="font-extrabold text-slate-900">{viewOrder.warehouses?.name || 'Dispatch (DEB)'}</p>
-                    <span className="text-[10px] text-slate-500">WhseID: 17/20</span>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vehicle & Driver</span>
-                    <p className="font-extrabold text-slate-900">{viewOrder.vehicle_number || 'Unassigned'}</p>
-                    <p className="text-[11px] text-slate-500">{viewOrder.driver_name || 'No Driver'}</p>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Dispatch Weight</span>
-                    <p className="font-extrabold text-emerald-900 font-mono text-lg">{viewOrder.total_weight.toLocaleString()} kg</p>
-                    <span className="text-[10px] text-emerald-600">({(viewOrder.total_weight / 1000).toFixed(2)} tonnes)</span>
-                  </div>
-                </div>
-
-                {/* Delivery Notes */}
-                {viewOrder.delivery_notes && (
-                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold">Delivery Notes / Special Instructions:</span>
-                      <p className="mt-0.5 text-amber-900">{viewOrder.delivery_notes}</p>
-                    </div>
-                  </div>
-                )}
 
                 {/* Line Items Table */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-3 p-4">
@@ -1053,7 +1253,7 @@ export default function DispatchPage() {
                           <th className="text-left px-4 py-2.5">Product Formulation</th>
                           <th className="text-left px-4 py-2.5">Sage Code</th>
                           <th className="text-left px-4 py-2.5">Batch #</th>
-                          <th className="text-right px-4 py-2.5">Quantity (kg)</th>
+                          <th className="text-right px-4 py-2.5">Quantity</th>
                           <th className="text-left px-4 py-2.5">Unit</th>
                         </tr>
                       </thead>
@@ -1072,14 +1272,117 @@ export default function DispatchPage() {
                   </div>
                 </div>
 
-                {/* Approval History */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                  <ApprovalHistory entityType="dispatch_order" entityId={viewOrder.id} />
-                </div>
-
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* OFFICIAL D-NOTE PRINTABLE MODAL */}
+      <DeliveryNoteModal
+        isOpen={showDNote}
+        onClose={() => setShowDNote(false)}
+        order={dnoteOrder}
+        items={dnoteItems}
+      />
+
+      {/* BRANCH CONFIRM DELIVERY MODAL */}
+      <Dialog open={showBranchConfirmModal} onOpenChange={setShowBranchConfirmModal}>
+        <DialogContent className="max-w-md w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 bg-emerald-100 rounded-xl text-emerald-800">
+                <Check className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Confirm Branch Delivery</h3>
+                <p className="text-xs text-slate-500">Verify stock delivery at receiving branch</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 font-medium">
+              Confirm that dispatch <strong className="font-mono text-slate-900">{branchConfirmOrder?.dispatch_number}</strong> was received in full and in good order at the receiving branch.
+            </p>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-600 uppercase">Receiving Inspection Notes</label>
+              <textarea
+                value={branchNotes}
+                onChange={(e) => setBranchNotes(e.target.value)}
+                placeholder="e.g. All 300 bags received intact. No seal tampering or moisture damage."
+                rows={3}
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-slate-50 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBranchConfirmModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBranchDelivery}
+                disabled={saving}
+                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md"
+              >
+                {saving ? 'Confirming...' : 'Confirm Delivery Received'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ACCOUNTS APPROVE POSTING MODAL */}
+      <Dialog open={showAccountsApproveModal} onOpenChange={setShowAccountsApproveModal}>
+        <DialogContent className="max-w-md w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 bg-purple-100 rounded-xl text-purple-800">
+                <DollarSign className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Accounts Approve & Post</h3>
+                <p className="text-xs text-slate-500">Raise Customer Invoice or Approve Sage Stock Transfer</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 font-medium">
+              Approving dispatch <strong className="font-mono text-slate-900">{accountsApproveOrder?.dispatch_number}</strong> for {accountsApproveOrder?.dispatch_type === 'customer_direct' ? 'Direct Customer Invoicing' : 'Sage IBT Stock Posting'}.
+            </p>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-600 uppercase">Finance Approval Remarks</label>
+              <textarea
+                value={accountsNotes}
+                onChange={(e) => setAccountsNotes(e.target.value)}
+                placeholder="e.g. Verified against D-Note #35877. Approved for posting."
+                rows={3}
+                className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-slate-50 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAccountsApproveModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAccountsApprovePosting}
+                disabled={saving}
+                className="px-4 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl shadow-md"
+              >
+                {saving ? 'Approving...' : 'Approve & Post to System'}
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1099,71 +1402,6 @@ export default function DispatchPage() {
           }
         }}
       />
-
-      {/* Picking Slip Printable Modal */}
-      <Modal open={showPickingSlip} onClose={() => { setShowPickingSlip(false); setPickingSlipOrder(null); }} title="Picking Slip" size="2xl">
-        {pickingSlipOrder && viewItems.length > 0 && (
-          <div className="space-y-6">
-            <div className="border-b border-slate-200 pb-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight">DISPATCH PICKING SLIP</h3>
-                  <p className="text-xs font-mono text-slate-500">Dispatch #: {pickingSlipOrder.dispatch_number}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Dispatch Date</p>
-                  <p className="text-sm font-bold text-slate-800">{format(new Date(pickingSlipOrder.dispatch_date), 'dd MMM yyyy')}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Destination Branch</p>
-                  <p className="font-extrabold text-slate-900">{pickingSlipOrder.branches?.name || '-'}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Vehicle / Driver</p>
-                  <p className="font-extrabold text-slate-900">{pickingSlipOrder.vehicle_number || '-'} / {pickingSlipOrder.driver_name || '-'}</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Items to Pick & Load</h4>
-              <table className="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
-                <thead className="bg-slate-900 text-white uppercase tracking-wider">
-                  <tr>
-                    <th className="text-left px-4 py-2.5">Product</th>
-                    <th className="text-left px-4 py-2.5">Batch</th>
-                    <th className="text-right px-4 py-2.5">Qty (kg)</th>
-                    <th className="text-center px-4 py-2.5">Picked</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {viewItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-bold text-slate-900">{item.formulations?.name || '-'}</td>
-                      <td className="px-4 py-3 text-slate-600 font-mono">{item.batch_number}</td>
-                      <td className="px-4 py-3 text-right text-slate-900 font-extrabold font-mono">{item.quantity.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">
-                        <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-900 text-white rounded-xl shadow"
-              >
-                <Printer className="w-3.5 h-3.5" /> Print Slip
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }

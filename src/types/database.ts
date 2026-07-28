@@ -313,12 +313,23 @@ export interface StockMovement {
 export interface DispatchOrder {
   id: string;
   dispatch_number: string;
+  dispatch_type?: 'branch_transfer' | 'customer_direct';
+  customer_name?: string;
+  customer_code?: string;
+  physical_dnote_number?: string;
+  hfdn_reference?: string;
+  order_number?: string;
+  vat_number?: string;
   branch_id: string | null;
   warehouse_id: string | null;
   dispatch_date: string;
   status: 'pending' | 'loading' | 'dispatched' | 'in_transit' | 'delivered' | 'cancelled';
   vehicle_number: string;
   driver_name: string;
+  driver_phone?: string;
+  is_hired_truck?: boolean;
+  transporter_name?: string;
+  trailer_number?: string;
   total_weight: number;
   total_value: number;
   prepared_by: string | null;
@@ -327,6 +338,14 @@ export interface DispatchOrder {
   rejection_reason?: string | null;
   delivery_notes: string;
   delivered_at: string | null;
+  branch_confirmed_by?: string | null;
+  branch_confirmed_at?: string | null;
+  branch_confirmation_notes?: string;
+  branch_confirmation_status?: 'pending' | 'confirmed' | 'rejected';
+  accounts_approved_by?: string | null;
+  accounts_approved_at?: string | null;
+  accounts_approval_notes?: string;
+  accounts_posting_status?: 'pending' | 'approved' | 'rejected';
   created_at: string;
   updated_at: string;
   branches?: Branch;
