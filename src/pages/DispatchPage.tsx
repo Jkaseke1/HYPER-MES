@@ -5,6 +5,7 @@ import {
   Pencil, Sparkles, Printer, RefreshCw, Building, ShieldCheck, DollarSign, Check, Phone, FileCheck, ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
 import type { DispatchOrder, DispatchItem, Branch, Warehouse, Formulation } from '../types/database';
@@ -187,6 +188,7 @@ export default function DispatchPage() {
         await supabase.from('dispatch_items').delete().eq('dispatch_order_id', editingOrderId);
         const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
+        toast.success('Dispatch order updated!');
       } else {
         const generatedNumber = await generateDispatchNumber();
         const { data, error } = await supabase.from('dispatch_orders').insert({ 
@@ -200,12 +202,13 @@ export default function DispatchPage() {
         if (!error && data) {
           const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
           if (rows.length) await supabase.from('dispatch_items').insert(rows);
+          toast.success('Dispatch order created & D-Note generated!');
         }
         if (error) throw error;
       }
     } catch (error: any) {
       console.error('Error saving dispatch order:', error);
-      alert(`Failed to save dispatch order: ${error.message}`);
+      toast.error(`Failed to save dispatch order: ${error.message}`);
     } finally {
       setSaving(false);
       setShowCreate(false);
@@ -369,13 +372,19 @@ export default function DispatchPage() {
       const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', branchConfirmOrder.id);
       if (error) throw error;
       
-      alert('Branch delivery confirmed successfully!');
+      toast.success(`Branch delivery confirmed for ${branchConfirmOrder.dispatch_number}!`);
       setShowBranchConfirmModal(false);
+
+      // If view detail modal is open for this order, update local view object so state reflects immediately!
+      if (viewOrder?.id === branchConfirmOrder.id) {
+        setViewOrder({ ...viewOrder, ...updates });
+      }
+
       setBranchConfirmOrder(null);
       setBranchNotes('');
       fetchOrders();
     } catch (err: any) {
-      alert(`Failed to confirm branch delivery: ${err.message}`);
+      toast.error(`Failed to confirm branch delivery: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -415,13 +424,18 @@ export default function DispatchPage() {
         reviewed_at: new Date().toISOString(),
       });
 
-      alert('Accounts approval completed! Ready for posting / customer invoice.');
+      toast.success(`Accounts approval completed for ${accountsApproveOrder.dispatch_number}! Posted to Sage.`);
       setShowAccountsApproveModal(false);
+
+      if (viewOrder?.id === accountsApproveOrder.id) {
+        setViewOrder({ ...viewOrder, ...updates });
+      }
+
       setAccountsApproveOrder(null);
       setAccountsNotes('');
       fetchOrders();
     } catch (err: any) {
-      alert(`Failed to approve accounts posting: ${err.message}`);
+      toast.error(`Failed to approve accounts posting: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -440,10 +454,6 @@ export default function DispatchPage() {
 
   // Compute 4-step workflow status stage for any order
   const getOrderStep = (o: DispatchOrder) => {
-    // Step 1: Created & Loaded
-    // Step 2: In Transit
-    // Step 3: Branch Confirm Receipt
-    // Step 4: Accounts Approve & Post
     let currentStep = 1;
     let step1Done = true;
     let step2Done = false;
@@ -652,12 +662,14 @@ export default function DispatchPage() {
                   <th className="text-left px-4 py-3">Logistics & Driver</th>
                   <th className="text-left px-4 py-3">Weight</th>
                   <th className="text-left px-4 py-3">Workflow Sequence Progress</th>
-                  <th className="text-right px-4 py-3">Required Next Action</th>
+                  <th className="text-right px-4 py-3">Actions & Next Step</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((o) => {
                   const stepInfo = getOrderStep(o);
+                  const isBranchConfirmed = o.branch_confirmation_status === 'confirmed';
+                  const isAccountsApproved = o.accounts_posting_status === 'approved';
 
                   return (
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
@@ -726,7 +738,7 @@ export default function DispatchPage() {
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      {/* STEP-BY-STEP PROGRESS PIPELINE (VERY CLEAR & NEAT) */}
+                      {/* STEP-BY-STEP PROGRESS PIPELINE */}
                       <td className="px-4 py-3">
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-1 text-[10px]">
@@ -750,11 +762,11 @@ export default function DispatchPage() {
                             {o.dispatch_type === 'branch_transfer' && (
                               <>
                                 <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
-                                  o.branch_confirmation_status === 'confirmed' 
+                                  isBranchConfirmed 
                                     ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
                                     : 'bg-amber-50 text-amber-800 border-amber-300'
                                 }`}>
-                                  {o.branch_confirmation_status === 'confirmed' ? '✓ 3. Branch Received' : '3. Awaiting Branch'}
+                                  {isBranchConfirmed ? '✓ 3. Branch Received' : '3. Awaiting Branch'}
                                 </span>
                                 <ChevronRight className="w-3 h-3 text-slate-400" />
                               </>
@@ -762,17 +774,17 @@ export default function DispatchPage() {
 
                             {/* Step 4 Badge */}
                             <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
-                              o.accounts_posting_status === 'approved' 
+                              isAccountsApproved 
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
                                 : 'bg-slate-100 text-slate-500 border-slate-200'
                             }`}>
-                              {o.accounts_posting_status === 'approved' ? '✓ 4. Invoiced/Posted' : '4. Accounts'}
+                              {isAccountsApproved ? '✓ 4. Invoiced/Posted' : '4. Accounts'}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      {/* ACTIONS & NEXT ACTION BUTTON */}
+                      {/* ACTIONS & NEXT STEP BUTTONS */}
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           
@@ -785,24 +797,36 @@ export default function DispatchPage() {
                             <FileText className="w-3.5 h-3.5 text-amber-400" /> D-Note
                           </button>
 
-                          {/* Action Button 1: Branch Receipt */}
-                          {o.dispatch_type === 'branch_transfer' && o.branch_confirmation_status !== 'confirmed' && (
-                            <button
-                              onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[11px] shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
-                            >
-                              <Check className="w-3.5 h-3.5" /> Step 3: Confirm Branch
-                            </button>
+                          {/* Action Button 1: Branch Receipt (Hidden/Disabled if already confirmed) */}
+                          {o.dispatch_type === 'branch_transfer' && (
+                            isBranchConfirmed ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 font-extrabold text-[11px] cursor-default">
+                                <Check className="w-3.5 h-3.5 text-emerald-600" /> Branch Confirmed
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[11px] shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+                              >
+                                <Check className="w-3.5 h-3.5" /> Step 3: Confirm Branch
+                              </button>
+                            )
                           )}
 
                           {/* Action Button 2: Accounts Approve & Post */}
-                          {o.accounts_posting_status !== 'approved' && (o.dispatch_type === 'customer_direct' || o.branch_confirmation_status === 'confirmed') && (
-                            <button
-                              onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
-                            >
-                              <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
-                            </button>
+                          {isAccountsApproved ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-50 text-purple-900 border border-purple-300 font-extrabold text-[11px] cursor-default">
+                              <DollarSign className="w-3.5 h-3.5 text-purple-600" /> Posted to Sage
+                            </span>
+                          ) : (
+                            (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
+                              <button
+                                onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
+                              >
+                                <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
+                              </button>
+                            )
                           )}
 
                           {/* View details button */}
@@ -1271,7 +1295,7 @@ export default function DispatchPage() {
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6 bg-slate-50/80 space-y-6">
                 
-                {/* Action Bar with Official D-Note Printer */}
+                {/* Action Bar with Official D-Note Printer & Status-Aware Next Buttons */}
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2">
                     <button
@@ -1281,22 +1305,36 @@ export default function DispatchPage() {
                       <FileText className="w-4 h-4 text-amber-400" /> Print Official D-Note
                     </button>
 
-                    {viewOrder.dispatch_type === 'branch_transfer' && viewOrder.branch_confirmation_status !== 'confirmed' && (
-                      <button
-                        onClick={() => { setBranchConfirmOrder(viewOrder); setBranchNotes(viewOrder.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-md"
-                      >
-                        <Check className="w-4 h-4" /> Step 3: Confirm Branch Receipt
-                      </button>
+                    {/* Step 3: Branch Confirm (Disabled if already confirmed) */}
+                    {viewOrder.dispatch_type === 'branch_transfer' && (
+                      viewOrder.branch_confirmation_status === 'confirmed' ? (
+                        <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 cursor-default">
+                          <Check className="w-4 h-4 text-emerald-600" /> Step 3: Branch Confirmed
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => { setBranchConfirmOrder(viewOrder); setBranchNotes(viewOrder.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-md"
+                        >
+                          <Check className="w-4 h-4" /> Step 3: Confirm Branch Receipt
+                        </button>
+                      )
                     )}
 
-                    {viewOrder.accounts_posting_status !== 'approved' && (
-                      <button
-                        onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
-                      >
-                        <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
-                      </button>
+                    {/* Step 4: Accounts Post (Disabled if already posted) */}
+                    {viewOrder.accounts_posting_status === 'approved' ? (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold rounded-xl bg-purple-50 text-purple-900 border border-purple-300 cursor-default">
+                        <DollarSign className="w-4 h-4 text-purple-600" /> Step 4: Posted to Sage
+                      </span>
+                    ) : (
+                      (viewOrder.dispatch_type === 'customer_direct' || viewOrder.branch_confirmation_status === 'confirmed') && (
+                        <button
+                          onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
+                        >
+                          <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
+                        </button>
+                      )
                     )}
                   </div>
 
