@@ -375,7 +375,6 @@ export default function DispatchPage() {
       toast.success(`Branch delivery confirmed for ${branchConfirmOrder.dispatch_number}!`);
       setShowBranchConfirmModal(false);
 
-      // If view detail modal is open for this order, update local view object so state reflects immediately!
       if (viewOrder?.id === branchConfirmOrder.id) {
         setViewOrder({ ...viewOrder, ...updates });
       }
@@ -403,7 +402,7 @@ export default function DispatchPage() {
       const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', accountsApproveOrder.id);
       if (error) throw error;
 
-      // Register Sage review event
+      // 1. Register Sage review event
       await supabase.from('sage_posting_reviews').insert({
         sync_event_id: accountsApproveOrder.id,
         event_type: 'dispatch_delivered',
@@ -423,6 +422,13 @@ export default function DispatchPage() {
         status: 'approved',
         reviewed_at: new Date().toISOString(),
       });
+
+      // 2. Release sync_log status from 'pending_finance_review' to 'pending' so background bridge worker posts immediately to Sage!
+      await supabase
+        .from('sync_log')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('reference_id', accountsApproveOrder.id)
+        .eq('event_type', 'dispatch_delivered');
 
       toast.success(`Accounts approval completed for ${accountsApproveOrder.dispatch_number}! Posted to Sage.`);
       setShowAccountsApproveModal(false);
