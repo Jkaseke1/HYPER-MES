@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Eye, Truck, MapPin, Package, AlertTriangle, FileText, X, Scale,
   Warehouse as WarehouseIcon, Calendar, User, Route, Clock, CheckCircle2, Box, ArrowRight,
-  Pencil, Sparkles, Printer, RefreshCw, Building, ShieldCheck, DollarSign, Check, Phone, FileCheck
+  Pencil, Sparkles, Printer, RefreshCw, Building, ShieldCheck, DollarSign, Check, Phone, FileCheck, ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -35,15 +35,15 @@ const STAGES = [
   { key: 'loading', label: 'Loading', icon: Box, desc: 'Vehicle Loading' },
   { key: 'dispatched', label: 'Dispatched', icon: Truck, desc: 'Left Warehouse' },
   { key: 'in_transit', label: 'In Transit', icon: Route, desc: 'On Delivery Route' },
-  { key: 'delivered', label: 'Delivered', icon: CheckCircle2, desc: 'Received at Branch' },
+  { key: 'delivered', label: 'Delivered', icon: CheckCircle2, desc: 'Received & Approved' },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; border: string; icon: any }> = {
-  pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock },
-  loading: { label: 'Loading', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', icon: Box },
-  dispatched: { label: 'Dispatched', color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Truck },
-  in_transit: { label: 'In Transit', color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', icon: Route },
-  delivered: { label: 'Delivered', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle2 },
+  pending: { label: '1. Pending', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock },
+  loading: { label: '1. Loading', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', icon: Box },
+  dispatched: { label: '2. Dispatched', color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Truck },
+  in_transit: { label: '2. In Transit', color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', icon: Route },
+  delivered: { label: '3. Delivered', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle2 },
   cancelled: { label: 'Cancelled', color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', icon: AlertTriangle },
 };
 
@@ -438,36 +438,63 @@ export default function DispatchPage() {
   const statusIndex = (s: string) => ['pending', 'loading', 'dispatched', 'in_transit', 'delivered'].indexOf(s);
   const currentStatusIndex = viewOrder ? statusIndex(viewOrder.status) : -1;
 
+  // Compute 4-step workflow status stage for any order
+  const getOrderStep = (o: DispatchOrder) => {
+    // Step 1: Created & Loaded
+    // Step 2: In Transit
+    // Step 3: Branch Confirm Receipt
+    // Step 4: Accounts Approve & Post
+    let currentStep = 1;
+    let step1Done = true;
+    let step2Done = false;
+    let step3Done = false;
+    let step4Done = false;
+
+    if (o.status === 'dispatched' || o.status === 'in_transit' || o.status === 'delivered') {
+      step2Done = true;
+      currentStep = 2;
+    }
+    if (o.branch_confirmation_status === 'confirmed' || o.status === 'delivered') {
+      step3Done = true;
+      currentStep = 3;
+    }
+    if (o.accounts_posting_status === 'approved') {
+      step4Done = true;
+      currentStep = 4;
+    }
+
+    return { currentStep, step1Done, step2Done, step3Done, step4Done };
+  };
+
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
       <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
 
         {/* STATIC FIXED TOP SECTION */}
-        <div className="shrink-0 space-y-3.5">
+        <div className="shrink-0 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Dispatch Logistics & D-Note Hub</h1>
-              <p className="text-xs text-slate-500">Driver assignments, hired trucks, official D-Notes, branch receipt & accounts invoicing.</p>
+              <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">Dispatch Logistics & D-Note Hub</h1>
+              <p className="text-xs text-slate-500">Manage fleet, hired trucks, official D-Notes, branch receipt & accounts invoicing.</p>
             </div>
           </div>
 
-          {/* Header Banner */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-5 rounded-2xl text-white shadow-lg relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+          {/* Top Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 rounded-2xl text-white shadow-lg relative overflow-hidden">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
-                  <Truck className="w-6 h-6 text-emerald-400" />
+                <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+                  <Truck className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-extrabold tracking-tight">Dispatch Logistics Hub</h2>
+                    <h2 className="text-lg font-extrabold tracking-tight">Dispatch Logistics Hub</h2>
                     <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
                       <Sparkles className="w-3 h-3" /> Official D-Note & Sage Integrated
                     </span>
                   </div>
                   <p className="text-slate-300 text-xs mt-0.5">
-                    Manage Drivers, Hired Transporters, Official D-Notes, Branch Confirmations, and Accounts Invoicing.
+                    Order ➔ Driver/Hired Truck ➔ Official D-Note ➔ Branch Receipt ➔ Accounts Invoicing & Sage Posting.
                   </p>
                 </div>
               </div>
@@ -481,7 +508,7 @@ export default function DispatchPage() {
                 </button>
                 <button
                   onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
-                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
+                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
                 >
                   <Plus className="w-4 h-4" />
                   New Dispatch Order
@@ -490,73 +517,106 @@ export default function DispatchPage() {
             </div>
           </div>
 
+          {/* STEP-BY-STEP PROCESS FLOW GUIDE BANNER */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between gap-2 overflow-x-auto text-xs">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
+                4-Step Process:
+              </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
+                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">1</span>
+                  Create & D-Note
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">2</span>
+                  Vehicle In-Transit
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">3</span>
+                  Branch Confirm Receipt
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px] shrink-0">
+                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center">4</span>
+                Accounts Approve & Post
+              </div>
+            </div>
+          </div>
+
           {/* Stats Overview */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+            <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Dispatches</span>
-                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
                   <Truck className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-extrabold text-slate-900 mt-1">{stats.total.toLocaleString()}</p>
-              <span className="text-[10px] text-slate-400">All registered trips</span>
+              <p className="text-lg font-extrabold text-slate-900 mt-0.5">{stats.total.toLocaleString()}</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-amber-200/80 bg-amber-50/20 p-3 shadow-sm">
+            <div className="bg-white rounded-xl border border-amber-200 bg-amber-50/20 p-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Pending</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
+                <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
                   <Clock className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-extrabold text-amber-900 mt-1">{stats.pending.toLocaleString()}</p>
-              <span className="text-[10px] text-amber-600 font-medium">Awaiting loading</span>
+              <p className="text-lg font-extrabold text-amber-900 mt-0.5">{stats.pending.toLocaleString()}</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-blue-200/80 bg-blue-50/20 p-3 shadow-sm">
+            <div className="bg-white rounded-xl border border-blue-200 bg-blue-50/20 p-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Loading Dock</span>
-                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
+                <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
                   <Box className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-extrabold text-blue-900 mt-1">{stats.loading.toLocaleString()}</p>
-              <span className="text-[10px] text-blue-600 font-medium">Currently loading</span>
+              <p className="text-lg font-extrabold text-blue-900 mt-0.5">{stats.loading.toLocaleString()}</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-purple-200/80 bg-purple-50/20 p-3 shadow-sm">
+            <div className="bg-white rounded-xl border border-purple-200 bg-purple-50/20 p-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">On The Road</span>
-                <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
+                <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
                   <Route className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-extrabold text-purple-900 mt-1">{stats.inTransit.toLocaleString()}</p>
-              <span className="text-[10px] text-purple-600 font-medium">In-transit</span>
+              <p className="text-lg font-extrabold text-purple-900 mt-0.5">{stats.inTransit.toLocaleString()}</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-emerald-200/80 bg-emerald-50/20 p-3 shadow-sm col-span-2 md:col-span-1">
+            <div className="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 p-2.5 shadow-sm col-span-2 md:col-span-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Delivered Weight</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
+                <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
                   <Scale className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-extrabold text-emerald-900 mt-1">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></p>
-              <span className="text-[10px] text-emerald-600 font-mono">{stats.totalWeight.toLocaleString()} kg</span>
+              <p className="text-lg font-extrabold text-emerald-900 mt-0.5">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></p>
             </div>
           </div>
 
           {/* Tab Navigation & Search */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">
+          <div className="bg-white rounded-2xl border border-slate-200 p-2.5 shadow-sm">
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
               <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                       tab === t.key
                         ? 'bg-slate-900 text-white shadow'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -579,61 +639,61 @@ export default function DispatchPage() {
           </div>
         </div>
 
-        {/* SCROLLABLE TABLE / CONTENT SECTION */}
+        {/* SCROLLABLE TABLE SECTION */}
         <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
           
           {/* Desktop Table View */}
           <div className="hidden md:block">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs border-collapse">
               <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
                 <tr>
-                  <th className="text-left px-5 py-3.5">Dispatch & D-Note #</th>
-                  <th className="text-left px-5 py-3.5">Type & Destination</th>
-                  <th className="text-left px-5 py-3.5">Transporter, Driver & Truck</th>
-                  <th className="text-left px-5 py-3.5">Weight (kg)</th>
-                  <th className="text-left px-5 py-3.5">Approval Status</th>
-                  <th className="text-right px-5 py-3.5">Actions & D-Note</th>
+                  <th className="text-left px-4 py-3">Dispatch & D-Note Ref</th>
+                  <th className="text-left px-4 py-3">Type & Destination</th>
+                  <th className="text-left px-4 py-3">Logistics & Driver</th>
+                  <th className="text-left px-4 py-3">Weight</th>
+                  <th className="text-left px-4 py-3">Workflow Sequence Progress</th>
+                  <th className="text-right px-4 py-3">Required Next Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((o) => {
-                  const meta = STATUS_META[o.status] || STATUS_META.pending;
-                  const Icon = meta.icon;
-                  const flow = nextStatus(o.status);
+                  const stepInfo = getOrderStep(o);
 
                   return (
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700">
+                      
+                      {/* Dispatch & D-Note Ref */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700 shrink-0">
                             {o.dispatch_number.split('-').pop()?.slice(0, 3)}
                           </div>
                           <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-bold text-slate-900 font-mono">{o.dispatch_number}</p>
-                              {o.physical_dnote_number && (
-                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded font-mono">
-                                  #{o.physical_dnote_number}
+                            <p className="font-extrabold text-slate-900 font-mono text-xs">{o.dispatch_number}</p>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {o.physical_dnote_number ? (
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded font-mono">
+                                  D-Note #{o.physical_dnote_number}
                                 </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">Date: {format(new Date(o.dispatch_date), 'dd MMM')}</span>
                               )}
                             </div>
-                            <p className="text-[11px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</p>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-5 py-3.5">
+                      {/* Type & Destination */}
+                      <td className="px-4 py-3">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                              o.dispatch_type === 'customer_direct' 
-                                ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                                : 'bg-indigo-100 text-indigo-800 border border-indigo-300'
-                            }`}>
-                              {o.dispatch_type === 'customer_direct' ? 'Customer Direct' : 'Branch Transfer'}
-                            </span>
-                          </div>
-                          <p className="font-bold text-slate-800">
+                          <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                            o.dispatch_type === 'customer_direct' 
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                              : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                          }`}>
+                            {o.dispatch_type === 'customer_direct' ? '• Customer Direct' : '• Branch Transfer (IBT)'}
+                          </span>
+                          <p className="font-bold text-slate-900 text-xs">
                             {o.dispatch_type === 'customer_direct' 
                               ? (o.customer_name || 'Direct Customer') 
                               : ((o.branches as any)?.name || '-')}
@@ -641,109 +701,121 @@ export default function DispatchPage() {
                         </div>
                       </td>
 
-                      <td className="px-5 py-3.5">
+                      {/* Transporter, Driver & Truck */}
+                      <td className="px-4 py-3">
                         <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 text-slate-800 font-bold">
-                            <Truck className="w-3.5 h-3.5 text-slate-400" />
-                            {o.vehicle_number || 'Unassigned'}
+                          <div className="flex items-center gap-1.5 text-slate-900 font-bold">
+                            <Truck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{o.vehicle_number || 'Unassigned'}</span>
                             {o.is_hired_truck && (
-                              <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1 rounded">
-                                HIRED: {o.transporter_name || 'Third Party'}
+                              <span className="text-[9px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-1 rounded">
+                                HIRED: {o.transporter_name || 'Haulier'}
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                            <User className="w-3.5 h-3.5 text-slate-400" />
-                            {o.driver_name || 'No driver'} {o.driver_phone ? `(${o.driver_phone})` : ''}
+                          <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                            <User className="w-3 h-3 text-slate-400" />
+                            <span>{o.driver_name || 'No driver'}</span>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-5 py-3.5">
-                        <span className="font-extrabold text-slate-900 font-mono text-sm">{o.total_weight.toLocaleString()}</span>
-                        <span className="text-[10px] text-slate-400 ml-1">kg</span>
+                      {/* Weight */}
+                      <td className="px-4 py-3">
+                        <span className="font-extrabold text-slate-900 font-mono text-xs">{o.total_weight.toLocaleString()} kg</span>
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      <td className="px-5 py-3.5 space-y-1">
-                        <div>
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${meta.bg} ${meta.color} ${meta.border}`}>
-                            <Icon className="w-3 h-3" /> {meta.label}
-                          </span>
-                        </div>
-
-                        {/* Branch Confirmation Status */}
-                        {o.dispatch_type === 'branch_transfer' && (
+                      {/* STEP-BY-STEP PROGRESS PIPELINE (VERY CLEAR & NEAT) */}
+                      <td className="px-4 py-3">
+                        <div className="space-y-1.5">
                           <div className="flex items-center gap-1 text-[10px]">
-                            <span className="text-slate-400">Branch:</span>
-                            <span className={`font-bold ${o.branch_confirmation_status === 'confirmed' ? 'text-emerald-700' : 'text-amber-600'}`}>
-                              {o.branch_confirmation_status === 'confirmed' ? '✓ Received' : 'Awaiting Receipt'}
+                            {/* Step 1 Badge */}
+                            <span className="bg-blue-100 text-blue-900 border border-blue-300 font-extrabold px-1.5 py-0.5 rounded">
+                              ✓ 1. Loaded
+                            </span>
+                            <ChevronRight className="w-3 h-3 text-slate-400" />
+
+                            {/* Step 2 Badge */}
+                            <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
+                              stepInfo.step2Done 
+                                ? 'bg-purple-100 text-purple-900 border-purple-300' 
+                                : 'bg-slate-100 text-slate-400 border-slate-200'
+                            }`}>
+                              {stepInfo.step2Done ? '✓ 2. On Road' : '2. Transit'}
+                            </span>
+                            <ChevronRight className="w-3 h-3 text-slate-400" />
+
+                            {/* Step 3 Badge */}
+                            {o.dispatch_type === 'branch_transfer' && (
+                              <>
+                                <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
+                                  o.branch_confirmation_status === 'confirmed' 
+                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
+                                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                                }`}>
+                                  {o.branch_confirmation_status === 'confirmed' ? '✓ 3. Branch Received' : '3. Awaiting Branch'}
+                                </span>
+                                <ChevronRight className="w-3 h-3 text-slate-400" />
+                              </>
+                            )}
+
+                            {/* Step 4 Badge */}
+                            <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
+                              o.accounts_posting_status === 'approved' 
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}>
+                              {o.accounts_posting_status === 'approved' ? '✓ 4. Invoiced/Posted' : '4. Accounts'}
                             </span>
                           </div>
-                        )}
-
-                        {/* Accounts Approval Status */}
-                        <div className="flex items-center gap-1 text-[10px]">
-                          <span className="text-slate-400">Accounts:</span>
-                          <span className={`font-bold ${o.accounts_posting_status === 'approved' ? 'text-emerald-700' : 'text-blue-600'}`}>
-                            {o.accounts_posting_status === 'approved' ? '✓ Posted / Invoiced' : 'Pending Posting'}
-                          </span>
                         </div>
                       </td>
 
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {/* ACTIONS & NEXT ACTION BUTTON */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          
                           {/* Official D-Note Button */}
                           <button
                             onClick={() => openDNoteModal(o)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-900 text-white hover:bg-blue-950 font-bold text-[11px] shadow-sm transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-extrabold text-[11px] shadow-sm transition-all"
                             title="Official Delivery Note"
                           >
-                            <FileText className="w-3.5 h-3.5 text-amber-400" />
-                            D-Note
+                            <FileText className="w-3.5 h-3.5 text-amber-400" /> D-Note
                           </button>
 
-                          {/* Branch Confirm Button */}
-                          {o.dispatch_type === 'branch_transfer' && o.branch_confirmation_status !== 'confirmed' && (o.status === 'in_transit' || o.status === 'dispatched' || o.status === 'delivered') && (
+                          {/* Action Button 1: Branch Receipt */}
+                          {o.dispatch_type === 'branch_transfer' && o.branch_confirmation_status !== 'confirmed' && (
                             <button
                               onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 font-bold text-[11px]"
-                              title="Branch Delivery Confirmation"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[11px] shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
                             >
-                              <Check className="w-3 h-3 text-emerald-700" /> Confirm Branch
+                              <Check className="w-3.5 h-3.5" /> Step 3: Confirm Branch
                             </button>
                           )}
 
-                          {/* Accounts Approve Posting Button */}
-                          {o.accounts_posting_status !== 'approved' && (
+                          {/* Action Button 2: Accounts Approve & Post */}
+                          {o.accounts_posting_status !== 'approved' && (o.dispatch_type === 'customer_direct' || o.branch_confirmation_status === 'confirmed') && (
                             <button
                               onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-300 font-bold text-[11px]"
-                              title="Accounts Approve & Post"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
                             >
-                              <DollarSign className="w-3 h-3 text-purple-700" /> Post / Invoice
+                              <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
                             </button>
                           )}
 
-                          {flow && (
-                            <button
-                              onClick={() => updateStatus(o.id, flow.next)}
-                              className="p-1.5 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm transition-all"
-                              title={flow.label}
-                            >
-                              <flow.icon className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
+                          {/* View details button */}
                           <button
                             onClick={() => openView(o)}
-                            className="p-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors"
                             title="View Dispatch Timeline"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
+
                     </tr>
                   );
                 })}
@@ -779,7 +851,7 @@ export default function DispatchPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-extrabold tracking-tight">
-                    {editingOrderId ? `Edit Dispatch Order (${dispatchNumber})` : 'New Dispatch Logistics Order'}
+                    {editingOrderId ? `Edit Dispatch Order (${dispatchNumber})` : 'New Dispatch Order (Step 1)'}
                   </h2>
                   <p className="text-slate-300 text-xs">Assign Driver, Hired Transporter, Vehicle & Generate D-Note</p>
                 </div>
@@ -1212,18 +1284,18 @@ export default function DispatchPage() {
                     {viewOrder.dispatch_type === 'branch_transfer' && viewOrder.branch_confirmation_status !== 'confirmed' && (
                       <button
                         onClick={() => { setBranchConfirmOrder(viewOrder); setBranchNotes(viewOrder.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-md"
                       >
-                        <Check className="w-4 h-4 text-emerald-700" /> Confirm Branch Receipt
+                        <Check className="w-4 h-4" /> Step 3: Confirm Branch Receipt
                       </button>
                     )}
 
                     {viewOrder.accounts_posting_status !== 'approved' && (
                       <button
                         onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-300"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
                       >
-                        <DollarSign className="w-4 h-4 text-purple-700" /> Accounts Approve Posting
+                        <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
                       </button>
                     )}
                   </div>
@@ -1295,7 +1367,7 @@ export default function DispatchPage() {
                 <Check className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Confirm Branch Delivery</h3>
+                <h3 className="font-extrabold text-slate-900 text-base">Step 3: Confirm Branch Delivery</h3>
                 <p className="text-xs text-slate-500">Verify stock delivery at receiving branch</p>
               </div>
             </div>
@@ -1309,7 +1381,7 @@ export default function DispatchPage() {
               <textarea
                 value={branchNotes}
                 onChange={(e) => setBranchNotes(e.target.value)}
-                placeholder="e.g. All 300 bags received intact. No seal tampering or moisture damage."
+                placeholder="e.g. All bags received intact. No seal tampering or moisture damage."
                 rows={3}
                 className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-slate-50 focus:bg-white"
               />
@@ -1345,7 +1417,7 @@ export default function DispatchPage() {
                 <DollarSign className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Accounts Approve & Post</h3>
+                <h3 className="font-extrabold text-slate-900 text-base">Step 4: Accounts Approve & Post</h3>
                 <p className="text-xs text-slate-500">Raise Customer Invoice or Approve Sage Stock Transfer</p>
               </div>
             </div>
