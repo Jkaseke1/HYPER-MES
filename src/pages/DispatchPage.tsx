@@ -639,59 +639,81 @@ export default function DispatchPage() {
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      {/* SLEEK CONNECTED WORKFLOW PROGRESS PIPELINE */}
-                      <td className="px-4 py-3 min-w-[340px]">
-                        <div className="flex items-center gap-1">
+                      {/* ULTRA-BOLD HIGH-CONTRAST WORKFLOW PIPELINE WITH DISTINCT ARROWS */}
+                      <td className="px-4 py-3 min-w-[360px]">
+                        <div className="flex items-center gap-1.5">
                           
-                          {/* Step 1: Loaded */}
-                          <div className="flex items-center gap-1 bg-blue-600 text-white font-bold px-2 py-0.5 rounded-l-lg text-[10px] shrink-0 shadow-xs">
-                            <span className="w-3 h-3 rounded-full bg-white/20 text-white text-[8px] flex items-center justify-center font-bold">1</span>
-                            Loaded
+                          {/* STAGE 1: LOADED / D-NOTE */}
+                          <div className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-xl text-[10px] shadow-xs border border-blue-700/50 shrink-0">
+                            <span className="w-4 h-4 rounded-full bg-white/25 text-white text-[9px] flex items-center justify-center font-black">1</span>
+                            <span>Loaded</span>
+                            <CheckCircle2 className="w-3 h-3 text-blue-200 shrink-0" />
                           </div>
 
-                          <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
+                          {/* Bold Accent Arrow 1 -> 2 */}
+                          <div className="shrink-0 px-0.5">
+                            <ArrowRight className={`w-4 h-4 stroke-[3] ${stepInfo.step2Done ? 'text-indigo-600' : 'text-slate-300'}`} />
+                          </div>
 
-                          {/* Step 2: In Transit */}
-                          <div className={`flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] shrink-0 border ${
+                          {/* STAGE 2: ON ROAD / IN-TRANSIT */}
+                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
                             stepInfo.step2Done
-                              ? 'bg-purple-600 text-white border-purple-600'
-                              : 'bg-slate-100 text-slate-400 border-slate-200'
+                              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700'
+                              : 'bg-slate-100 text-slate-400 border-slate-200/90'
                           }`}>
-                            <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
-                              stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
+                            <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                              stepInfo.step2Done ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>2</span>
-                            {stepInfo.step2Done ? 'On Road' : 'Transit'}
+                            <span>{stepInfo.step2Done ? 'On Road' : 'Transit'}</span>
+                            {stepInfo.step2Done && <CheckCircle2 className="w-3 h-3 text-purple-200 shrink-0" />}
                           </div>
 
-                          {/* Step 3: Branch Confirm (For Branch Transfers) */}
+                          {/* STAGE 3: BRANCH RECEIPT / CONFIRMED */}
                           {o.dispatch_type === 'branch_transfer' && (
                             <>
-                              <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
-                              <div className={`flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] shrink-0 border ${
+                              {/* Bold Accent Arrow 2 -> 3 */}
+                              <div className="shrink-0 px-0.5">
+                                <ArrowRight className={`w-4 h-4 stroke-[3] ${isBranchConfirmed ? 'text-purple-600' : 'text-slate-300'}`} />
+                              </div>
+
+                              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
                                 isBranchConfirmed
-                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                  : 'bg-amber-50 text-amber-900 border-amber-300'
+                                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-700'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
                               }`}>
-                                <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
-                                  isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'
+                                <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                                  isBranchConfirmed ? 'bg-white/25 text-white' : 'bg-amber-600 text-white'
                                 }`}>3</span>
-                                {isBranchConfirmed ? 'Received' : 'Awaiting'}
+                                <span>{isBranchConfirmed ? 'Received' : 'Awaiting'}</span>
+                                {isBranchConfirmed ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-200 shrink-0" />
+                                ) : (
+                                  <Clock className="w-3 h-3 text-amber-700 shrink-0" />
+                                )}
                               </div>
                             </>
                           )}
 
-                          <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
+                          {/* Bold Accent Arrow 3 -> 4 */}
+                          <div className="shrink-0 px-0.5">
+                            <ArrowRight className={`w-4 h-4 stroke-[3] ${isAccountsApproved ? 'text-emerald-600' : 'text-slate-300'}`} />
+                          </div>
 
-                          {/* Step 4: Accounts Approve & Post */}
-                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-r-lg font-bold text-[10px] shrink-0 border ${
+                          {/* STAGE 4: POSTED / INVOICED */}
+                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
                             isAccountsApproved
-                              ? 'bg-emerald-700 text-white border-emerald-700'
-                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                              ? 'bg-gradient-to-r from-emerald-700 to-teal-800 text-white border-emerald-900'
+                              : 'bg-slate-100 text-slate-400 border-slate-200/90'
                           }`}>
-                            <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
-                              isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
+                            <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                              isAccountsApproved ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>4</span>
-                            {isAccountsApproved ? 'Posted' : 'Accounts'}
+                            <span>{isAccountsApproved ? 'Posted' : 'Accounts'}</span>
+                            {isAccountsApproved ? (
+                              <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+                            ) : (
+                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                            )}
                           </div>
 
                         </div>
