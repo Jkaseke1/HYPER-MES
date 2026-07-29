@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([]);
   const [sageStockByMatId, setSageStockByMatId] = useState<Record<string, number>>({});
   const [sageStockMap, setSageStockMap] = useState<Record<string, number>>({});
+  const [snapshotStockMap, setSnapshotStockMap] = useState<Record<string, number>>({});
   const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
   const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +64,7 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       setLoading(true);
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes] =
+      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes] =
         await Promise.all([
           supabase.from('production_orders').select('planned_qty, actual_qty, status'),
           supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
@@ -75,6 +76,7 @@ export default function DashboardPage() {
           supabase.from('inventory_depletion_forecasts').select('*'),
           supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
           supabase.from('sage_stock_balances').select('raw_material_id, sage_code, item_code, quantity, quantity_on_hand, warehouse_id'),
+          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
         ]);
 
       const orders = ordersRes.data || [];
@@ -100,7 +102,7 @@ export default function DashboardPage() {
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
 
-      // Build Sage stock map indexed by raw_material_id and item code
+      // 1. Build Sage stock map indexed by raw_material_id and item code
       const sageMapByMatId: Record<string, number> = {};
       const sageMapByCode: Record<string, number> = {};
 
@@ -120,6 +122,18 @@ export default function DashboardPage() {
       setSageStockByMatId(sageMapByMatId);
       setSageStockMap(sageMapByCode);
 
+      // 2. Build snapshot stock map as intelligent fallback
+      const snapMap: Record<string, number> = {};
+      if (snapshotsRes?.data) {
+        for (const s of snapshotsRes.data as any[]) {
+          const nameKey = (s.raw_material_name || '').toUpperCase().trim();
+          if (nameKey && snapMap[nameKey] === undefined) {
+            snapMap[nameKey] = Number(s.physical_stock || 0);
+          }
+        }
+      }
+      setSnapshotStockMap(snapMap);
+
       setLoading(false);
     }
     fetchDashboardData();
@@ -137,13 +151,23 @@ export default function DashboardPage() {
     const forecast = forecastMap[item.id];
     const reorderLevel = Number(item.reorder_level || 0);
     const codeKey = (item.code || '').toUpperCase().trim();
+    const nameKey = (item.name || '').toUpperCase().trim();
 
-    // Check Sage stock by raw_material_id first, then by code
+    // Multi-tier Sage stock resolution
     const sageByMatId = sageStockByMatId[item.id];
     const sageByCode = sageStockMap[codeKey];
+    const sageBySnap = snapshotStockMap[nameKey];
     
-    // Always default Sage stock to 0 if not present, so it displays numbers reliably
-    const sageStock = sageByMatId !== undefined ? sageByMatId : (sageByCode !== undefined ? sageByCode : 0);
+    // Pick highest priority available Sage stock value
+    let sageStock = 0;
+    if (sageByMatId !== undefined) {
+      sageStock = sageByMatId;
+    } else if (sageByCode !== undefined) {
+      sageStock = sageByCode;
+    } else if (sageBySnap !== undefined) {
+      sageStock = sageBySnap;
+    }
+
     const mesStock = Number(item.current_stock || 0);
     const hasReorderLevel = reorderLevel > 0;
     const thresholdStock = hasReorderLevel ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
@@ -189,7 +213,7 @@ export default function DashboardPage() {
       reorderLevel,
       forecast,
     };
-  }, [forecastMap, sageStockByMatId, sageStockMap]);
+  }, [forecastMap, sageStockByMatId, sageStockMap, snapshotStockMap]);
 
   const filteredLowStock = useMemo(() => {
     return lowStockItems
@@ -426,7 +450,7 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-slate-400">No raw materials are currently below reorder levels in MES or Sage DB.</p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1 pt-1 pb-1">
                 {filteredLowStock.map(({ item, alertInfo }) => (
                   <div key={item.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 hover:bg-slate-100 transition-colors space-y-2">
                     <div className="flex items-start justify-between gap-2">
@@ -441,7 +465,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded ${
+                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded shrink-0 ${
                         alertInfo.severity === 'critical' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
                       }`}>
                         {alertInfo.alertReason || alertInfo.severity}
