@@ -141,14 +141,15 @@ export default function DashboardPage() {
     // Check Sage stock by raw_material_id first, then by code
     const sageByMatId = sageStockByMatId[item.id];
     const sageByCode = sageStockMap[codeKey];
-    const sageStock = sageByMatId !== undefined ? sageByMatId : (sageByCode !== undefined ? sageByCode : null);
-
+    
+    // Always default Sage stock to 0 if not present, so it displays numbers reliably
+    const sageStock = sageByMatId !== undefined ? sageByMatId : (sageByCode !== undefined ? sageByCode : 0);
     const mesStock = Number(item.current_stock || 0);
     const hasReorderLevel = reorderLevel > 0;
     const thresholdStock = hasReorderLevel ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
 
     const mesBelow = hasReorderLevel && mesStock <= thresholdStock;
-    const sageBelow = sageStock !== null && hasReorderLevel && sageStock <= thresholdStock;
+    const sageBelow = hasReorderLevel && sageStock <= thresholdStock;
 
     const daysToDepletion = forecast?.days_to_depletion;
     const targetCover = item.days_of_cover_target || 7;
@@ -158,7 +159,7 @@ export default function DashboardPage() {
     let alertReason: string[] = [];
 
     if (hasReorderLevel) {
-      if (mesStock === 0 || (sageStock !== null && sageStock === 0)) {
+      if (mesStock === 0 || sageStock === 0) {
         severity = 'critical';
         if (mesStock === 0) alertReason.push('MES Out of Stock');
         if (sageStock === 0) alertReason.push('Sage Out of Stock');
@@ -175,6 +176,9 @@ export default function DashboardPage() {
         severity = 'warning';
         alertReason.push('Depletion Warning');
       }
+    } else if (mesStock > 0 && depletionBelow) {
+      severity = 'warning';
+      alertReason.push('Depletion Warning');
     }
 
     return {
@@ -184,7 +188,6 @@ export default function DashboardPage() {
       sageStock,
       reorderLevel,
       forecast,
-      isSageChecked: sageStock !== null,
     };
   }, [forecastMap, sageStockByMatId, sageStockMap]);
 
@@ -458,13 +461,9 @@ export default function DashboardPage() {
                         <span className="text-slate-500 text-[10px] font-bold flex items-center gap-1">
                           <Database className="w-3 h-3 text-indigo-500" /> Sage DB:
                         </span>
-                        {alertInfo.sageStock !== null ? (
-                          <span className={`font-mono font-extrabold ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
-                            {alertInfo.sageStock.toLocaleString()} {item.unit}
-                          </span>
-                        ) : (
-                          <span className="font-mono font-bold text-slate-500">0 {item.unit}</span>
-                        )}
+                        <span className={`font-mono font-extrabold ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
+                          {alertInfo.sageStock.toLocaleString()} {item.unit}
+                        </span>
                       </div>
                     </div>
                   </div>
