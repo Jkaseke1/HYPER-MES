@@ -49,110 +49,118 @@ export default function DashboardPage() {
     setLastUpdated(new Date());
   }, []);
 
+  const fetchDashboardData = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes] =
+      await Promise.all([
+        supabase.from('production_orders').select('planned_qty, actual_qty, status'),
+        supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
+        supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']),
+        supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10),
+        supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target, is_active').order('name'),
+        supabase.from('monthly_operations_trends').select('*'),
+        supabase.from('inventory_depletion_forecasts').select('*'),
+        supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
+        supabase.from('sage_stock_balances').select('*'),
+        supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
+      ]);
+
+    const orders = ordersRes.data || [];
+    const completed = orders.filter((o) => o.status === 'completed');
+    const totalProd = completed.reduce((sum, o) => sum + (o.actual_qty || 0), 0);
+    const activeCount = orders.filter((o) => ['pending', 'materials_issued', 'in_progress'].includes(o.status)).length;
+    const totalPlanned = completed.reduce((sum, o) => sum + (o.planned_qty || 0), 0);
+    const efficiency = totalPlanned > 0 ? Math.round((totalProd / totalPlanned) * 100) : 0;
+
+    setStats({
+      totalProduction: Math.round(totalProd * 10) / 10,
+      activeOrders: activeCount,
+      rawMaterialCount: materialsRes.count || 0,
+      formulationCount: formulationsRes.count || 0,
+      pendingDispatches: dispatchRes.count || 0,
+      efficiency,
+    });
+    setRecentOrders((recentRes.data as ProductionOrder[]) || []);
+    
+    const allMaterials = (stockRes.data as RawMaterial[]) || [];
+    setLowStockItems(allMaterials);
+    setTrends((trendRes.data as MonthlyTrendRow[]) || []);
+    setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
+    setVarianceAlerts((varianceRes.data as any[]) || []);
+
+    // 1. Build Sage stock map strictly from Sage balance columns
+    const sageMapByMatId: Record<string, number> = {};
+    const sageMapByCode: Record<string, number> = {};
+
+    if (sageStockRes?.data) {
+      for (const row of sageStockRes.data as any[]) {
+        const qty = Number(
+          row.quantity !== undefined && row.quantity !== null 
+            ? row.quantity 
+            : (row.quantity_on_hand !== undefined && row.quantity_on_hand !== null
+                ? row.quantity_on_hand 
+                : (row.balance || 0))
+        );
+
+        if (row.raw_material_id) {
+          sageMapByMatId[row.raw_material_id] = (sageMapByMatId[row.raw_material_id] || 0) + qty;
+        }
+        if (row.sage_code) {
+          const k = String(row.sage_code).toUpperCase().trim();
+          sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
+        }
+        if (row.item_code) {
+          const k = String(row.item_code).toUpperCase().trim();
+          sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
+        }
+        if (row.code) {
+          const k = String(row.code).toUpperCase().trim();
+          sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
+        }
+      }
+    }
+
+    setSageStockByMatId(sageMapByMatId);
+    setSageStockMap(sageMapByCode);
+
+    // 2. Build snapshot stock map strictly using physical_stock (never system_stock)
+    const snapMap: Record<string, number> = {};
+    if (snapshotsRes?.data) {
+      for (const s of snapshotsRes.data as any[]) {
+        const nameKey = (s.raw_material_name || '').toUpperCase().trim();
+        if (nameKey && snapMap[nameKey] === undefined && s.physical_stock !== null && s.physical_stock !== undefined) {
+          snapMap[nameKey] = Number(s.physical_stock);
+        }
+      }
+    }
+    setSnapshotStockMap(snapMap);
+
+    if (isInitial) setLoading(false);
+    setLastUpdated(new Date());
+  }, []);
+
   useEffect(() => {
     fetchLiveOrders();
+    fetchDashboardData(true);
+
     const channel = supabase
-      .channel('live-production')
+      .channel('live-dashboard-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
         fetchLiveOrders();
+        fetchDashboardData(false);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
+        fetchDashboardData(false);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'raw_materials' }, () => {
+        fetchDashboardData(false);
       })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
-  }, [fetchLiveOrders]);
-
-  useEffect(() => {
-    async function fetchDashboardData() {
-      setLoading(true);
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes] =
-        await Promise.all([
-          supabase.from('production_orders').select('planned_qty, actual_qty, status'),
-          supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
-          supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']),
-          supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10),
-          supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target, is_active').order('name'),
-          supabase.from('monthly_operations_trends').select('*'),
-          supabase.from('inventory_depletion_forecasts').select('*'),
-          supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
-          supabase.from('sage_stock_balances').select('*'),
-          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
-        ]);
-
-      const orders = ordersRes.data || [];
-      const completed = orders.filter((o) => o.status === 'completed');
-      const totalProd = completed.reduce((sum, o) => sum + (o.actual_qty || 0), 0);
-      const activeCount = orders.filter((o) => ['pending', 'materials_issued', 'in_progress'].includes(o.status)).length;
-      const totalPlanned = completed.reduce((sum, o) => sum + (o.planned_qty || 0), 0);
-      const efficiency = totalPlanned > 0 ? Math.round((totalProd / totalPlanned) * 100) : 0;
-
-      setStats({
-        totalProduction: Math.round(totalProd * 10) / 10,
-        activeOrders: activeCount,
-        rawMaterialCount: materialsRes.count || 0,
-        formulationCount: formulationsRes.count || 0,
-        pendingDispatches: dispatchRes.count || 0,
-        efficiency,
-      });
-      setRecentOrders((recentRes.data as ProductionOrder[]) || []);
-      
-      const allMaterials = (stockRes.data as RawMaterial[]) || [];
-      setLowStockItems(allMaterials);
-      setTrends((trendRes.data as MonthlyTrendRow[]) || []);
-      setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
-      setVarianceAlerts((varianceRes.data as any[]) || []);
-
-      // 1. Build Sage stock map strictly from Sage balance columns
-      const sageMapByMatId: Record<string, number> = {};
-      const sageMapByCode: Record<string, number> = {};
-
-      if (sageStockRes?.data) {
-        for (const row of sageStockRes.data as any[]) {
-          const qty = Number(
-            row.quantity !== undefined && row.quantity !== null 
-              ? row.quantity 
-              : (row.quantity_on_hand !== undefined && row.quantity_on_hand !== null
-                  ? row.quantity_on_hand 
-                  : (row.balance || 0))
-          );
-
-          if (row.raw_material_id) {
-            sageMapByMatId[row.raw_material_id] = (sageMapByMatId[row.raw_material_id] || 0) + qty;
-          }
-          if (row.sage_code) {
-            const k = String(row.sage_code).toUpperCase().trim();
-            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
-          }
-          if (row.item_code) {
-            const k = String(row.item_code).toUpperCase().trim();
-            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
-          }
-          if (row.code) {
-            const k = String(row.code).toUpperCase().trim();
-            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
-          }
-        }
-      }
-
-      setSageStockByMatId(sageMapByMatId);
-      setSageStockMap(sageMapByCode);
-
-      // 2. Build snapshot stock map strictly using physical_stock (never system_stock)
-      const snapMap: Record<string, number> = {};
-      if (snapshotsRes?.data) {
-        for (const s of snapshotsRes.data as any[]) {
-          const nameKey = (s.raw_material_name || '').toUpperCase().trim();
-          if (nameKey && snapMap[nameKey] === undefined && s.physical_stock !== null && s.physical_stock !== undefined) {
-            snapMap[nameKey] = Number(s.physical_stock);
-          }
-        }
-      }
-      setSnapshotStockMap(snapMap);
-
-      setLoading(false);
-    }
-    fetchDashboardData();
-  }, []);
+  }, [fetchLiveOrders, fetchDashboardData]);
 
   const forecastMap = useMemo(() => {
     return inventoryForecasts.reduce<Record<string, InventoryForecastRow>>((acc, row) => {
@@ -295,7 +303,7 @@ export default function DashboardPage() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={fetchLiveOrders}
+                  onClick={() => { fetchLiveOrders(); fetchDashboardData(false); }}
                   className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
                 >
                   <RefreshCw className="w-3.5 h-3.5" /> Refresh
