@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, WifiOff, Home, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -30,25 +30,51 @@ class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const isOfflineModuleError = 
+        this.state.error?.message?.includes('dynamically imported module') ||
+        this.state.error?.message?.includes('fetch') ||
+        !navigator.onLine;
+
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center p-8 max-w-md">
-            <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Something went wrong
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="text-center p-8 max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl space-y-4">
+            {isOfflineModuleError ? (
+              <WifiOff className="h-14 w-14 text-amber-500 mx-auto" />
+            ) : (
+              <AlertTriangle className="h-14 w-14 text-rose-500 mx-auto" />
+            )}
+
+            <h1 className="text-xl font-bold text-slate-900">
+              {isOfflineModuleError ? 'Page Not Cached Offline' : 'Something went wrong'}
             </h1>
-            <p className="text-gray-600 mb-6">
-              {this.state.error?.message || 'An unexpected error occurred'}
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {isOfflineModuleError
+                ? 'This page module was not loaded while online. Connect to the network once to cache all pages, or return to Dashboard.'
+                : (this.state.error?.message || 'An unexpected error occurred')}
             </p>
-            <button
-              onClick={() => {
-                this.setState({ hasError: false, error: undefined });
-                window.location.href = '/HYPER-MES/#/stock-take';
-              }}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Return to Stock Take
-            </button>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: undefined });
+                  window.location.reload();
+                }}
+                className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: undefined });
+                  window.location.hash = '#/';
+                }}
+                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+              >
+                <Home className="w-3.5 h-3.5" /> Go to Dashboard
+              </button>
+            </div>
           </div>
         </div>
       );
