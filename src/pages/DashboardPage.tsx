@@ -28,6 +28,7 @@ export default function DashboardPage() {
   });
   const [recentOrders, setRecentOrders] = useState<ProductionOrder[]>([]);
   const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([]);
+  const [sageStockByMatId, setSageStockByMatId] = useState<Record<string, number>>({});
   const [sageStockMap, setSageStockMap] = useState<Record<string, number>>({});
   const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
   const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
@@ -69,11 +70,11 @@ export default function DashboardPage() {
           supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active'),
           supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']),
           supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10),
-          supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target').order('name'),
+          supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target, is_active').order('name'),
           supabase.from('monthly_operations_trends').select('*'),
           supabase.from('inventory_depletion_forecasts').select('*'),
           supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
-          supabase.from('sage_stock_balances').select('sage_code, item_code, quantity'),
+          supabase.from('sage_stock_balances').select('raw_material_id, sage_code, item_code, quantity, quantity_on_hand, warehouse_id'),
         ]);
 
       const orders = ordersRes.data || [];
@@ -99,17 +100,25 @@ export default function DashboardPage() {
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
 
-      // Build Sage stock map indexed by code
-      const sageMap: Record<string, number> = {};
+      // Build Sage stock map indexed by raw_material_id and item code
+      const sageMapByMatId: Record<string, number> = {};
+      const sageMapByCode: Record<string, number> = {};
+
       if (sageStockRes?.data) {
-        for (const row of sageStockRes.data) {
-          const key = (row.sage_code || row.item_code || '').toUpperCase().trim();
-          if (key) {
-            sageMap[key] = (sageMap[key] || 0) + Number(row.quantity || 0);
+        for (const row of sageStockRes.data as any[]) {
+          const qty = Number(row.quantity !== undefined && row.quantity !== null ? row.quantity : (row.quantity_on_hand || 0));
+          if (row.raw_material_id) {
+            sageMapByMatId[row.raw_material_id] = (sageMapByMatId[row.raw_material_id] || 0) + qty;
+          }
+          const code = (row.sage_code || row.item_code || '').toUpperCase().trim();
+          if (code) {
+            sageMapByCode[code] = (sageMapByCode[code] || 0) + qty;
           }
         }
       }
-      setSageStockMap(sageMap);
+
+      setSageStockByMatId(sageMapByMatId);
+      setSageStockMap(sageMapByCode);
 
       setLoading(false);
     }
@@ -127,14 +136,19 @@ export default function DashboardPage() {
   const getStockAlertInfo = useCallback((item: RawMaterial) => {
     const forecast = forecastMap[item.id];
     const reorderLevel = Number(item.reorder_level || 0);
-    const thresholdStock = reorderLevel > 0 ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
-    
     const codeKey = (item.code || '').toUpperCase().trim();
-    const sageStock = sageStockMap[codeKey] !== undefined ? sageStockMap[codeKey] : null;
-    const mesStock = Number(item.current_stock || 0);
 
-    const mesBelow = reorderLevel > 0 && mesStock <= thresholdStock;
-    const sageBelow = sageStock !== null && reorderLevel > 0 && sageStock <= thresholdStock;
+    // Check Sage stock by raw_material_id first, then by code
+    const sageByMatId = sageStockByMatId[item.id];
+    const sageByCode = sageStockMap[codeKey];
+    const sageStock = sageByMatId !== undefined ? sageByMatId : (sageByCode !== undefined ? sageByCode : null);
+
+    const mesStock = Number(item.current_stock || 0);
+    const hasReorderLevel = reorderLevel > 0;
+    const thresholdStock = hasReorderLevel ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
+
+    const mesBelow = hasReorderLevel && mesStock <= thresholdStock;
+    const sageBelow = sageStock !== null && hasReorderLevel && sageStock <= thresholdStock;
 
     const daysToDepletion = forecast?.days_to_depletion;
     const targetCover = item.days_of_cover_target || 7;
@@ -143,22 +157,24 @@ export default function DashboardPage() {
     let severity: 'critical' | 'warning' | 'healthy' = 'healthy';
     let alertReason: string[] = [];
 
-    if (mesStock === 0 || (sageStock !== null && sageStock === 0)) {
-      severity = 'critical';
-      if (mesStock === 0) alertReason.push('MES Out of Stock');
-      if (sageStock === 0) alertReason.push('Sage Out of Stock');
-    } else if (mesBelow && sageBelow) {
-      severity = 'critical';
-      alertReason.push('MES & Sage Low');
-    } else if (mesBelow) {
-      severity = 'warning';
-      alertReason.push('MES Low Stock');
-    } else if (sageBelow) {
-      severity = 'warning';
-      alertReason.push('Sage DB Low Stock');
-    } else if (depletionBelow) {
-      severity = 'warning';
-      alertReason.push('Depletion Warning');
+    if (hasReorderLevel) {
+      if (mesStock === 0 || (sageStock !== null && sageStock === 0)) {
+        severity = 'critical';
+        if (mesStock === 0) alertReason.push('MES Out of Stock');
+        if (sageStock === 0) alertReason.push('Sage Out of Stock');
+      } else if (mesBelow && sageBelow) {
+        severity = 'critical';
+        alertReason.push('MES & Sage Low');
+      } else if (mesBelow) {
+        severity = 'warning';
+        alertReason.push('MES Low Stock');
+      } else if (sageBelow) {
+        severity = 'warning';
+        alertReason.push('Sage DB Low Stock');
+      } else if (depletionBelow) {
+        severity = 'warning';
+        alertReason.push('Depletion Warning');
+      }
     }
 
     return {
@@ -170,10 +186,11 @@ export default function DashboardPage() {
       forecast,
       isSageChecked: sageStock !== null,
     };
-  }, [forecastMap, sageStockMap]);
+  }, [forecastMap, sageStockByMatId, sageStockMap]);
 
   const filteredLowStock = useMemo(() => {
     return lowStockItems
+      .filter((item) => item.is_active !== false)
       .map((item) => ({ item, alertInfo: getStockAlertInfo(item) }))
       .filter(({ alertInfo }) => alertInfo.severity !== 'healthy');
   }, [lowStockItems, getStockAlertInfo]);
@@ -446,7 +463,7 @@ export default function DashboardPage() {
                             {alertInfo.sageStock.toLocaleString()} {item.unit}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[10px] italic">Not Synced</span>
+                          <span className="font-mono font-bold text-slate-500">0 {item.unit}</span>
                         )}
                       </div>
                     </div>
