@@ -551,19 +551,19 @@ export default function DispatchPage() {
         </div>
 
         {/* SCROLLABLE DATA TABLE SECTION */}
-        <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
+        <div className="flex-1 overflow-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
           
           {/* Desktop Table View */}
-          <div className="hidden md:block">
-            <table className="w-full text-xs border-collapse">
-              <thead className="bg-slate-950 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-xs border-collapse min-w-[1050px]">
+              <thead className="bg-slate-950 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm text-[10px]">
                 <tr>
-                  <th className="text-left px-4 py-3.5">Dispatch & D-Note Ref</th>
-                  <th className="text-left px-4 py-3.5">Type & Destination</th>
-                  <th className="text-left px-4 py-3.5">Logistics & Driver</th>
-                  <th className="text-left px-4 py-3.5">Weight</th>
-                  <th className="text-left px-4 py-3.5 min-w-[340px]">Workflow Sequence Progress</th>
-                  <th className="text-right px-4 py-3.5">Actions & Next Step</th>
+                  <th className="text-left px-2.5 py-3">Dispatch & D-Note Ref</th>
+                  <th className="text-left px-2.5 py-3">Type & Destination</th>
+                  <th className="text-left px-2.5 py-3">Logistics & Driver</th>
+                  <th className="text-left px-2.5 py-3">Weight</th>
+                  <th className="text-left px-2.5 py-3 min-w-[310px]">Workflow Sequence Progress</th>
+                  <th className="text-right px-2.5 py-3">Actions & Next Step</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -576,20 +576,20 @@ export default function DispatchPage() {
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
                       
                       {/* Dispatch & D-Note Ref */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700 shrink-0">
+                      <td className="px-2.5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-[11px] border border-slate-700 shrink-0">
                             {o.dispatch_number.split('-').pop()?.slice(0, 3)}
                           </div>
                           <div>
                             <p className="font-extrabold text-slate-900 font-mono text-xs">{o.dispatch_number}</p>
                             <div className="flex items-center gap-1 mt-0.5">
                               {o.physical_dnote_number ? (
-                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded font-mono">
+                                <span className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1 py-0.2 rounded font-mono">
                                   D-Note #{o.physical_dnote_number}
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-slate-400">Date: {format(new Date(o.dispatch_date), 'dd MMM')}</span>
+                                <span className="text-[9px] text-slate-400">Date: {format(new Date(o.dispatch_date), 'dd MMM')}</span>
                               )}
                             </div>
                           </div>
@@ -597,16 +597,16 @@ export default function DispatchPage() {
                       </td>
 
                       {/* Type & Destination */}
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                      <td className="px-2.5 py-2.5">
+                        <div className="space-y-0.5">
+                          <span className={`inline-block text-[8.5px] font-extrabold uppercase px-1.5 py-0.2 rounded ${
                             o.dispatch_type === 'customer_direct' 
                               ? 'bg-amber-100 text-amber-900 border border-amber-300' 
                               : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
                           }`}>
-                            {o.dispatch_type === 'customer_direct' ? '• Customer Direct' : '• Branch Transfer (IBT)'}
+                            {o.dispatch_type === 'customer_direct' ? '• Direct' : '• Branch Transfer'}
                           </span>
-                          <p className="font-bold text-slate-900 text-xs">
+                          <p className="font-bold text-slate-900 text-[11px] truncate max-w-[130px]" title={o.dispatch_type === 'customer_direct' ? (o.customer_name || 'Direct Customer') : ((o.branches as any)?.name || '-')}>
                             {o.dispatch_type === 'customer_direct' 
                               ? (o.customer_name || 'Direct Customer') 
                               : ((o.branches as any)?.name || '-')}
@@ -615,104 +615,104 @@ export default function DispatchPage() {
                       </td>
 
                       {/* Transporter, Driver & Truck */}
-                      <td className="px-4 py-3">
+                      <td className="px-2.5 py-2.5">
                         <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 text-slate-900 font-bold">
-                            <Truck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <div className="flex items-center gap-1 text-slate-900 font-bold text-[11px]">
+                            <Truck className="w-3 h-3 text-slate-400 shrink-0" />
                             <span>{o.vehicle_number || 'Unassigned'}</span>
                             {o.is_hired_truck && (
-                              <span className="text-[9px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-1 rounded">
-                                HIRED: {o.transporter_name || 'Haulier'}
+                              <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 border border-amber-300 px-1 rounded">
+                                HIRED
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                          <div className="text-[10px] text-slate-600 flex items-center gap-1">
                             <User className="w-3 h-3 text-slate-400" />
-                            <span>{o.driver_name || 'No driver'}</span>
+                            <span className="truncate max-w-[100px]">{o.driver_name || 'No driver'}</span>
                           </div>
                         </div>
                       </td>
 
                       {/* Weight */}
-                      <td className="px-4 py-3">
+                      <td className="px-2.5 py-2.5">
                         <span className="font-extrabold text-slate-900 font-mono text-xs">{o.total_weight.toLocaleString()} kg</span>
-                        <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
+                        <p className="text-[9px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
                       {/* ULTRA-BOLD HIGH-CONTRAST WORKFLOW PIPELINE WITH DISTINCT ARROWS */}
-                      <td className="px-4 py-3 min-w-[360px]">
-                        <div className="flex items-center gap-1.5">
+                      <td className="px-2.5 py-2.5 min-w-[310px]">
+                        <div className="flex items-center gap-1">
                           
                           {/* STAGE 1: LOADED / D-NOTE */}
-                          <div className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-xl text-[10px] shadow-xs border border-blue-700/50 shrink-0">
-                            <span className="w-4 h-4 rounded-full bg-white/25 text-white text-[9px] flex items-center justify-center font-black">1</span>
+                          <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-lg text-[9.5px] shadow-2xs border border-blue-700/50 shrink-0">
+                            <span className="w-3.5 h-3.5 rounded-full bg-white/25 text-white text-[8px] flex items-center justify-center font-black">1</span>
                             <span>Loaded</span>
-                            <CheckCircle2 className="w-3 h-3 text-blue-200 shrink-0" />
+                            <CheckCircle2 className="w-2.5 h-2.5 text-blue-200 shrink-0" />
                           </div>
 
                           {/* Bold Accent Arrow 1 -> 2 */}
-                          <div className="shrink-0 px-0.5">
-                            <ArrowRight className={`w-4 h-4 stroke-[3] ${stepInfo.step2Done ? 'text-indigo-600' : 'text-slate-300'}`} />
+                          <div className="shrink-0">
+                            <ArrowRight className={`w-3 h-3 stroke-[2.5] ${stepInfo.step2Done ? 'text-indigo-600' : 'text-slate-300'}`} />
                           </div>
 
                           {/* STAGE 2: ON ROAD / IN-TRANSIT */}
-                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg font-extrabold text-[9.5px] shadow-2xs shrink-0 border ${
                             stepInfo.step2Done
                               ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700'
                               : 'bg-slate-100 text-slate-400 border-slate-200/90'
                           }`}>
-                            <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                            <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black ${
                               stepInfo.step2Done ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>2</span>
                             <span>{stepInfo.step2Done ? 'On Road' : 'Transit'}</span>
-                            {stepInfo.step2Done && <CheckCircle2 className="w-3 h-3 text-purple-200 shrink-0" />}
+                            {stepInfo.step2Done && <CheckCircle2 className="w-2.5 h-2.5 text-purple-200 shrink-0" />}
                           </div>
 
                           {/* STAGE 3: BRANCH RECEIPT / CONFIRMED */}
                           {o.dispatch_type === 'branch_transfer' && (
                             <>
                               {/* Bold Accent Arrow 2 -> 3 */}
-                              <div className="shrink-0 px-0.5">
-                                <ArrowRight className={`w-4 h-4 stroke-[3] ${isBranchConfirmed ? 'text-purple-600' : 'text-slate-300'}`} />
+                              <div className="shrink-0">
+                                <ArrowRight className={`w-3 h-3 stroke-[2.5] ${isBranchConfirmed ? 'text-purple-600' : 'text-slate-300'}`} />
                               </div>
 
-                              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
+                              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg font-extrabold text-[9.5px] shadow-2xs shrink-0 border ${
                                 isBranchConfirmed
                                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-700'
                                   : 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
                               }`}>
-                                <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                                <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black ${
                                   isBranchConfirmed ? 'bg-white/25 text-white' : 'bg-amber-600 text-white'
                                 }`}>3</span>
                                 <span>{isBranchConfirmed ? 'Received' : 'Awaiting'}</span>
                                 {isBranchConfirmed ? (
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-200 shrink-0" />
+                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-200 shrink-0" />
                                 ) : (
-                                  <Clock className="w-3 h-3 text-amber-700 shrink-0" />
+                                  <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                 )}
                               </div>
                             </>
                           )}
 
                           {/* Bold Accent Arrow 3 -> 4 */}
-                          <div className="shrink-0 px-0.5">
-                            <ArrowRight className={`w-4 h-4 stroke-[3] ${isAccountsApproved ? 'text-emerald-600' : 'text-slate-300'}`} />
+                          <div className="shrink-0">
+                            <ArrowRight className={`w-3 h-3 stroke-[2.5] ${isAccountsApproved ? 'text-emerald-600' : 'text-slate-300'}`} />
                           </div>
 
                           {/* STAGE 4: POSTED / INVOICED */}
-                          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-[10px] shadow-xs shrink-0 border ${
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg font-extrabold text-[9.5px] shadow-2xs shrink-0 border ${
                             isAccountsApproved
                               ? 'bg-gradient-to-r from-emerald-700 to-teal-800 text-white border-emerald-900'
                               : 'bg-slate-100 text-slate-400 border-slate-200/90'
                           }`}>
-                            <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-black ${
+                            <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black ${
                               isAccountsApproved ? 'bg-white/25 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>4</span>
                             <span>{isAccountsApproved ? 'Posted' : 'Accounts'}</span>
                             {isAccountsApproved ? (
-                              <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+                              <Sparkles className="w-2.5 h-2.5 text-amber-300 shrink-0" />
                             ) : (
-                              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                              <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                             )}
                           </div>
 
@@ -720,52 +720,52 @@ export default function DispatchPage() {
                       </td>
 
                       {/* ACTIONS & NEXT STEP BUTTONS */}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="px-2.5 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           
                           {/* Official D-Note Button */}
                           <button
                             onClick={() => openDNoteModal(o)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-extrabold text-[11px] shadow-sm transition-all"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-900 hover:bg-blue-950 text-white font-extrabold text-[10px] shadow-2xs transition-all shrink-0"
                             title="Official Delivery Note"
                           >
-                            <FileText className="w-3.5 h-3.5 text-amber-400" /> D-Note
+                            <FileText className="w-3 h-3 text-amber-400" /> D-Note
                           </button>
 
-                          {/* Action Button 1: Branch Receipt (Hidden/Disabled if already confirmed) */}
+                          {/* Action Button 1: Branch Receipt */}
                           {o.dispatch_type === 'branch_transfer' && (
                             isBranchConfirmed ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 font-extrabold text-[11px] cursor-default">
-                                <Check className="w-3.5 h-3.5 text-emerald-600" /> Branch Confirmed
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 font-extrabold text-[10px] cursor-default shrink-0">
+                                <Check className="w-3 h-3 text-emerald-600" /> Branch Confirmed
                               </span>
                             ) : (
                               <button
                                 onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[11px] shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[10px] shadow-2xs active:scale-95 transition-all shrink-0"
                               >
-                                <Check className="w-3.5 h-3.5" /> Step 3: Confirm Branch
+                                <Check className="w-3 h-3" /> Step 3: Confirm Branch
                               </button>
                             )
                           )}
 
-                          {/* Action Button 2: Accounts Approve & Post (FINANCE & ADMIN ONLY) */}
+                          {/* Action Button 2: Accounts Approve & Post */}
                           {isAccountsApproved ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-50 text-purple-900 border border-purple-300 font-extrabold text-[11px] cursor-default">
-                              <DollarSign className="w-3.5 h-3.5 text-purple-600" /> Posted to Sage
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 text-purple-900 border border-purple-300 font-extrabold text-[10px] cursor-default shrink-0">
+                              <DollarSign className="w-3 h-3 text-purple-600" /> Posted to Sage
                             </span>
                           ) : (
                             isFinance ? (
                               (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
                                 <button
                                   onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[10px] shadow-2xs active:scale-95 transition-all shrink-0"
                                 >
-                                  <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
+                                  <DollarSign className="w-3 h-3" /> Step 4: Post / Invoice
                                 </button>
                               )
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-extrabold text-[11px] cursor-default" title="Finance & Admin access required to post">
-                                <Clock className="w-3.5 h-3.5 text-amber-600" /> Step 4: Finance Only
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-extrabold text-[10px] cursor-default shrink-0" title="Finance & Admin access required to post">
+                                <Clock className="w-3 h-3 text-amber-600" /> Step 4: Finance Only
                               </span>
                             )
                           )}
