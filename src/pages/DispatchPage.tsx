@@ -32,23 +32,6 @@ const TABS: { key: Tab; label: string }[] = [
 
 const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg' };
 
-const STAGES = [
-  { key: 'pending', label: 'Pending', icon: Clock, desc: 'Created & Queueing' },
-  { key: 'loading', label: 'Loading', icon: Box, desc: 'Vehicle Loading' },
-  { key: 'dispatched', label: 'Dispatched', icon: Truck, desc: 'Left Warehouse' },
-  { key: 'in_transit', label: 'In Transit', icon: Route, desc: 'On Delivery Route' },
-  { key: 'delivered', label: 'Delivered', icon: CheckCircle2, desc: 'Received & Approved' },
-];
-
-const STATUS_META: Record<string, { label: string; color: string; bg: string; border: string; icon: any }> = {
-  pending: { label: '1. Pending', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', icon: Clock },
-  loading: { label: '1. Loading', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', icon: Box },
-  dispatched: { label: '2. Dispatched', color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', icon: Truck },
-  in_transit: { label: '2. In Transit', color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', icon: Route },
-  delivered: { label: '3. Delivered', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle2 },
-  cancelled: { label: 'Cancelled', color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', icon: AlertTriangle },
-};
-
 // Preset drivers and fleet for fast entry
 const FLEET_TRUCKS = ['ABG 1234', 'AES 5678', 'AFG 9012', 'AHL 3456', 'AGE 7890'];
 const FLEET_DRIVERS = ['P. Tembo', 'S. Mujele', 'J. Kaseke', 'M. Moyo', 'T. Ndlovu'];
@@ -111,8 +94,6 @@ export default function DispatchPage() {
   const [pendingDeliverCallback, setPendingDeliverCallback] = useState<(() => Promise<void>) | null>(null);
   const [batchNumbers, setBatchNumbers] = useState<{ [key: string]: string[] }>({});
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
-  const [showPickingSlip, setShowPickingSlip] = useState(false);
-  const [pickingSlipOrder, setPickingSlipOrder] = useState<DispatchOrder | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
@@ -173,8 +154,7 @@ export default function DispatchPage() {
   const stats = {
     total: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
-    loading: orders.filter(o => o.status === 'loading').length,
-    inTransit: orders.filter(o => o.status === 'in_transit' || o.status === 'dispatched').length,
+    inTransit: orders.filter(o => o.status === 'in_transit' || o.status === 'dispatched' || o.status === 'loading').length,
     delivered: orders.filter(o => o.status === 'delivered').length,
     totalWeight: orders.reduce((s, o) => s + (o.total_weight || 0), 0),
   };
@@ -221,41 +201,6 @@ export default function DispatchPage() {
       setDispatchNumber('');
       fetchOrders();
     }
-  };
-
-  const handleEdit = async (order: DispatchOrder) => {
-    setViewOrder(null);
-    const { data: editItems } = await supabase.from('dispatch_items').select('*, formulations(id, name, sage_code)').eq('dispatch_order_id', order.id);
-    setForm({
-      dispatch_type: order.dispatch_type || 'branch_transfer',
-      customer_name: order.customer_name || '',
-      customer_code: order.customer_code || '',
-      branch_id: order.branch_id || '',
-      warehouse_id: order.warehouse_id || '',
-      dispatch_date: format(new Date(order.dispatch_date), 'yyyy-MM-dd'),
-      vehicle_number: order.vehicle_number || '',
-      driver_name: order.driver_name || '',
-      driver_phone: order.driver_phone || '',
-      is_hired_truck: order.is_hired_truck || false,
-      transporter_name: order.transporter_name || '',
-      trailer_number: order.trailer_number || '',
-      physical_dnote_number: order.physical_dnote_number || '',
-      hfdn_reference: order.hfdn_reference || '',
-      order_number: order.order_number || '',
-      vat_number: order.vat_number || '',
-      delivery_notes: order.delivery_notes || '',
-    });
-    if (editItems && editItems.length > 0) {
-      setItems(editItems.map((i: any) => ({ formulation_id: i.formulation_id, batch_number: i.batch_number || '', quantity: i.quantity, unit: i.unit || 'kg' })));
-      for (const i of editItems) {
-        if (i.formulation_id) fetchFGStock(i.formulation_id);
-      }
-    } else {
-      setItems([{ ...EMPTY_ITEM }]);
-    }
-    setEditingOrderId(order.id);
-    setDispatchNumber(order.dispatch_number);
-    setShowCreate(true);
   };
 
   const resetForm = () => {
@@ -465,9 +410,6 @@ export default function DispatchPage() {
   };
   const nextStatus = (s: string) => STATUS_FLOW[s] || null;
 
-  const statusIndex = (s: string) => ['pending', 'loading', 'dispatched', 'in_transit', 'delivered'].indexOf(s);
-  const currentStatusIndex = viewOrder ? statusIndex(viewOrder.status) : -1;
-
   // Compute 4-step workflow status stage for any order
   const getOrderStep = (o: DispatchOrder) => {
     let currentStep = 1;
@@ -494,155 +436,98 @@ export default function DispatchPage() {
 
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
-      <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
+      <div className="max-w-[1600px] mx-auto w-full flex flex-col h-full space-y-4">
 
-        {/* STATIC FIXED TOP SECTION */}
+        {/* CLEAN EXECUTIVE HEADER BANNER */}
         <div className="shrink-0 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight">Dispatch Logistics & D-Note Hub</h1>
-              <p className="text-xs text-slate-500">Manage fleet, hired trucks, official D-Notes, branch receipt & accounts invoicing.</p>
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-4 md:p-5 rounded-2xl text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 relative z-10">
+              <div className="w-11 h-11 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
+                <Truck className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Dispatch Logistics & D-Note Hub</h1>
+                  <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                    <Sparkles className="w-3 h-3" /> Sage Integrated
+                  </span>
+                </div>
+                <p className="text-slate-300 text-xs mt-0.5">
+                  Manage Fleet, Hired Transporters, Official D-Notes, Branch Receipt & Accounts Invoicing.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={fetchOrders}
+                className="p-2.5 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
+                title="Refresh Dispatches"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
+                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 text-xs"
+              >
+                <Plus className="w-4 h-4" />
+                New Dispatch Order
+              </button>
             </div>
           </div>
 
-          {/* Top Header Banner */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 rounded-2xl text-white shadow-lg relative overflow-hidden">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
-                  <Truck className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-extrabold tracking-tight">Dispatch Logistics Hub</h2>
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      <Sparkles className="w-3 h-3" /> Official D-Note & Sage Integrated
-                    </span>
-                  </div>
-                  <p className="text-slate-300 text-xs mt-0.5">
-                    Order ➔ Driver/Hired Truck ➔ Official D-Note ➔ Branch Receipt ➔ Accounts Invoicing & Sage Posting.
-                  </p>
-                </div>
+          {/* STREAMLINED KPI CARDS */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+                <Truck className="w-4 h-4" />
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={fetchOrders}
-                  className="p-2 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
-                  title="Refresh Dispatches"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
-                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  New Dispatch Order
-                </button>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Orders</span>
+                <span className="text-lg font-extrabold text-slate-900">{stats.total.toLocaleString()}</span>
               </div>
             </div>
-          </div>
 
-          {/* STEP-BY-STEP PROCESS FLOW GUIDE BANNER */}
-          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between gap-2 overflow-x-auto text-xs">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
-                4-Step Process:
-              </span>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">1</span>
-                  Create & D-Note
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div className="bg-white rounded-2xl border border-amber-200 bg-amber-50/20 p-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <Clock className="w-4 h-4" />
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold">2</span>
-                  Vehicle In-Transit
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div>
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Pending Queue</span>
+                <span className="text-lg font-extrabold text-amber-900">{stats.pending.toLocaleString()}</span>
               </div>
+            </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">3</span>
-                  Branch Confirm Receipt
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div className="bg-white rounded-2xl border border-purple-200 bg-purple-50/20 p-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700 shrink-0">
+                <Route className="w-4 h-4" />
               </div>
+              <div>
+                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">In-Transit / Road</span>
+                <span className="text-lg font-extrabold text-purple-900">{stats.inTransit.toLocaleString()}</span>
+              </div>
+            </div>
 
-              <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px] shrink-0">
-                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-bold">4</span>
-                Accounts Approve & Post (Finance Only)
+            <div className="bg-white rounded-2xl border border-emerald-200 bg-emerald-50/20 p-3 shadow-sm flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                <Scale className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Delivered Volume</span>
+                <span className="text-lg font-extrabold text-emerald-900">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></span>
               </div>
             </div>
           </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Dispatches</span>
-                <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                  <Truck className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-lg font-extrabold text-slate-900 mt-0.5">{stats.total.toLocaleString()}</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-amber-200 bg-amber-50/20 p-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Pending</span>
-                <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
-                  <Clock className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-lg font-extrabold text-amber-900 mt-0.5">{stats.pending.toLocaleString()}</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-blue-200 bg-blue-50/20 p-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Loading Dock</span>
-                <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
-                  <Box className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-lg font-extrabold text-blue-900 mt-0.5">{stats.loading.toLocaleString()}</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-purple-200 bg-purple-50/20 p-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">On The Road</span>
-                <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
-                  <Route className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-lg font-extrabold text-purple-900 mt-0.5">{stats.inTransit.toLocaleString()}</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 p-2.5 shadow-sm col-span-2 md:col-span-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Delivered Weight</span>
-                <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
-                  <Scale className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-lg font-extrabold text-emerald-900 mt-0.5">{(stats.totalWeight / 1000).toFixed(2)} <span className="text-xs font-normal text-emerald-600">t</span></p>
-            </div>
-          </div>
-
-          {/* Tab Navigation & Search */}
+          {/* TAB FILTERS & SEARCH TOOLBAR */}
           <div className="bg-white rounded-2xl border border-slate-200 p-2.5 shadow-sm">
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
-              <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex flex-wrap gap-1 bg-slate-100/80 p-1 rounded-xl">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       tab === t.key
                         ? 'bg-slate-900 text-white shadow'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -665,20 +550,20 @@ export default function DispatchPage() {
           </div>
         </div>
 
-        {/* SCROLLABLE TABLE SECTION */}
+        {/* SCROLLABLE DATA TABLE SECTION */}
         <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
           
           {/* Desktop Table View */}
           <div className="hidden md:block">
             <table className="w-full text-xs border-collapse">
-              <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
+              <thead className="bg-slate-950 text-white uppercase tracking-wider font-semibold sticky top-0 z-10 shadow-sm">
                 <tr>
-                  <th className="text-left px-4 py-3">Dispatch & D-Note Ref</th>
-                  <th className="text-left px-4 py-3">Type & Destination</th>
-                  <th className="text-left px-4 py-3">Logistics & Driver</th>
-                  <th className="text-left px-4 py-3">Weight</th>
-                  <th className="text-left px-4 py-3 min-w-[360px]">Workflow Sequence Progress</th>
-                  <th className="text-right px-4 py-3">Actions & Next Step</th>
+                  <th className="text-left px-4 py-3.5">Dispatch & D-Note Ref</th>
+                  <th className="text-left px-4 py-3.5">Type & Destination</th>
+                  <th className="text-left px-4 py-3.5">Logistics & Driver</th>
+                  <th className="text-left px-4 py-3.5">Weight</th>
+                  <th className="text-left px-4 py-3.5 min-w-[340px]">Workflow Sequence Progress</th>
+                  <th className="text-right px-4 py-3.5">Actions & Next Step</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -754,25 +639,25 @@ export default function DispatchPage() {
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      {/* REDESIGNED CONNECTED STEP-BY-STEP WORKFLOW PROGRESS PIPELINE */}
-                      <td className="px-4 py-3 min-w-[360px]">
+                      {/* SLEEK CONNECTED WORKFLOW PROGRESS PIPELINE */}
+                      <td className="px-4 py-3 min-w-[340px]">
                         <div className="flex items-center gap-1">
                           
                           {/* Step 1: Loaded */}
-                          <div className="flex items-center gap-1 bg-blue-600 text-white font-extrabold px-2.5 py-1 rounded-l-xl text-[11px] shrink-0 shadow-sm">
-                            <span className="w-3.5 h-3.5 rounded-full bg-white/20 text-white text-[9px] flex items-center justify-center font-bold">1</span>
+                          <div className="flex items-center gap-1 bg-blue-600 text-white font-bold px-2 py-0.5 rounded-l-lg text-[10px] shrink-0 shadow-xs">
+                            <span className="w-3 h-3 rounded-full bg-white/20 text-white text-[8px] flex items-center justify-center font-bold">1</span>
                             Loaded
                           </div>
 
-                          <ChevronRight className="w-3.5 h-3.5 text-purple-400 shrink-0 -mx-0.5" />
+                          <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
 
                           {/* Step 2: In Transit */}
-                          <div className={`flex items-center gap-1 px-2.5 py-1 font-extrabold text-[11px] shrink-0 border ${
+                          <div className={`flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] shrink-0 border ${
                             stepInfo.step2Done
-                              ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                              ? 'bg-purple-600 text-white border-purple-600'
                               : 'bg-slate-100 text-slate-400 border-slate-200'
                           }`}>
-                            <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                            <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
                               stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>2</span>
                             {stepInfo.step2Done ? 'On Road' : 'Transit'}
@@ -781,13 +666,13 @@ export default function DispatchPage() {
                           {/* Step 3: Branch Confirm (For Branch Transfers) */}
                           {o.dispatch_type === 'branch_transfer' && (
                             <>
-                              <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0 -mx-0.5" />
-                              <div className={`flex items-center gap-1 px-2.5 py-1 font-extrabold text-[11px] shrink-0 border ${
+                              <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
+                              <div className={`flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] shrink-0 border ${
                                 isBranchConfirmed
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-amber-50 text-amber-900 border-amber-300'
                               }`}>
-                                <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                                <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
                                   isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'
                                 }`}>3</span>
                                 {isBranchConfirmed ? 'Received' : 'Awaiting'}
@@ -795,15 +680,15 @@ export default function DispatchPage() {
                             </>
                           )}
 
-                          <ChevronRight className="w-3.5 h-3.5 text-emerald-500 shrink-0 -mx-0.5" />
+                          <ChevronRight className="w-3 h-3 text-slate-300 shrink-0 -mx-0.5" />
 
-                          {/* Step 4: Accounts Invoiced / Posted */}
-                          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-r-xl font-extrabold text-[11px] shrink-0 border ${
+                          {/* Step 4: Accounts Approve & Post */}
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-r-lg font-bold text-[10px] shrink-0 border ${
                             isAccountsApproved
-                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                              ? 'bg-emerald-700 text-white border-emerald-700'
                               : 'bg-slate-100 text-slate-500 border-slate-200'
                           }`}>
-                            <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                            <span className={`w-3 h-3 rounded-full text-[8px] flex items-center justify-center font-bold ${
                               isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
                             }`}>4</span>
                             {isAccountsApproved ? 'Posted' : 'Accounts'}
