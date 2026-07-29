@@ -7,6 +7,7 @@ import {
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { generateDispatchNumber } from '../lib/batchNumberGenerator';
 import type { DispatchOrder, DispatchItem, Branch, Warehouse, Formulation } from '../types/database';
 import Modal from '../components/ui/Modal';
@@ -53,6 +54,9 @@ const FLEET_TRUCKS = ['ABG 1234', 'AES 5678', 'AFG 9012', 'AHL 3456', 'AGE 7890'
 const FLEET_DRIVERS = ['P. Tembo', 'S. Mujele', 'J. Kaseke', 'M. Moyo', 'T. Ndlovu'];
 
 export default function DispatchPage() {
+  const { profile } = useAuth();
+  const isFinance = profile?.role === 'finance' || profile?.role === 'accountant' || profile?.role === 'admin';
+
   const [orders, setOrders] = useState<DispatchOrder[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -389,9 +393,15 @@ export default function DispatchPage() {
     }
   };
 
-  // Accounts Approve & Post Action
+  // Accounts Approve & Post Action (FINANCE & ADMIN ONLY)
   const handleAccountsApprovePosting = async () => {
     if (!accountsApproveOrder) return;
+
+    if (!isFinance) {
+      toast.error('Access restricted: Step 4 posting is reserved for Finance and Admin users.');
+      return;
+    }
+
     setSaving(true);
     try {
       const updates = {
@@ -566,7 +576,7 @@ export default function DispatchPage() {
 
               <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px] shrink-0">
                 <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center">4</span>
-                Accounts Approve & Post
+                Accounts Approve & Post (Finance Only)
               </div>
             </div>
           </div>
@@ -819,19 +829,25 @@ export default function DispatchPage() {
                             )
                           )}
 
-                          {/* Action Button 2: Accounts Approve & Post */}
+                          {/* Action Button 2: Accounts Approve & Post (FINANCE & ADMIN ONLY) */}
                           {isAccountsApproved ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-50 text-purple-900 border border-purple-300 font-extrabold text-[11px] cursor-default">
                               <DollarSign className="w-3.5 h-3.5 text-purple-600" /> Posted to Sage
                             </span>
                           ) : (
-                            (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
-                              <button
-                                onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
-                              >
-                                <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
-                              </button>
+                            isFinance ? (
+                              (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
+                                <button
+                                  onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-[11px] shadow-md shadow-purple-500/20 active:scale-95 transition-all"
+                                >
+                                  <DollarSign className="w-3.5 h-3.5" /> Step 4: Post / Invoice
+                                </button>
+                              )
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-extrabold text-[11px] cursor-default" title="Finance & Admin access required to post">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" /> Step 4: Finance Only
+                              </span>
                             )
                           )}
 
@@ -1327,19 +1343,25 @@ export default function DispatchPage() {
                       )
                     )}
 
-                    {/* Step 4: Accounts Post (Disabled if already posted) */}
+                    {/* Step 4: Accounts Post (FINANCE & ADMIN ONLY) */}
                     {viewOrder.accounts_posting_status === 'approved' ? (
                       <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold rounded-xl bg-purple-50 text-purple-900 border border-purple-300 cursor-default">
                         <DollarSign className="w-4 h-4 text-purple-600" /> Step 4: Posted to Sage
                       </span>
                     ) : (
-                      (viewOrder.dispatch_type === 'customer_direct' || viewOrder.branch_confirmation_status === 'confirmed') && (
-                        <button
-                          onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
-                        >
-                          <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
-                        </button>
+                      isFinance ? (
+                        (viewOrder.dispatch_type === 'customer_direct' || viewOrder.branch_confirmation_status === 'confirmed') && (
+                          <button
+                            onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
+                          >
+                            <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
+                          </button>
+                        )
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-200 cursor-default">
+                          <Clock className="w-4 h-4 text-amber-600" /> Step 4: Finance Only
+                        </span>
                       )
                     )}
                   </div>
@@ -1452,7 +1474,7 @@ export default function DispatchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ACCOUNTS APPROVE POSTING MODAL */}
+      {/* ACCOUNTS APPROVE POSTING MODAL (FINANCE & ADMIN ONLY) */}
       <Dialog open={showAccountsApproveModal} onOpenChange={setShowAccountsApproveModal}>
         <DialogContent className="max-w-md w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200">
           <div className="space-y-4">
@@ -1469,6 +1491,13 @@ export default function DispatchPage() {
             <p className="text-xs text-slate-700 font-medium">
               Approving dispatch <strong className="font-mono text-slate-900">{accountsApproveOrder?.dispatch_number}</strong> for {accountsApproveOrder?.dispatch_type === 'customer_direct' ? 'Direct Customer Invoicing' : 'Sage IBT Stock Posting'}.
             </p>
+
+            {!isFinance && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-rose-600 shrink-0" />
+                Finance or Admin access required to approve postings.
+              </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-[11px] font-bold text-slate-600 uppercase">Finance Approval Remarks</label>
@@ -1492,8 +1521,8 @@ export default function DispatchPage() {
               <button
                 type="button"
                 onClick={handleAccountsApprovePosting}
-                disabled={saving}
-                className="px-4 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl shadow-md"
+                disabled={saving || !isFinance}
+                className="px-4 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl shadow-md disabled:opacity-50"
               >
                 {saving ? 'Approving...' : 'Approve & Post to System'}
               </button>
