@@ -75,8 +75,8 @@ export default function DashboardPage() {
           supabase.from('monthly_operations_trends').select('*'),
           supabase.from('inventory_depletion_forecasts').select('*'),
           supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
-          supabase.from('sage_stock_balances').select('raw_material_id, sage_code, item_code, quantity, quantity_on_hand, warehouse_id'),
-          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
+          supabase.from('sage_stock_balances').select('*'),
+          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock, system_stock').order('snapshot_date', { ascending: false }).limit(100),
         ]);
 
       const orders = ordersRes.data || [];
@@ -102,19 +102,34 @@ export default function DashboardPage() {
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
 
-      // 1. Build Sage stock map indexed by raw_material_id and item code
+      // 1. Build Sage stock map indexed by raw_material_id, sage_code, item_code, and name
       const sageMapByMatId: Record<string, number> = {};
       const sageMapByCode: Record<string, number> = {};
 
       if (sageStockRes?.data) {
         for (const row of sageStockRes.data as any[]) {
-          const qty = Number(row.quantity !== undefined && row.quantity !== null ? row.quantity : (row.quantity_on_hand || 0));
+          const qty = Number(
+            row.quantity !== undefined && row.quantity !== null 
+              ? row.quantity 
+              : (row.quantity_on_hand !== undefined && row.quantity_on_hand !== null
+                  ? row.quantity_on_hand 
+                  : (row.balance || row.current_stock || 0))
+          );
+
           if (row.raw_material_id) {
             sageMapByMatId[row.raw_material_id] = (sageMapByMatId[row.raw_material_id] || 0) + qty;
           }
-          const code = (row.sage_code || row.item_code || '').toUpperCase().trim();
-          if (code) {
-            sageMapByCode[code] = (sageMapByCode[code] || 0) + qty;
+          if (row.sage_code) {
+            const k = String(row.sage_code).toUpperCase().trim();
+            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
+          }
+          if (row.item_code) {
+            const k = String(row.item_code).toUpperCase().trim();
+            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
+          }
+          if (row.code) {
+            const k = String(row.code).toUpperCase().trim();
+            sageMapByCode[k] = (sageMapByCode[k] || 0) + qty;
           }
         }
       }
@@ -128,7 +143,7 @@ export default function DashboardPage() {
         for (const s of snapshotsRes.data as any[]) {
           const nameKey = (s.raw_material_name || '').toUpperCase().trim();
           if (nameKey && snapMap[nameKey] === undefined) {
-            snapMap[nameKey] = Number(s.physical_stock || 0);
+            snapMap[nameKey] = Number(s.physical_stock !== undefined ? s.physical_stock : (s.system_stock || 0));
           }
         }
       }
