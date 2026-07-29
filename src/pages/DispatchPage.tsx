@@ -552,7 +552,7 @@ export default function DispatchPage() {
 
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1.5 bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">1</span>
+                  <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">1</span>
                   Create & D-Note
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -560,7 +560,7 @@ export default function DispatchPage() {
 
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1.5 bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">2</span>
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold">2</span>
                   Vehicle In-Transit
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -568,14 +568,14 @@ export default function DispatchPage() {
 
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px]">
-                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">3</span>
+                  <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">3</span>
                   Branch Confirm Receipt
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </div>
 
               <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 rounded-xl font-extrabold text-[11px] shrink-0">
-                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center">4</span>
+                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-bold">4</span>
                 Accounts Approve & Post (Finance Only)
               </div>
             </div>
@@ -677,7 +677,7 @@ export default function DispatchPage() {
                   <th className="text-left px-4 py-3">Type & Destination</th>
                   <th className="text-left px-4 py-3">Logistics & Driver</th>
                   <th className="text-left px-4 py-3">Weight</th>
-                  <th className="text-left px-4 py-3">Workflow Sequence Progress</th>
+                  <th className="text-left px-4 py-3 min-w-[360px]">Workflow Sequence Progress</th>
                   <th className="text-right px-4 py-3">Actions & Next Step</th>
                 </tr>
               </thead>
@@ -754,49 +754,61 @@ export default function DispatchPage() {
                         <p className="text-[10px] text-slate-400">({(o.total_weight / 1000).toFixed(2)} t)</p>
                       </td>
 
-                      {/* STEP-BY-STEP PROGRESS PIPELINE */}
-                      <td className="px-4 py-3">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1 text-[10px]">
-                            {/* Step 1 Badge */}
-                            <span className="bg-blue-100 text-blue-900 border border-blue-300 font-extrabold px-1.5 py-0.5 rounded">
-                              ✓ 1. Loaded
-                            </span>
-                            <ChevronRight className="w-3 h-3 text-slate-400" />
-
-                            {/* Step 2 Badge */}
-                            <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
-                              stepInfo.step2Done 
-                                ? 'bg-purple-100 text-purple-900 border-purple-300' 
-                                : 'bg-slate-100 text-slate-400 border-slate-200'
-                            }`}>
-                              {stepInfo.step2Done ? '✓ 2. On Road' : '2. Transit'}
-                            </span>
-                            <ChevronRight className="w-3 h-3 text-slate-400" />
-
-                            {/* Step 3 Badge */}
-                            {o.dispatch_type === 'branch_transfer' && (
-                              <>
-                                <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
-                                  isBranchConfirmed 
-                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
-                                    : 'bg-amber-50 text-amber-800 border-amber-300'
-                                }`}>
-                                  {isBranchConfirmed ? '✓ 3. Branch Received' : '3. Awaiting Branch'}
-                                </span>
-                                <ChevronRight className="w-3 h-3 text-slate-400" />
-                              </>
-                            )}
-
-                            {/* Step 4 Badge */}
-                            <span className={`font-extrabold px-1.5 py-0.5 rounded border ${
-                              isAccountsApproved 
-                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}>
-                              {isAccountsApproved ? '✓ 4. Invoiced/Posted' : '4. Accounts'}
-                            </span>
+                      {/* REDESIGNED CONNECTED STEP-BY-STEP WORKFLOW PROGRESS PIPELINE */}
+                      <td className="px-4 py-3 min-w-[360px]">
+                        <div className="flex items-center gap-1">
+                          
+                          {/* Step 1: Loaded */}
+                          <div className="flex items-center gap-1 bg-blue-600 text-white font-extrabold px-2.5 py-1 rounded-l-xl text-[11px] shrink-0 shadow-sm">
+                            <span className="w-3.5 h-3.5 rounded-full bg-white/20 text-white text-[9px] flex items-center justify-center font-bold">1</span>
+                            Loaded
                           </div>
+
+                          <ChevronRight className="w-3.5 h-3.5 text-purple-400 shrink-0 -mx-0.5" />
+
+                          {/* Step 2: In Transit */}
+                          <div className={`flex items-center gap-1 px-2.5 py-1 font-extrabold text-[11px] shrink-0 border ${
+                            stepInfo.step2Done
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                              : 'bg-slate-100 text-slate-400 border-slate-200'
+                          }`}>
+                            <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                              stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
+                            }`}>2</span>
+                            {stepInfo.step2Done ? 'On Road' : 'Transit'}
+                          </div>
+
+                          {/* Step 3: Branch Confirm (For Branch Transfers) */}
+                          {o.dispatch_type === 'branch_transfer' && (
+                            <>
+                              <ChevronRight className="w-3.5 h-3.5 text-emerald-400 shrink-0 -mx-0.5" />
+                              <div className={`flex items-center gap-1 px-2.5 py-1 font-extrabold text-[11px] shrink-0 border ${
+                                isBranchConfirmed
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                              }`}>
+                                <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                                  isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'
+                                }`}>3</span>
+                                {isBranchConfirmed ? 'Received' : 'Awaiting'}
+                              </div>
+                            </>
+                          )}
+
+                          <ChevronRight className="w-3.5 h-3.5 text-emerald-500 shrink-0 -mx-0.5" />
+
+                          {/* Step 4: Accounts Invoiced / Posted */}
+                          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-r-xl font-extrabold text-[11px] shrink-0 border ${
+                            isAccountsApproved
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>
+                            <span className={`w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold ${
+                              isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
+                            }`}>4</span>
+                            {isAccountsApproved ? 'Posted' : 'Accounts'}
+                          </div>
+
                         </div>
                       </td>
 
