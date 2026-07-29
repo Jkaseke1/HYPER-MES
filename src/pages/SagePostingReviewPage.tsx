@@ -7,7 +7,7 @@ import { Label } from '../components/ui/label';
 import {
   ClipboardCheck, CheckCircle2, XCircle, Clock, DollarSign, Package,
   Building2, Loader2, ChevronDown, ChevronRight, ShieldAlert, Zap,
-  TrendingUp, FileCheck2, AlertTriangle, RefreshCw,
+  TrendingUp, FileCheck2, AlertTriangle, RefreshCw, Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -135,7 +135,7 @@ function StatusPill({ group }: { group: ReviewGroup }) {
   if (group.status === 'approved') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
-        <Zap className="w-3 h-3 animate-pulse" /> Approved — Queued
+        <Zap className="w-3 h-3" /> Approved — Queued
       </span>
     );
   }
@@ -155,7 +155,7 @@ function StatusPill({ group }: { group: ReviewGroup }) {
   }
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-      <Clock className="w-3 h-3 animate-pulse" /> Pending Review
+      <Clock className="w-3 h-3" /> Pending Review
     </span>
   );
 }
@@ -187,6 +187,7 @@ export default function SagePostingReviewPage() {
   const [reviews, setReviews] = useState<SagePostingReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [searchQuery, setSearchQuery] = useState('');
   const [rejectGroup, setRejectGroup] = useState<ReviewGroup | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [batchApproving, setBatchApproving] = useState(false);
@@ -195,8 +196,8 @@ export default function SagePostingReviewPage() {
 
   const isFinance = profile?.role === 'finance' || profile?.role === 'accountant' || profile?.role === 'admin';
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     let query = supabase
       .from('sage_posting_reviews')
       .select('*')
@@ -213,16 +214,27 @@ export default function SagePostingReviewPage() {
     } else {
       setReviews(data || []);
     }
-    setLoading(false);
+    if (!isSilent) setLoading(false);
   }, [filter]);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 15000);
+    fetchData(false);
+    const interval = setInterval(() => fetchData(true), 15000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
   const groups = useMemo(() => buildGroups(reviews), [reviews]);
+
+  const filteredGroups = useMemo(() => {
+    if (!searchQuery.trim()) return groups;
+    const q = searchQuery.toLowerCase();
+    return groups.filter((g) =>
+      g.event_description?.toLowerCase().includes(q) ||
+      g.reference?.toLowerCase().includes(q) ||
+      g.event_type.toLowerCase().includes(q) ||
+      g.lines.some((l) => l.sage_code?.toLowerCase().includes(q) || l.description?.toLowerCase().includes(q))
+    );
+  }, [groups, searchQuery]);
 
   const approveGroup = async (group: ReviewGroup) => {
     const pendingIds = group.lines.filter((l) => l.status === 'pending').map((l) => l.id);
@@ -239,7 +251,7 @@ export default function SagePostingReviewPage() {
       toast.error(`Failed to approve: ${error.message}`);
     } else {
       toast.success(`✅ Approved ${EVENT_LABELS[group.event_type] || group.event_type}${group.reference ? ` — ${group.reference}` : ''}`);
-      fetchData();
+      fetchData(true);
     }
   };
 
@@ -263,7 +275,7 @@ export default function SagePostingReviewPage() {
       toast.success(`Rejected package (${pendingIds.length} lines)`);
       setRejectGroup(null);
       setRejectReason('');
-      fetchData();
+      fetchData(true);
     }
   };
 
@@ -284,7 +296,7 @@ export default function SagePostingReviewPage() {
     }
     setBatchApproving(false);
     toast.success(`✅ Approved ${successCount} of ${pendingGroups.length} packages`);
-    fetchData();
+    fetchData(true);
   };
 
   const pendingLineCount  = reviews.filter((r) => r.status === 'pending').length;
@@ -322,8 +334,8 @@ export default function SagePostingReviewPage() {
           <div className="flex items-center gap-2 mb-1">
             <span className="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/30 font-mono font-medium">Finance Gateway</span>
             <span className="flex items-center gap-1 text-xs text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              Auto-refresh 15s
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+              Live Sync
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Sage Posting Review</h1>
@@ -331,7 +343,7 @@ export default function SagePostingReviewPage() {
         </div>
         <div className="relative flex flex-col sm:flex-row gap-2 shrink-0">
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(false)}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-semibold rounded-xl transition-all"
           >
             <RefreshCw className="w-4 h-4" />
@@ -359,26 +371,51 @@ export default function SagePostingReviewPage() {
         <KPICard label="Pending Value"    value={`$${totalValue.toFixed(2)}`} icon={DollarSign} accent="border-slate-200" sub="under review" />
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1">Filter:</span>
-        {(['pending', 'approved', 'rejected', 'all'] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${
-              filter === f
-                ? 'bg-slate-900 text-white border-slate-900 shadow'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {f === 'pending' && <Clock className="w-3 h-3 inline mr-1 -mt-0.5" />}
-            {f === 'approved' && <CheckCircle2 className="w-3 h-3 inline mr-1 -mt-0.5" />}
-            {f === 'rejected' && <XCircle className="w-3 h-3 inline mr-1 -mt-0.5" />}
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-slate-400">{groups.length} package{groups.length !== 1 ? 's' : ''}</span>
+      {/* Filter & Live Search Toolbar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1">Filter:</span>
+          {(['pending', 'approved', 'rejected', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                filter === f
+                  ? 'bg-slate-900 text-white border-slate-900 shadow'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {f === 'pending' && <Clock className="w-3 h-3 inline mr-1 -mt-0.5" />}
+              {f === 'approved' && <CheckCircle2 className="w-3 h-3 inline mr-1 -mt-0.5" />}
+              {f === 'rejected' && <XCircle className="w-3 h-3 inline mr-1 -mt-0.5" />}
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Live Search Input */}
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search reference, Sage code, event..."
+            className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <span className="text-xs text-slate-400 font-medium shrink-0">
+          {filteredGroups.length} package{filteredGroups.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Package List */}
@@ -388,14 +425,16 @@ export default function SagePostingReviewPage() {
             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
             <p className="text-sm text-slate-500 mt-3 font-medium">Loading review packages…</p>
           </div>
-        ) : groups.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center">
             <ClipboardCheck className="w-12 h-12 text-slate-200 mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-400">No {filter !== 'all' ? filter : ''} packages found</p>
-            <p className="text-xs text-slate-400 mt-1">All clear — nothing needs attention right now.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {searchQuery ? 'No reviews matched your search criteria.' : 'All clear — nothing needs attention right now.'}
+            </p>
           </div>
         ) : (
-          groups.map((group) => {
+          filteredGroups.map((group) => {
             const isOpen    = !!expanded[group.key];
             const hasPending = group.lines.some((l) => l.status === 'pending');
             const codes     = [...new Set(group.lines.map((l) => l.sage_code))].slice(0, 5);
@@ -480,23 +519,17 @@ export default function SagePostingReviewPage() {
                         <button
                           disabled={actingKey === group.key}
                           onClick={() => { setRejectGroup(group); setRejectReason(''); }}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-red-50 hover:text-red-600 rounded-xl border border-slate-200 transition-all disabled:opacity-50"
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Reject
                         </button>
                       </div>
                     )}
-
-                    {group.status === 'rejected' && group.lines[0]?.rejection_reason && (
-                      <div className="max-w-[200px] text-[10px] text-red-500 bg-red-50 border border-red-100 rounded-lg px-2 py-1 truncate" title={group.lines[0].rejection_reason}>
-                        ⚠ {group.lines[0].rejection_reason}
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Expanded line items */}
+                {/* Expanded Item Details */}
                 {isOpen && (
                   <div className="border-t border-slate-100">
                     <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100">
