@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Circle, Play, Activity, Gauge, Users, Zap,
-  Layers, Scale, Sparkles, ShieldCheck, Factory, Truck
+  Layers, Scale, Sparkles, ShieldCheck, Factory, Truck, Database, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
@@ -28,6 +28,7 @@ export default function DashboardPage() {
   });
   const [recentOrders, setRecentOrders] = useState<ProductionOrder[]>([]);
   const [lowStockItems, setLowStockItems] = useState<RawMaterial[]>([]);
+  const [sageStockMap, setSageStockMap] = useState<Record<string, number>>({});
   const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
   const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +62,7 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       setLoading(true);
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes] =
+      const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes] =
         await Promise.all([
           supabase.from('production_orders').select('planned_qty, actual_qty, status'),
           supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
@@ -72,6 +73,7 @@ export default function DashboardPage() {
           supabase.from('monthly_operations_trends').select('*'),
           supabase.from('inventory_depletion_forecasts').select('*'),
           supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
+          supabase.from('sage_stock_balances').select('sage_code, item_code, quantity'),
         ]);
 
       const orders = ordersRes.data || [];
@@ -96,6 +98,19 @@ export default function DashboardPage() {
       setTrends((trendRes.data as MonthlyTrendRow[]) || []);
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
+
+      // Build Sage stock map indexed by code
+      const sageMap: Record<string, number> = {};
+      if (sageStockRes?.data) {
+        for (const row of sageStockRes.data) {
+          const key = (row.sage_code || row.item_code || '').toUpperCase().trim();
+          if (key) {
+            sageMap[key] = (sageMap[key] || 0) + Number(row.quantity || 0);
+          }
+        }
+      }
+      setSageStockMap(sageMap);
+
       setLoading(false);
     }
     fetchDashboardData();
@@ -108,27 +123,60 @@ export default function DashboardPage() {
     }, {});
   }, [inventoryForecasts]);
 
-  function getSeverity(item: RawMaterial) {
+  // Evaluates stock health across BOTH MES and Sage DB
+  const getStockAlertInfo = useCallback((item: RawMaterial) => {
     const forecast = forecastMap[item.id];
     const reorderLevel = Number(item.reorder_level || 0);
-    const hasReorderLevel = reorderLevel > 0;
-    const thresholdStock = reorderLevel * (1 + (item.alert_threshold_pct || 0.1));
-    const belowLevel = hasReorderLevel ? item.current_stock <= thresholdStock : false;
+    const thresholdStock = reorderLevel > 0 ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
+    
+    const codeKey = (item.code || '').toUpperCase().trim();
+    const sageStock = sageStockMap[codeKey] !== undefined ? sageStockMap[codeKey] : null;
+    const mesStock = Number(item.current_stock || 0);
+
+    const mesBelow = reorderLevel > 0 && mesStock <= thresholdStock;
+    const sageBelow = sageStock !== null && reorderLevel > 0 && sageStock <= thresholdStock;
 
     const daysToDepletion = forecast?.days_to_depletion;
     const targetCover = item.days_of_cover_target || 7;
-    const belowDays = typeof daysToDepletion === 'number' && daysToDepletion > 0
-      ? daysToDepletion <= targetCover
-      : false;
+    const depletionBelow = typeof daysToDepletion === 'number' && daysToDepletion > 0 && daysToDepletion <= targetCover;
 
-    if (hasReorderLevel && belowLevel && belowDays) return 'critical';
-    if (belowLevel || belowDays) return 'warning';
-    return 'healthy';
-  }
+    let severity: 'critical' | 'warning' | 'healthy' = 'healthy';
+    let alertReason: string[] = [];
 
-  const filteredLowStock = lowStockItems
-    .map((item) => ({ item, severity: getSeverity(item), forecast: forecastMap[item.id] }))
-    .filter(({ severity }) => severity !== 'healthy');
+    if (mesStock === 0 || (sageStock !== null && sageStock === 0)) {
+      severity = 'critical';
+      if (mesStock === 0) alertReason.push('MES Out of Stock');
+      if (sageStock === 0) alertReason.push('Sage Out of Stock');
+    } else if (mesBelow && sageBelow) {
+      severity = 'critical';
+      alertReason.push('MES & Sage Low');
+    } else if (mesBelow) {
+      severity = 'warning';
+      alertReason.push('MES Low Stock');
+    } else if (sageBelow) {
+      severity = 'warning';
+      alertReason.push('Sage DB Low Stock');
+    } else if (depletionBelow) {
+      severity = 'warning';
+      alertReason.push('Depletion Warning');
+    }
+
+    return {
+      severity,
+      alertReason: alertReason.join(' & '),
+      mesStock,
+      sageStock,
+      reorderLevel,
+      forecast,
+      isSageChecked: sageStock !== null,
+    };
+  }, [forecastMap, sageStockMap]);
+
+  const filteredLowStock = useMemo(() => {
+    return lowStockItems
+      .map((item) => ({ item, alertInfo: getStockAlertInfo(item) }))
+      .filter(({ alertInfo }) => alertInfo.severity !== 'healthy');
+  }, [lowStockItems, getStockAlertInfo]);
 
   const trendChartData = trends.map((row) => ({
     month: format(new Date(row.month), 'MMM yyyy'),
@@ -149,107 +197,56 @@ export default function DashboardPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-              <Factory className="w-7 h-7 text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Operations Command Center</h1>
-                <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                  <Sparkles className="w-3.5 h-3.5" /> Live MES Floor
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 mt-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Circle className="w-2 h-2 fill-emerald-400 text-emerald-400" />
-                  Raw Materials: <strong className="text-white">{stats.rawMaterialCount}</strong>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Circle className="w-2 h-2 fill-blue-400 text-blue-400" />
-                  Formulations: <strong className="text-white">{stats.formulationCount}</strong>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Circle className={`w-2 h-2 ${filteredLowStock.length > 0 ? 'fill-amber-400 text-amber-400' : 'fill-emerald-400 text-emerald-400'}`} />
-                  Stock Alerts: <strong className={filteredLowStock.length > 0 ? 'text-amber-300' : 'text-emerald-300'}>{filteredLowStock.length}</strong>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Live Sync</p>
-              <p className="text-xs font-mono font-bold text-slate-200">{format(lastUpdated, 'EEEE, MMM d · HH:mm:ss')}</p>
-            </div>
-            <button
-              onClick={fetchLiveOrders}
-              className="p-3 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
-              title="Refresh Live Floor"
-            >
-              <RefreshCw className="w-4.5 h-4.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Hero Live Production Floor Card */}
+      {/* Hero Live Production Banner */}
       {(() => {
-        const heroOrder = liveOrders.find(o => o.status === 'in_progress') || liveOrders[0];
-        const yieldPct = heroOrder && heroOrder.planned_qty > 0 ? Math.min(100, Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)) : 0;
-        const runtimeMs = heroOrder?.actual_start ? Date.now() - new Date(heroOrder.actual_start).getTime() : 0;
-        const runtimeHrs = Math.floor(runtimeMs / 3600000);
-        const runtimeMin = Math.floor((runtimeMs % 3600000) / 60000);
-        const runtimeSec = Math.floor((runtimeMs % 60000) / 1000);
-        const runtimeStr = heroOrder?.actual_start
-          ? `${String(runtimeHrs).padStart(2, '0')}:${String(runtimeMin).padStart(2, '0')}:${String(runtimeSec).padStart(2, '0')}`
-          : '--:--:--';
-        const throughput = heroOrder && runtimeHrs > 0 ? Math.round((heroOrder.actual_qty || 0) / Math.max(runtimeHrs, 0.5)) : 0;
-        const isRunning = heroOrder?.status === 'in_progress';
+        const inProgressOrders = liveOrders.filter((o) => o.status === 'in_progress');
+        const heroOrder = inProgressOrders[0] || liveOrders[0];
+
+        if (!heroOrder) return null;
+
+        const yieldPct = heroOrder.planned_qty > 0
+          ? Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)
+          : 0;
+
+        const elapsedHours = heroOrder.start_time
+          ? Math.max(0.1, (Date.now() - new Date(heroOrder.start_time).getTime()) / 3600000)
+          : 1;
+
+        const throughput = Math.round((heroOrder.actual_qty || 0) / elapsedHours);
 
         return (
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Manufacturing Floor Status</h2>
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-700/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Factory className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      Live Feed
+                    </span>
+                    <span className="text-xs text-slate-400">Updated {format(lastUpdated, 'HH:mm:ss')}</span>
+                  </div>
+                  <h2 className="text-lg font-extrabold tracking-tight mt-0.5">
+                    Active Batch: <span className="font-mono text-emerald-400">{heroOrder.batch_number}</span> — {(heroOrder.formulations as any)?.name}
+                  </h2>
+                </div>
               </div>
+
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 font-medium">Line Status:</span>
-                <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full border ${isRunning ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : heroOrder ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                  {isRunning ? 'ACTIVE RUNNING' : heroOrder ? 'MATERIALS ISSUED' : 'NO ORDERS'}
-                </span>
+                <button
+                  onClick={fetchLiveOrders}
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </button>
               </div>
             </div>
 
-            {!heroOrder ? (
-              <div className="bg-slate-50 rounded-2xl p-10 text-center border border-slate-200/60">
-                <Factory className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-bold text-slate-700">No active production orders running on the floor</p>
-                <p className="text-xs text-slate-400 mt-1">Start a new batch from Production Orders to view live telemetry.</p>
-              </div>
-            ) : (
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shrink-0">
-                      <Play className="w-6 h-6 text-white fill-white ml-0.5" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-extrabold text-white tracking-tight">{heroOrder.formulations?.name || heroOrder.batch_number}</h3>
-                      <p className="text-xs text-slate-300 font-mono mt-0.5">Batch: {heroOrder.batch_number} • Main Manufacturing Line</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Active Runtime</span>
-                    <p className="text-xl font-mono font-black text-emerald-400">{runtimeStr}</p>
-                  </div>
-                </div>
-
+            {heroOrder && (
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: 'Throughput', value: `${throughput.toLocaleString()} ${heroOrder.unit}/hr`, pct: Math.min(100, throughput / 10), color: '#10b981', icon: Zap },
@@ -334,7 +331,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Analytics Charts & Stock Alerts */}
+      {/* Analytics Charts & Dual-Source Stock Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         
         {/* Operations Trends Chart */}
@@ -387,44 +384,71 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stock & Reorder Alerts Widget */}
+          {/* DUAL-SOURCE STOCK & REORDER ALERTS WIDGET (MES + SAGE DB) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Stock & Reorder Alerts</h3>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Stock & Reorder Alerts</h3>
+                  <p className="text-[10px] text-slate-400">Monitoring both MES & Sage DB stock levels</p>
+                </div>
               </div>
-              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">{filteredLowStock.length} Alerts</span>
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                {filteredLowStock.length} Alerts
+              </span>
             </div>
 
             {filteredLowStock.length === 0 ? (
               <div className="py-8 text-center text-slate-400 space-y-1">
                 <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-1" />
-                <p className="text-xs font-bold text-slate-700">All raw material stock levels healthy</p>
+                <p className="text-xs font-bold text-slate-700">All MES & Sage DB stock levels healthy</p>
+                <p className="text-[10px] text-slate-400">No raw materials are currently below reorder levels in MES or Sage DB.</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                {filteredLowStock.map(({ item, severity, forecast }) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200/70 hover:bg-slate-100 transition-colors">
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                          <span className="font-mono font-bold text-blue-700">{item.code}</span>
-                          {forecast?.days_to_depletion != null && (
-                            <span className="text-amber-700 font-semibold">• {forecast.days_to_depletion.toFixed(1)} days left</span>
-                          )}
+              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                {filteredLowStock.map(({ item, alertInfo }) => (
+                  <div key={item.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 hover:bg-slate-100 transition-colors space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${alertInfo.severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                            <span className="font-mono font-bold text-blue-700">{item.code}</span>
+                            <span>• Reorder: <strong className="font-mono">{item.reorder_level.toLocaleString()} {item.unit}</strong></span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="text-right shrink-0 ml-2">
-                      <p className={`text-xs font-extrabold font-mono ${severity === 'critical' ? 'text-rose-600' : 'text-amber-600'}`}>
-                        {item.current_stock.toLocaleString()} {item.unit}
-                      </p>
-                      <span className={`inline-block text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${severity === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>
-                        {severity}
+
+                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded ${
+                        alertInfo.severity === 'critical' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
+                      }`}>
+                        {alertInfo.alertReason || alertInfo.severity}
                       </span>
+                    </div>
+
+                    {/* MES vs SAGE DUAL-SOURCE STOCK COMPARISON BADGES */}
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[11px]">
+                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <span className="text-slate-500 text-[10px] font-bold">MES Stock:</span>
+                        <span className={`font-mono font-extrabold ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
+                          {alertInfo.mesStock.toLocaleString()} {item.unit}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <span className="text-slate-500 text-[10px] font-bold flex items-center gap-1">
+                          <Database className="w-3 h-3 text-indigo-500" /> Sage DB:
+                        </span>
+                        {alertInfo.sageStock !== null ? (
+                          <span className={`font-mono font-extrabold ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
+                            {alertInfo.sageStock.toLocaleString()} {item.unit}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px] italic">Not Synced</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -481,7 +505,6 @@ export default function DashboardPage() {
           </table>
         </div>
       </div>
-
     </div>
   );
 }
