@@ -1,29 +1,30 @@
-const CACHE_NAME = 'hyper-mes-cache-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-];
+const CACHE_NAME = 'hyper-mes-v2';
 
-// Install Event - Cache App Shell Assets
+// Dynamic installation - cache scope root and index.html safely
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[ServiceWorker] Caching app shell assets');
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      console.log('[ServiceWorker] Installing & caching app shell...');
+      const scope = self.registration.scope;
+      const indexUrl = new URL('index.html', scope).href;
+      
+      try {
+        await cache.addAll([scope, indexUrl]);
+        console.log('[ServiceWorker] Successfully cached app shell scope:', scope);
+      } catch (err) {
+        console.warn('[ServiceWorker] Install caching warning:', err);
+      }
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate Event - Clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
-            console.log('[ServiceWorker] Clearing old cache:', cache);
+            console.log('[ServiceWorker] Deleting old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -32,43 +33,49 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Stale-While-Revalidate Strategy for Navigation & Static Assets
 self.addEventListener('fetch', (event) => {
-  const requestUrl = new URL(event.request.url);
+  const request = event.request;
+  const url = new URL(request.url);
 
-  // Skip caching Supabase API or WebSocket requests (let Supabase SDK & offlineSync handle data caching)
-  if (requestUrl.hostname.includes('supabase.co') || requestUrl.pathname.startsWith('/rest/')) {
+  // Do not intercept Supabase REST/Realtime requests or external APIs
+  if (url.hostname.includes('supabase.co') || url.pathname.includes('/rest/v1/')) {
     return;
   }
 
-  // Handle GET requests with Cache First / Network Fallback
-  if (event.request.method === 'GET') {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Return cached asset and update cache in background
-          fetch(event.request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-            }
-          }).catch(() => {/* Ignore network errors offline */});
-          return cachedResponse;
-        }
-
-        return fetch(event.request).then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-            return networkResponse;
-          }
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-          return networkResponse;
-        }).catch(() => {
-          // If offline and request is for a page, return index.html
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html');
-          }
-        });
-      })
-    );
+  if (request.method !== 'GET') {
+    return;
   }
+
+  event.respondWith(
+    caches.match(request).then((cachedResponse) => {
+      // Return cached version if found
+      if (cachedResponse) {
+        // Fetch fresh copy in background to update cache (Stale-While-Revalidate)
+        fetch(request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
+          }
+        }).catch(() => {/* Offline */});
+        return cachedResponse;
+      }
+
+      // If not cached, fetch from network and cache
+      return fetch(request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+        return networkResponse;
+      }).catch(async () => {
+        // Fallback for HTML navigation requests when offline
+        if (request.headers.get('accept')?.includes('text/html')) {
+          const scope = self.registration.scope;
+          const indexUrl = new URL('index.html', scope).href;
+          const cachedIndex = await caches.match(indexUrl) || await caches.match(scope);
+          if (cachedIndex) return cachedIndex;
+        }
+      });
+    })
+  );
 });
