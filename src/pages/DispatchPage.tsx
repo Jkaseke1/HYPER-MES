@@ -679,59 +679,9 @@ export default function DispatchPage() {
                       {/* Horizontal Divider */}
                       <div className="border-t border-slate-100 mx-4" />
 
-                      {/* Bottom Row: Workflow Pipeline + Actions */}
-                      <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-50/60">
-
-                        {/* Pipeline label */}
-                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest shrink-0">Pipeline:</span>
-
-                        {/* STAGE 1: LOADED */}
-                        <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[9.5px] border border-blue-700/40 shadow-sm shrink-0">
-                          <span className="w-3.5 h-3.5 rounded-full bg-white/20 text-white text-[8px] flex items-center justify-center font-black leading-none">1</span>
-                          <span>Loaded</span>
-                          <CheckCircle2 className="w-2.5 h-2.5 text-blue-200" />
-                        </div>
-
-                        <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${stepInfo.step2Done ? 'text-indigo-500' : 'text-slate-300'}`} />
-
-                        {/* STAGE 2 */}
-                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
-                          stepInfo.step2Done ? 'bg-gradient-to-r from-purple-600 to-indigo-500 text-white border-purple-600' : 'bg-white text-slate-400 border-slate-200'
-                        }`}>
-                          <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-                          <span>{stepInfo.step2Done ? 'On Road' : 'Transit'}</span>
-                          {stepInfo.step2Done && <CheckCircle2 className="w-2.5 h-2.5 text-purple-200" />}
-                        </div>
-
-                        {o.dispatch_type === 'branch_transfer' && (
-                          <>
-                            <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${isBranchConfirmed ? 'text-purple-500' : 'text-slate-300'}`} />
-                            <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
-                              isBranchConfirmed ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-600' : 'bg-amber-50 text-amber-800 border-amber-300'
-                            }`}>
-                              <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'}`}>3</span>
-                              <span>{isBranchConfirmed ? 'Received' : 'Awaiting'}</span>
-                              {isBranchConfirmed ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-100" /> : <Clock className="w-2.5 h-2.5 text-amber-600" />}
-                            </div>
-                          </>
-                        )}
-
-                        <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${isAccountsApproved ? 'text-emerald-500' : 'text-slate-300'}`} />
-
-                        {/* STAGE 4 */}
-                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
-                          isAccountsApproved ? 'bg-gradient-to-r from-emerald-700 to-teal-700 text-white border-emerald-800' : 'bg-white text-slate-400 border-slate-200'
-                        }`}>
-                          <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>4</span>
-                          <span>{isAccountsApproved ? 'Posted' : 'Accounts'}</span>
-                          {isAccountsApproved ? <Sparkles className="w-2.5 h-2.5 text-amber-300" /> : <Clock className="w-2.5 h-2.5 text-slate-400" />}
-                        </div>
-
-                        {/* Push actions to right */}
-                        <div className="flex-1" />
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 shrink-0">
+                      {/* Bottom Row: Action Buttons only */}
+                      <div className="flex items-center justify-between px-5 py-2.5 bg-slate-50/50">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => openDNoteModal(o)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all"
@@ -777,6 +727,14 @@ export default function DispatchPage() {
                           )}
                         </div>
 
+                        {/* View Detail — right side */}
+                        <button
+                          onClick={() => openView(o)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition-colors"
+                          title="View full dispatch details & workflow status"
+                        >
+                          <Eye className="w-3 h-3" /> View Details
+                        </button>
                       </div>
                     </div>
                   );
@@ -1286,6 +1244,125 @@ export default function DispatchPage() {
                       Advance to {nextStatus(viewOrder.status)!.label}
                     </button>
                   )}
+                </div>
+
+                {/* ══════════════════════════════════════════════════════════════ */}
+                {/* WORKFLOW STATUS BREAKDOWN */}
+                {/* ══════════════════════════════════════════════════════════════ */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
+                    <Route className="w-4 h-4 text-indigo-500" />
+                    <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Dispatch Workflow Status</h3>
+                  </div>
+
+                  {/* Step blocks */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-100">
+
+                    {/* STAGE 1: LOADED */}
+                    <div className="p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</div>
+                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">Loaded & Dispatched</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
+                        <span className="text-xs font-bold text-blue-700">Complete</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">Dispatched on {format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')}</p>
+                      {viewOrder.physical_dnote_number && (
+                        <p className="text-[10px] font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded inline-block">D-Note #{viewOrder.physical_dnote_number}</p>
+                      )}
+                    </div>
+
+                    {/* STAGE 2: IN-TRANSIT */}
+                    <div className={`p-4 space-y-2 ${
+                      ['dispatched','in_transit','delivered'].includes(viewOrder.status) ? '' : 'opacity-50'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-full text-white text-[10px] font-black flex items-center justify-center shrink-0 ${
+                          ['dispatched','in_transit','delivered'].includes(viewOrder.status) ? 'bg-purple-600' : 'bg-slate-300'
+                        }`}>2</div>
+                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">In-Transit / On Road</span>
+                      </div>
+                      {['dispatched','in_transit','delivered'].includes(viewOrder.status) ? (
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-purple-500 shrink-0" />
+                          <span className="text-xs font-bold text-purple-700">Vehicle Dispatched</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-xs font-bold text-slate-400">Not yet dispatched</span>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-slate-500">Vehicle: {viewOrder.vehicle_number || 'Unassigned'}</p>
+                      <p className="text-[10px] text-slate-500">Driver: {viewOrder.driver_name || 'N/A'}</p>
+                    </div>
+
+                    {/* STAGE 3: BRANCH RECEIPT (IBT only) */}
+                    <div className={`p-4 space-y-2 ${
+                      viewOrder.dispatch_type === 'branch_transfer' ? '' : 'bg-slate-50/50'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-full text-white text-[10px] font-black flex items-center justify-center shrink-0 ${
+                          viewOrder.branch_confirmation_status === 'confirmed' ? 'bg-emerald-500' :
+                          viewOrder.dispatch_type === 'branch_transfer' ? 'bg-amber-400' : 'bg-slate-200'
+                        }`}>3</div>
+                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">Branch Receipt</span>
+                      </div>
+                      {viewOrder.dispatch_type !== 'branch_transfer' ? (
+                        <p className="text-[10px] text-slate-400 italic">N/A — Customer Direct</p>
+                      ) : viewOrder.branch_confirmation_status === 'confirmed' ? (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span className="text-xs font-bold text-emerald-700">Confirmed Received</span>
+                          </div>
+                          {viewOrder.branch_confirmation_notes && (
+                            <p className="text-[10px] text-slate-500 italic">&ldquo;{viewOrder.branch_confirmation_notes}&rdquo;</p>
+                          )}
+                          <p className="text-[10px] text-slate-500">Branch: {(viewOrder.branches as any)?.name || '-'}</p>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span className="text-xs font-bold text-amber-700">Awaiting branch confirmation</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* STAGE 4: ACCOUNTS POSTING */}
+                    <div className={`p-4 space-y-2 ${
+                      viewOrder.accounts_posting_status === 'approved' ? '' : 'opacity-60'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-full text-white text-[10px] font-black flex items-center justify-center shrink-0 ${
+                          viewOrder.accounts_posting_status === 'approved' ? 'bg-emerald-700' : 'bg-slate-300'
+                        }`}>4</div>
+                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">Accounts & Posting</span>
+                      </div>
+                      {viewOrder.accounts_posting_status === 'approved' ? (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-bold text-emerald-700">Posted to Sage</span>
+                          </div>
+                          {viewOrder.accounts_approval_notes && (
+                            <p className="text-[10px] text-slate-500 italic">&ldquo;{viewOrder.accounts_approval_notes}&rdquo;</p>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-xs font-bold text-slate-400">Pending finance approval</span>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-slate-500">
+                        {viewOrder.dispatch_type === 'customer_direct' ? 'Customer Invoice' : 'Sage IBT Stock Transfer'}
+                      </p>
+                    </div>
+
+                  </div>
                 </div>
 
                 {/* Line Items Table */}
