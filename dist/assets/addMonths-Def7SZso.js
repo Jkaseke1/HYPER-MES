@@ -1,1 +1,0 @@
-import{t as f,c}from"./format-eXFWiDEz.js";function M(r,n,a){const t=f(r,a==null?void 0:a.in);if(isNaN(n))return c(r,NaN);if(!n)return t;const s=t.getDate(),e=c(r,t.getTime());e.setMonth(t.getMonth()+n+1,0);const o=e.getDate();return s>=o?e:(t.setFullYear(e.getFullYear(),e.getMonth(),s),t)}export{M as a};
