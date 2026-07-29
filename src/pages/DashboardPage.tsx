@@ -76,7 +76,7 @@ export default function DashboardPage() {
           supabase.from('inventory_depletion_forecasts').select('*'),
           supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
           supabase.from('sage_stock_balances').select('*'),
-          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock, system_stock').order('snapshot_date', { ascending: false }).limit(100),
+          supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
         ]);
 
       const orders = ordersRes.data || [];
@@ -102,7 +102,7 @@ export default function DashboardPage() {
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
 
-      // 1. Build Sage stock map indexed by raw_material_id, sage_code, item_code, and name
+      // 1. Build Sage stock map indexed by raw_material_id, sage_code, item_code, and code
       const sageMapByMatId: Record<string, number> = {};
       const sageMapByCode: Record<string, number> = {};
 
@@ -137,13 +137,13 @@ export default function DashboardPage() {
       setSageStockByMatId(sageMapByMatId);
       setSageStockMap(sageMapByCode);
 
-      // 2. Build snapshot stock map as intelligent fallback
+      // 2. Build snapshot stock map ONLY using physical_stock (never system_stock)
       const snapMap: Record<string, number> = {};
       if (snapshotsRes?.data) {
         for (const s of snapshotsRes.data as any[]) {
           const nameKey = (s.raw_material_name || '').toUpperCase().trim();
-          if (nameKey && snapMap[nameKey] === undefined) {
-            snapMap[nameKey] = Number(s.physical_stock !== undefined ? s.physical_stock : (s.system_stock || 0));
+          if (nameKey && snapMap[nameKey] === undefined && s.physical_stock !== null && s.physical_stock !== undefined) {
+            snapMap[nameKey] = Number(s.physical_stock);
           }
         }
       }
@@ -168,13 +168,12 @@ export default function DashboardPage() {
     const codeKey = (item.code || '').toUpperCase().trim();
     const nameKey = (item.name || '').toUpperCase().trim();
 
-    // Multi-tier Sage stock resolution
+    // Multi-tier Sage stock resolution (strict Sage DB sources only)
     const sageByMatId = sageStockByMatId[item.id];
     const sageByCode = sageStockMap[codeKey];
     const sageBySnap = snapshotStockMap[nameKey];
     
-    // Pick highest priority available Sage stock value
-    let sageStock = 0;
+    let sageStock: number | null = null;
     if (sageByMatId !== undefined) {
       sageStock = sageByMatId;
     } else if (sageByCode !== undefined) {
@@ -188,7 +187,7 @@ export default function DashboardPage() {
     const thresholdStock = hasReorderLevel ? reorderLevel * (1 + (item.alert_threshold_pct || 0.1)) : 0;
 
     const mesBelow = hasReorderLevel && mesStock <= thresholdStock;
-    const sageBelow = hasReorderLevel && sageStock <= thresholdStock;
+    const sageBelow = sageStock !== null && hasReorderLevel && sageStock <= thresholdStock;
 
     const daysToDepletion = forecast?.days_to_depletion;
     const targetCover = item.days_of_cover_target || 7;
@@ -198,7 +197,7 @@ export default function DashboardPage() {
     let alertReason: string[] = [];
 
     if (hasReorderLevel) {
-      if (mesStock === 0 || sageStock === 0) {
+      if (mesStock === 0 || (sageStock !== null && sageStock === 0)) {
         severity = 'critical';
         if (mesStock === 0) alertReason.push('MES Out of Stock');
         if (sageStock === 0) alertReason.push('Sage Out of Stock');
@@ -489,20 +488,24 @@ export default function DashboardPage() {
 
                     {/* MES vs SAGE DUAL-SOURCE STOCK COMPARISON BADGES */}
                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[11px]">
-                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                        <span className="text-slate-500 text-[10px] font-bold">MES Stock:</span>
-                        <span className={`font-mono font-extrabold ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
+                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
+                        <span className="text-slate-500 text-[10px] font-bold shrink-0">MES Stock:</span>
+                        <span className={`font-mono font-extrabold truncate ml-1 ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
                           {alertInfo.mesStock.toLocaleString()} {item.unit}
                         </span>
                       </div>
 
-                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                        <span className="text-slate-500 text-[10px] font-bold flex items-center gap-1">
-                          <Database className="w-3 h-3 text-indigo-500" /> Sage DB:
+                      <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
+                        <span className="text-slate-500 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                          <Database className="w-3 h-3 text-indigo-500 shrink-0" /> Sage DB:
                         </span>
-                        <span className={`font-mono font-extrabold ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
-                          {alertInfo.sageStock.toLocaleString()} {item.unit}
-                        </span>
+                        {alertInfo.sageStock !== null ? (
+                          <span className={`font-mono font-extrabold truncate ml-1 ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
+                            {alertInfo.sageStock.toLocaleString()} {item.unit}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-slate-400 italic">Not Synced</span>
+                        )}
                       </div>
                     </div>
                   </div>
