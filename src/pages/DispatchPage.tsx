@@ -550,192 +550,213 @@ export default function DispatchPage() {
           </div>
         </div>
 
-        {/* SCROLLABLE DATA TABLE SECTION */}
-        <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
-          
-          {/* Desktop Table View */}
-          <div className="hidden md:block">
-            <table className="w-full text-xs border-collapse">
-              <thead className="bg-slate-950 text-white uppercase tracking-wider font-bold sticky top-0 z-10 shadow-sm text-[10px]">
-                <tr>
-                  <th className="text-left px-4 py-3 w-[170px]">Dispatch & D-Note</th>
-                  <th className="text-left px-4 py-3 w-[155px]">Type & Destination</th>
-                  <th className="text-left px-4 py-3 w-[140px]">Logistics & Driver</th>
-                  <th className="text-left px-4 py-3 w-[80px]">Weight</th>
-                  <th className="text-left px-4 py-3">Workflow Sequence Progress & Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((o) => {
+        {/* CARD-BASED DISPATCH LIST */}
+        <div className="flex-1 overflow-y-auto min-h-0 bg-slate-50 rounded-2xl border border-slate-200 shadow-sm relative">
+
+          {/* Sticky Column Header */}
+          <div className="sticky top-0 z-10 bg-slate-950 px-5 py-2.5 flex items-center gap-4 shadow-md">
+            <div className="w-1 h-5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest w-[160px]">Dispatch Ref</span>
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest w-[160px]">Type & Destination</span>
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest w-[140px]">Logistics & Driver</span>
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest w-[80px]">Weight</span>
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest flex-1">Workflow & Actions</span>
+          </div>
+
+          {/* Card List */}
+          <div className="p-4 space-y-3">
+            {filtered.map((o) => {
                   const stepInfo = getOrderStep(o);
                   const isBranchConfirmed = o.branch_confirmation_status === 'confirmed';
                   const isAccountsApproved = o.accounts_posting_status === 'approved';
 
+                  // Derive accent color per status
+                  const accentClass = isAccountsApproved
+                    ? 'bg-emerald-500'
+                    : o.dispatch_type === 'branch_transfer' && isBranchConfirmed
+                      ? 'bg-teal-400'
+                      : stepInfo.step2Done
+                        ? 'bg-purple-500'
+                        : 'bg-blue-500';
+
                   return (
-                    <tr key={o.id} className="hover:bg-slate-50/60 transition-colors">
-                      
-                      {/* Dispatch & D-Note Ref */}
-                      <td className="px-4 py-3.5 w-[170px]">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700 shrink-0">
+                    /* ═══════════ DISPATCH CARD ═══════════ */
+                    <div
+                      key={o.id}
+                      className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                    >
+                      {/* Top Info Row */}
+                      <div className="flex items-stretch gap-0">
+
+                        {/* Colored Status Accent Bar */}
+                        <div className={`w-1 shrink-0 ${accentClass}`} />
+
+                        {/* Dispatch Ref */}
+                        <div className="flex items-center gap-3 px-4 py-3 w-[168px] shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black font-mono text-xs border border-slate-700 shrink-0">
                             {o.dispatch_number.split('-').pop()?.slice(0, 3)}
                           </div>
                           <div>
                             <p className="font-extrabold text-slate-900 font-mono text-xs leading-tight">{o.dispatch_number}</p>
                             <div className="mt-0.5">
                               {o.physical_dnote_number ? (
-                                <span className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 rounded font-mono">
-                                  D-Note #{o.physical_dnote_number}
-                                </span>
+                                <span className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded font-mono">D-Note #{o.physical_dnote_number}</span>
                               ) : (
                                 <span className="text-[9px] text-slate-400">{format(new Date(o.dispatch_date), 'dd MMM yyyy')}</span>
                               )}
                             </div>
                           </div>
                         </div>
-                      </td>
 
-                      {/* Type & Destination */}
-                      <td className="px-4 py-3.5 w-[155px]">
-                        <div className="space-y-1">
-                          <span className={`inline-block text-[8.5px] font-extrabold uppercase px-1.5 py-0.5 rounded-md ${
-                            o.dispatch_type === 'customer_direct' 
-                              ? 'bg-amber-100 text-amber-900 border border-amber-200' 
-                              : 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                          }`}>
-                            {o.dispatch_type === 'customer_direct' ? '• Customer Direct' : '• Branch Transfer (IBT)'}
-                          </span>
-                          <p className="font-bold text-slate-800 text-xs leading-tight">
-                            {o.dispatch_type === 'customer_direct' 
-                              ? (o.customer_name || 'Direct Customer') 
-                              : ((o.branches as any)?.name || '-')}
-                          </p>
-                        </div>
-                      </td>
+                        {/* Divider */}
+                        <div className="w-px bg-slate-100 self-stretch shrink-0" />
 
-                      {/* Transporter, Driver & Truck */}
-                      <td className="px-4 py-3.5 w-[140px]">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
-                            <Truck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{o.vehicle_number || 'Unassigned'}</span>
-                            {o.is_hired_truck && (
-                              <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 border border-amber-200 px-1 rounded">HIRED</span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                            <User className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{o.driver_name || 'No driver'}</span>
+                        {/* Type & Destination */}
+                        <div className="flex items-center px-4 py-3 w-[160px] shrink-0 space-y-1">
+                          <div className="space-y-1">
+                            <span className={`inline-block text-[8.5px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                              o.dispatch_type === 'customer_direct'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                            }`}>
+                              {o.dispatch_type === 'customer_direct' ? 'Customer Direct' : 'Branch Transfer'}
+                            </span>
+                            <p className="font-bold text-slate-800 text-xs leading-tight mt-0.5">
+                              {o.dispatch_type === 'customer_direct'
+                                ? (o.customer_name || 'Direct Customer')
+                                : ((o.branches as any)?.name || '-')}
+                            </p>
                           </div>
                         </div>
-                      </td>
 
-                      {/* Weight */}
-                      <td className="px-4 py-3.5 w-[80px]">
-                        <span className="font-extrabold text-slate-900 font-mono text-xs">{o.total_weight.toLocaleString()} <span className="font-normal text-slate-500">kg</span></span>
-                        <p className="text-[9px] text-slate-400 mt-0.5">{(o.total_weight / 1000).toFixed(2)} t</p>
-                      </td>
+                        {/* Divider */}
+                        <div className="w-px bg-slate-100 self-stretch shrink-0" />
 
-                      {/* COMBINED: WORKFLOW PIPELINE + ACTION BUTTONS (stacked 2 rows) */}
-                      <td className="px-4 py-3">
-                        
-                        {/* ─── ROW 1: Workflow Stage Pipeline ─── */}
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          
-                          {/* STAGE 1: LOADED */}
-                          <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10px] border border-blue-700/40 shadow-sm shrink-0">
-                            <span className="w-4 h-4 rounded-full bg-white/20 text-white text-[8px] flex items-center justify-center font-black leading-none">1</span>
-                            <span>Loaded</span>
-                            <CheckCircle2 className="w-3 h-3 text-blue-200" />
+                        {/* Logistics & Driver */}
+                        <div className="flex items-center px-4 py-3 w-[140px] shrink-0">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
+                              <Truck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{o.vehicle_number || 'Unassigned'}</span>
+                              {o.is_hired_truck && (
+                                <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 border border-amber-200 px-1 rounded-sm">HIRED</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                              <User className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span>{o.driver_name || 'No driver'}</span>
+                            </div>
                           </div>
-
-                          <ArrowRight className={`w-3.5 h-3.5 shrink-0 stroke-[2.5] ${stepInfo.step2Done ? 'text-indigo-500' : 'text-slate-300'}`} />
-
-                          {/* STAGE 2: ON ROAD / TRANSIT */}
-                          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[10px] border shadow-sm shrink-0 ${
-                            stepInfo.step2Done
-                              ? 'bg-gradient-to-r from-purple-600 to-indigo-500 text-white border-purple-600'
-                              : 'bg-slate-100 text-slate-400 border-slate-200'
-                          }`}>
-                            <span className={`w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${
-                              stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
-                            }`}>2</span>
-                            <span>{stepInfo.step2Done ? 'On Road' : 'Transit'}</span>
-                            {stepInfo.step2Done && <CheckCircle2 className="w-3 h-3 text-purple-200" />}
-                          </div>
-
-                          {/* STAGE 3: BRANCH (only branch transfers) */}
-                          {o.dispatch_type === 'branch_transfer' && (
-                            <>
-                              <ArrowRight className={`w-3.5 h-3.5 shrink-0 stroke-[2.5] ${isBranchConfirmed ? 'text-purple-500' : 'text-slate-300'}`} />
-                              <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[10px] border shadow-sm shrink-0 ${
-                                isBranchConfirmed
-                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-600'
-                                  : 'bg-amber-50 text-amber-800 border-amber-300'
-                              }`}>
-                                <span className={`w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${
-                                  isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'
-                                }`}>3</span>
-                                <span>{isBranchConfirmed ? 'Received' : 'Awaiting'}</span>
-                                {isBranchConfirmed 
-                                  ? <CheckCircle2 className="w-3 h-3 text-emerald-100" />
-                                  : <Clock className="w-3 h-3 text-amber-600" />
-                                }
-                              </div>
-                            </>
-                          )}
-
-                          <ArrowRight className={`w-3.5 h-3.5 shrink-0 stroke-[2.5] ${isAccountsApproved ? 'text-emerald-500' : 'text-slate-300'}`} />
-
-                          {/* STAGE 4: POSTED / ACCOUNTS */}
-                          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[10px] border shadow-sm shrink-0 ${
-                            isAccountsApproved
-                              ? 'bg-gradient-to-r from-emerald-700 to-teal-700 text-white border-emerald-800'
-                              : 'bg-slate-100 text-slate-400 border-slate-200'
-                          }`}>
-                            <span className={`w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${
-                              isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-300 text-slate-600'
-                            }`}>4</span>
-                            <span>{isAccountsApproved ? 'Posted' : 'Accounts'}</span>
-                            {isAccountsApproved 
-                              ? <Sparkles className="w-3 h-3 text-amber-300" />
-                              : <Clock className="w-3 h-3 text-slate-400" />
-                            }
-                          </div>
-
                         </div>
 
-                        {/* ─── ROW 2: Action Buttons ─── */}
-                        <div className="flex items-center gap-2">
-                          
-                          {/* D-Note */}
+                        {/* Divider */}
+                        <div className="w-px bg-slate-100 self-stretch shrink-0" />
+
+                        {/* Weight */}
+                        <div className="flex items-center px-4 py-3 w-[90px] shrink-0">
+                          <div>
+                            <p className="font-extrabold text-slate-900 font-mono text-sm leading-tight">{o.total_weight.toLocaleString()}</p>
+                            <p className="text-[9px] text-slate-400 font-medium">{(o.total_weight / 1000).toFixed(2)} t</p>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-px bg-slate-100 self-stretch shrink-0" />
+
+                        {/* View button — top right */}
+                        <div className="flex items-center px-4 py-3 ml-auto shrink-0">
+                          <button
+                            onClick={() => openView(o)}
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors"
+                            title="View Dispatch Timeline"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                      </div>
+
+                      {/* Horizontal Divider */}
+                      <div className="border-t border-slate-100 mx-4" />
+
+                      {/* Bottom Row: Workflow Pipeline + Actions */}
+                      <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-50/60">
+
+                        {/* Pipeline label */}
+                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest shrink-0">Pipeline:</span>
+
+                        {/* STAGE 1: LOADED */}
+                        <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[9.5px] border border-blue-700/40 shadow-sm shrink-0">
+                          <span className="w-3.5 h-3.5 rounded-full bg-white/20 text-white text-[8px] flex items-center justify-center font-black leading-none">1</span>
+                          <span>Loaded</span>
+                          <CheckCircle2 className="w-2.5 h-2.5 text-blue-200" />
+                        </div>
+
+                        <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${stepInfo.step2Done ? 'text-indigo-500' : 'text-slate-300'}`} />
+
+                        {/* STAGE 2 */}
+                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
+                          stepInfo.step2Done ? 'bg-gradient-to-r from-purple-600 to-indigo-500 text-white border-purple-600' : 'bg-white text-slate-400 border-slate-200'
+                        }`}>
+                          <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${stepInfo.step2Done ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
+                          <span>{stepInfo.step2Done ? 'On Road' : 'Transit'}</span>
+                          {stepInfo.step2Done && <CheckCircle2 className="w-2.5 h-2.5 text-purple-200" />}
+                        </div>
+
+                        {o.dispatch_type === 'branch_transfer' && (
+                          <>
+                            <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${isBranchConfirmed ? 'text-purple-500' : 'text-slate-300'}`} />
+                            <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
+                              isBranchConfirmed ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-600' : 'bg-amber-50 text-amber-800 border-amber-300'
+                            }`}>
+                              <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${isBranchConfirmed ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'}`}>3</span>
+                              <span>{isBranchConfirmed ? 'Received' : 'Awaiting'}</span>
+                              {isBranchConfirmed ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-100" /> : <Clock className="w-2.5 h-2.5 text-amber-600" />}
+                            </div>
+                          </>
+                        )}
+
+                        <ArrowRight className={`w-4 h-4 shrink-0 stroke-[3] ${isAccountsApproved ? 'text-emerald-500' : 'text-slate-300'}`} />
+
+                        {/* STAGE 4 */}
+                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-extrabold text-[9.5px] border shadow-sm shrink-0 ${
+                          isAccountsApproved ? 'bg-gradient-to-r from-emerald-700 to-teal-700 text-white border-emerald-800' : 'bg-white text-slate-400 border-slate-200'
+                        }`}>
+                          <span className={`w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center font-black leading-none ${isAccountsApproved ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>4</span>
+                          <span>{isAccountsApproved ? 'Posted' : 'Accounts'}</span>
+                          {isAccountsApproved ? <Sparkles className="w-2.5 h-2.5 text-amber-300" /> : <Clock className="w-2.5 h-2.5 text-slate-400" />}
+                        </div>
+
+                        {/* Push actions to right */}
+                        <div className="flex-1" />
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             onClick={() => openDNoteModal(o)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all shrink-0"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all"
                             title="Official Delivery Note"
                           >
                             <FileText className="w-3 h-3 text-amber-400" /> D-Note
                           </button>
 
-                          {/* Branch Confirmation */}
                           {o.dispatch_type === 'branch_transfer' && (
                             isBranchConfirmed ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] shrink-0">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
                                 <Check className="w-3 h-3" /> Branch Confirmed
                               </span>
                             ) : (
                               <button
                                 onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all"
                               >
-                                <Check className="w-3 h-3" /> Step 3: Confirm Receipt
+                                <Check className="w-3 h-3" /> Confirm Receipt
                               </button>
                             )
                           )}
 
-                          {/* Accounts Post */}
                           {isAccountsApproved ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[10px] shrink-0">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[10px]">
                               <DollarSign className="w-3 h-3" /> Posted to Sage
                             </span>
                           ) : (
@@ -743,47 +764,32 @@ export default function DispatchPage() {
                               (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
                                 <button
                                   onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all"
                                 >
-                                  <DollarSign className="w-3 h-3" /> Step 4: Post / Invoice
+                                  <DollarSign className="w-3 h-3" /> Post / Invoice
                                 </button>
                               )
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px] shrink-0" title="Finance & Admin access required">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px]" title="Finance & Admin access required">
                                 <Clock className="w-3 h-3" /> Awaiting Finance
                               </span>
                             )
                           )}
-
-                          {/* View Details */}
-                          <button
-                            onClick={() => openView(o)}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors shrink-0"
-                            title="View Dispatch Timeline"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-
                         </div>
-                      </td>
 
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
 
-                {!filtered.length && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-16 text-center">
-                      <div className="flex flex-col items-center justify-center text-slate-400">
-                        <Truck className="w-12 h-12 mb-3 text-slate-300 animate-pulse" />
-                        <p className="text-sm font-bold text-slate-700">No dispatch orders found</p>
-                        <p className="text-xs mt-1 text-slate-400">Try adjusting your tab filter or create a new dispatch order.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            {/* Empty State */}
+            {!filtered.length && (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <Truck className="w-14 h-14 mb-4 text-slate-300 animate-pulse" />
+                <p className="text-base font-bold text-slate-700">No dispatch orders found</p>
+                <p className="text-xs mt-1 text-slate-400">Try adjusting your tab filter or create a new dispatch order.</p>
+              </div>
+            )}
           </div>
         </div>
 
