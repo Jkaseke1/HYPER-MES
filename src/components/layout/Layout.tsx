@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import OfflineBanner from '../ui/OfflineBanner';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -76,10 +77,11 @@ export default function Layout() {
 
       {/* Main content */}
       <div
-        className={`transition-all duration-300 lg:ml-[240px] ${
+        className={`transition-all duration-300 ${
           collapsed ? 'lg:ml-[68px]' : 'lg:ml-[240px]'
         }`}
       >
+        <OfflineBanner />
         <Header
           title={title}
           onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
