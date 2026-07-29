@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
+import { cacheData, getCachedData } from '../lib/offlineSync';
 
 interface WBTicket {
   id: string;
@@ -71,15 +72,26 @@ export default function WeighBridgePage() {
 
   async function fetchTickets() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('weigh_bridge_tickets')
-      .select('*, suppliers(name, code)')
-      .order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error loading WB tickets:', error);
-      setTickets([]);
-    } else {
-      setTickets(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('weigh_bridge_tickets')
+        .select('*, suppliers(name, code)')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (!navigator.onLine) {
+          const cached = await getCachedData('weigh_bridge_tickets_all');
+          if (cached) setTickets(cached);
+        } else {
+          console.error('Error loading WB tickets:', error);
+        }
+      } else if (data) {
+        setTickets(data);
+        cacheData('weigh_bridge_tickets_all', data);
+      }
+    } catch {
+      const cached = await getCachedData('weigh_bridge_tickets_all');
+      if (cached) setTickets(cached);
     }
     setLoading(false);
   }

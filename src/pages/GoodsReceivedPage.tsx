@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { cacheData, getCachedData, queueOfflineAction } from '../lib/offlineSync';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
@@ -80,16 +81,53 @@ export default function GoodsReceivedPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), approver:profiles!approved_by(full_name)').order('created_at', { ascending: false }),
-      supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
-      supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
-      supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
-    ]);
-    setGrns(grnsRes.data || []);
-    setSuppliers(suppliersRes.data || []);
-    setMaterials(materialsRes.data || []);
-    setWbTickets(wbRes.data || []);
+    try {
+      const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
+        supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), approver:profiles!approved_by(full_name)').order('created_at', { ascending: false }),
+        supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
+        supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
+        supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
+      ]);
+
+      if (grnsRes.data) {
+        setGrns(grnsRes.data as any);
+        cacheData('goods_received_notes', grnsRes.data);
+      }
+      if (suppliersRes.data) {
+        setSuppliers(suppliersRes.data as any);
+        cacheData('suppliers', suppliersRes.data);
+      }
+      if (materialsRes.data) {
+        setMaterials(materialsRes.data as any);
+        cacheData('raw_materials', materialsRes.data);
+      }
+      if (wbRes.data) {
+        setWbTickets(wbRes.data as any);
+        cacheData('weigh_bridge_tickets', wbRes.data);
+      }
+
+      if (!navigator.onLine || grnsRes.error) {
+        const cachedGrns = await getCachedData('goods_received_notes');
+        const cachedSuppliers = await getCachedData('suppliers');
+        const cachedMaterials = await getCachedData('raw_materials');
+        const cachedWb = await getCachedData('weigh_bridge_tickets');
+
+        if (cachedGrns) setGrns(cachedGrns);
+        if (cachedSuppliers) setSuppliers(cachedSuppliers);
+        if (cachedMaterials) setMaterials(cachedMaterials);
+        if (cachedWb) setWbTickets(cachedWb);
+      }
+    } catch {
+      const cachedGrns = await getCachedData('goods_received_notes');
+      const cachedSuppliers = await getCachedData('suppliers');
+      const cachedMaterials = await getCachedData('raw_materials');
+      const cachedWb = await getCachedData('weigh_bridge_tickets');
+
+      if (cachedGrns) setGrns(cachedGrns);
+      if (cachedSuppliers) setSuppliers(cachedSuppliers);
+      if (cachedMaterials) setMaterials(cachedMaterials);
+      if (cachedWb) setWbTickets(cachedWb);
+    }
     setLoading(false);
   }
 
