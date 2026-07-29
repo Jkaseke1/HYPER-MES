@@ -585,11 +585,11 @@ export default function DispatchPage() {
                       key={o.id}
                       className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
-                      {/* Top Info Row */}
-                      <div className="flex items-stretch gap-0">
+                      {/* Single Row: Info + Actions */}
+                      <div className="flex items-center gap-0 min-h-[60px]">
 
                         {/* Colored Status Accent Bar */}
-                        <div className={`w-1 shrink-0 ${accentClass}`} />
+                        <div className={`w-1 self-stretch shrink-0 ${accentClass}`} />
 
                         {/* Dispatch Ref */}
                         <div className="flex items-center gap-3 px-4 py-3 w-[168px] shrink-0">
@@ -612,7 +612,7 @@ export default function DispatchPage() {
                         <div className="w-px bg-slate-100 self-stretch shrink-0" />
 
                         {/* Type & Destination */}
-                        <div className="flex items-center px-4 py-3 w-[160px] shrink-0 space-y-1">
+                        <div className="flex items-center px-4 py-3 w-[155px] shrink-0">
                           <div className="space-y-1">
                             <span className={`inline-block text-[8.5px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                               o.dispatch_type === 'customer_direct'
@@ -663,78 +663,67 @@ export default function DispatchPage() {
                         {/* Divider */}
                         <div className="w-px bg-slate-100 self-stretch shrink-0" />
 
-                        {/* View button — top right */}
-                        <div className="flex items-center px-4 py-3 ml-auto shrink-0">
-                          <button
-                            onClick={() => openView(o)}
-                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors"
-                            title="View Dispatch Timeline"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {/* ── ACTION BUTTONS (flex-1 fills remaining space) ── */}
+                        <div className="flex items-center justify-between flex-1 px-4 py-3 gap-2">
 
-                      </div>
+                          {/* Left: action buttons */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => openDNoteModal(o)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all shrink-0"
+                              title="Official Delivery Note"
+                            >
+                              <FileText className="w-3 h-3 text-amber-400" /> D-Note
+                            </button>
 
-                      {/* Horizontal Divider */}
-                      <div className="border-t border-slate-100 mx-4" />
-
-                      {/* Bottom Row: Action Buttons only */}
-                      <div className="flex items-center justify-between px-5 py-2.5 bg-slate-50/50">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openDNoteModal(o)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all"
-                            title="Official Delivery Note"
-                          >
-                            <FileText className="w-3 h-3 text-amber-400" /> D-Note
-                          </button>
-
-                          {o.dispatch_type === 'branch_transfer' && (
-                            isBranchConfirmed ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
-                                <Check className="w-3 h-3" /> Branch Confirmed
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all"
-                              >
-                                <Check className="w-3 h-3" /> Confirm Receipt
-                              </button>
-                            )
-                          )}
-
-                          {isAccountsApproved ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[10px]">
-                              <DollarSign className="w-3 h-3" /> Posted to Sage
-                            </span>
-                          ) : (
-                            isFinance ? (
-                              (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
+                            {o.dispatch_type === 'branch_transfer' && (
+                              isBranchConfirmed ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] shrink-0">
+                                  <Check className="w-3 h-3" /> Branch Confirmed
+                                </span>
+                              ) : (
                                 <button
-                                  onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all"
+                                  onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
                                 >
-                                  <DollarSign className="w-3 h-3" /> Post / Invoice
+                                  <Check className="w-3 h-3" /> Confirm Receipt
                                 </button>
                               )
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px]" title="Finance & Admin access required">
-                                <Clock className="w-3 h-3" /> Awaiting Finance
+                            )}
+
+                            {isAccountsApproved ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-bold text-[10px] shrink-0">
+                                <DollarSign className="w-3 h-3" /> Posted to Sage
                               </span>
-                            )
-                          )}
+                            ) : (
+                              isFinance ? (
+                                (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
+                                  <button
+                                    onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
+                                  >
+                                    <DollarSign className="w-3 h-3" /> Post / Invoice
+                                  </button>
+                                )
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px] shrink-0" title="Finance & Admin access required">
+                                  <Clock className="w-3 h-3" /> Awaiting Finance
+                                </span>
+                              )
+                            )}
+                          </div>
+
+                          {/* Right: View Details */}
+                          <button
+                            onClick={() => openView(o)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition-colors shrink-0"
+                            title="View full dispatch details & workflow status"
+                          >
+                            <Eye className="w-3 h-3" /> View Details
+                          </button>
+
                         </div>
 
-                        {/* View Detail — right side */}
-                        <button
-                          onClick={() => openView(o)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition-colors"
-                          title="View full dispatch details & workflow status"
-                        >
-                          <Eye className="w-3 h-3" /> View Details
-                        </button>
                       </div>
                     </div>
                   );
