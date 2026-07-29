@@ -102,7 +102,7 @@ export default function DashboardPage() {
       setInventoryForecasts((forecastRes.data as InventoryForecastRow[]) || []);
       setVarianceAlerts((varianceRes.data as any[]) || []);
 
-      // 1. Build Sage stock map indexed by raw_material_id, sage_code, item_code, and code
+      // 1. Build Sage stock map strictly from Sage balance columns
       const sageMapByMatId: Record<string, number> = {};
       const sageMapByCode: Record<string, number> = {};
 
@@ -113,7 +113,7 @@ export default function DashboardPage() {
               ? row.quantity 
               : (row.quantity_on_hand !== undefined && row.quantity_on_hand !== null
                   ? row.quantity_on_hand 
-                  : (row.balance || row.current_stock || 0))
+                  : (row.balance || 0))
           );
 
           if (row.raw_material_id) {
@@ -137,7 +137,7 @@ export default function DashboardPage() {
       setSageStockByMatId(sageMapByMatId);
       setSageStockMap(sageMapByCode);
 
-      // 2. Build snapshot stock map ONLY using physical_stock (never system_stock)
+      // 2. Build snapshot stock map strictly using physical_stock (never system_stock)
       const snapMap: Record<string, number> = {};
       if (snapshotsRes?.data) {
         for (const s of snapshotsRes.data as any[]) {
