@@ -487,24 +487,24 @@ export default function DashboardPage() {
                     </div>
 
                     {/* MES vs SAGE DUAL-SOURCE STOCK COMPARISON BADGES */}
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[11px]">
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-[10px]">
                       <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
-                        <span className="text-slate-500 text-[10px] font-bold shrink-0">MES Stock:</span>
-                        <span className={`font-mono font-extrabold truncate ml-1 ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
+                        <span className="text-slate-500 font-bold shrink-0">MES Stock:</span>
+                        <span className={`font-mono font-extrabold ml-1 ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
                           {alertInfo.mesStock.toLocaleString()} {item.unit}
                         </span>
                       </div>
 
                       <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
-                        <span className="text-slate-500 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                        <span className="text-slate-500 font-bold flex items-center gap-1 shrink-0">
                           <Database className="w-3 h-3 text-indigo-500 shrink-0" /> Sage DB:
                         </span>
                         {alertInfo.sageStock !== null ? (
-                          <span className={`font-mono font-extrabold truncate ml-1 ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
+                          <span className={`font-mono font-extrabold ml-1 ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
                             {alertInfo.sageStock.toLocaleString()} {item.unit}
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold text-slate-400 italic">Not Synced</span>
+                          <span className="font-bold text-slate-400 italic">Not Synced</span>
                         )}
                       </div>
                     </div>
