@@ -23,6 +23,7 @@ export type UpdateStatusState = 'up_to_date' | 'soft_update_available' | 'force_
 export const UPDATE_CHANNEL_NAME = 'mes_system_updates_channel';
 export const UPDATE_EVENT_NAME = 'system_update_event';
 export const LAST_APPLIED_VERSION_KEY = 'hyper_mes_last_applied_version';
+export const UPDATE_HISTORY_LOCAL_KEY = 'hyper_mes_update_broadcast_history_v1';
 
 export function getInstalledVersion(): string {
   return APP_VERSION;
@@ -33,6 +34,30 @@ export function saveLastAppliedVersion(version: string) {
     localStorage.setItem(LAST_APPLIED_VERSION_KEY, version);
   } catch (e) {
     console.warn('Failed to save last applied version:', e);
+  }
+}
+
+function getLocalHistory(): SystemUpdateLogRecord[] {
+  try {
+    const raw = localStorage.getItem(UPDATE_HISTORY_LOCAL_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Error reading local update history:', e);
+  }
+  return [];
+}
+
+function saveLocalHistoryRecord(rec: SystemUpdateLogRecord) {
+  try {
+    const list = getLocalHistory();
+    // Filter out duplicate if same version and type exists
+    const filtered = list.filter(r => !(r.version === rec.version && r.type === rec.type));
+    const updated = [rec, ...filtered].slice(0, 50);
+    localStorage.setItem(UPDATE_HISTORY_LOCAL_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Error saving local update record:', e);
   }
 }
 
@@ -50,6 +75,7 @@ export async function broadcastSystemUpdate(
     admin_email: adminEmail,
   };
 
+  // 1. Broadcast over Supabase Realtime Channel
   const channel = supabase.channel(UPDATE_CHANNEL_NAME);
   await channel.subscribe();
   
@@ -59,7 +85,18 @@ export async function broadcastSystemUpdate(
     payload,
   });
 
-  // Log in user_access_logs with structured action_details
+  // 2. Save locally for guaranteed audit persistence across reloads
+  const localRec: SystemUpdateLogRecord = {
+    id: 'broadcast-' + Date.now(),
+    version,
+    type,
+    message,
+    admin_email: adminEmail,
+    timestamp: payload.timestamp,
+  };
+  saveLocalHistoryRecord(localRec);
+
+  // 3. Log in user_access_logs table if available
   try {
     await supabase.from('user_access_logs').insert([{
       user_email: adminEmail,
@@ -69,11 +106,14 @@ export async function broadcastSystemUpdate(
       ip_address: '127.0.0.1'
     }]);
   } catch (e) {
-    console.warn('Failed to log update event:', e);
+    console.warn('DB log skipped or table pending:', e);
   }
 }
 
 export async function fetchRecentSystemUpdates(): Promise<SystemUpdateLogRecord[]> {
+  const localRecords = getLocalHistory();
+  let dbRecords: SystemUpdateLogRecord[] = [];
+
   try {
     const { data, error } = await supabase
       .from('user_access_logs')
@@ -82,36 +122,62 @@ export async function fetchRecentSystemUpdates(): Promise<SystemUpdateLogRecord[
       .order('created_at', { ascending: false })
       .limit(20);
 
-    if (error || !data) return [];
+    if (!error && data) {
+      dbRecords = data.map((log: any) => {
+        const details = log.action_details || '';
+        let type: 'soft_update' | 'force_update' = 'soft_update';
+        let version = APP_VERSION;
+        let message = details;
 
-    return data.map((log: any) => {
-      const details = log.action_details || '';
-      let type: 'soft_update' | 'force_update' = 'soft_update';
-      let version = APP_VERSION;
-      let message = details;
+        if (details.includes('SYSTEM_UPDATE')) {
+          const parts = details.split('|');
+          if (parts[1]?.includes('FORCE')) type = 'force_update';
+          if (parts[2]) version = parts[2].replace('v', '');
+          if (parts[3]) message = parts[3];
+        } else if (details.toLowerCase().includes('force')) {
+          type = 'force_update';
+        }
 
-      if (details.includes('SYSTEM_UPDATE')) {
-        const parts = details.split('|');
-        if (parts[1]?.includes('FORCE')) type = 'force_update';
-        if (parts[2]) version = parts[2].replace('v', '');
-        if (parts[3]) message = parts[3];
-      } else if (details.toLowerCase().includes('force')) {
-        type = 'force_update';
-      }
-
-      return {
-        id: log.id,
-        version,
-        type,
-        message,
-        admin_email: log.user_email || 'admin@hyperfeeds.co.zw',
-        timestamp: log.created_at,
-      };
-    });
+        return {
+          id: log.id,
+          version,
+          type,
+          message,
+          admin_email: log.user_email || 'admin@hyperfeeds.co.zw',
+          timestamp: log.created_at,
+        };
+      });
+    }
   } catch (e) {
-    console.warn('Error fetching system updates history:', e);
-    return [];
+    console.warn('Error fetching system updates history from DB:', e);
   }
+
+  // Merge local & DB records, prioritizing local timestamp if present
+  const map = new Map<string, SystemUpdateLogRecord>();
+  [...localRecords, ...dbRecords].forEach(rec => {
+    const key = `${rec.version}-${rec.type}`;
+    if (!map.has(key)) {
+      map.set(key, rec);
+    }
+  });
+
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  // Fallback initial record if empty so user always sees the base active build
+  if (merged.length === 0) {
+    return [{
+      id: 'init-1',
+      version: APP_VERSION,
+      type: 'soft_update',
+      message: 'Base system release operational.',
+      admin_email: 'admin@hyperfeeds.co.zw',
+      timestamp: new Date().toISOString(),
+    }];
+  }
+
+  return merged;
 }
 
 export function computeUpdateStatus(
