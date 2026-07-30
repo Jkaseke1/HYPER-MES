@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import type { Profile, Branch } from '../types/database';
 import type { Role, Permission, UserRole, UserBranchAccess } from '../types/permissions';
 import { APP_VERSION, APP_BUILD_TIME } from '../config/version';
-import { broadcastSystemUpdate, fetchRecentSystemUpdates, computeUpdateStatus, SystemUpdateLogRecord } from '../lib/updateManager';
+import { broadcastSystemUpdate, fetchRecentSystemUpdates, fetchGitHubCommits, computeUpdateStatus, SystemUpdateLogRecord, GitHubCommitRecord } from '../lib/updateManager';
 
 interface UserWithDetails extends Profile {
   user_roles: (UserRole & { roles: Role })[];
@@ -51,10 +51,13 @@ export default function AdminUsersPage() {
   const [softBroadcastSent, setSoftBroadcastSent] = useState<string | null>(null);
   const [forceBroadcastSent, setForceBroadcastSent] = useState<string | null>(null);
   const [updateHistory, setUpdateHistory] = useState<SystemUpdateLogRecord[]>([]);
+  const [githubCommits, setGithubCommits] = useState<GitHubCommitRecord[]>([]);
 
   const loadUpdateHistory = useCallback(async () => {
     const records = await fetchRecentSystemUpdates();
     setUpdateHistory(records);
+    const commits = await fetchGitHubCommits();
+    setGithubCommits(commits);
   }, []);
 
   useEffect(() => {
@@ -1058,6 +1061,58 @@ export default function AdminUsersPage() {
               </button>
             </div>
           </div>
+
+          {/* GitHub Commits & Deployment Stream */}
+          {githubCommits.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-800">GitHub Code Commits & Deployment Pushes</h4>
+                    <p className="text-xs text-slate-500">Live feed of recent GitHub main branch updates ready for broadcast</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full">
+                  Repository: Jkaseke1/HYPER-MES
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                {githubCommits.map((cmt) => (
+                  <div key={cmt.sha} className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-teal-300 transition-all flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between text-[11px] mb-1">
+                        <span className="font-mono font-bold bg-slate-200 px-1.5 py-0.5 rounded text-slate-800">
+                          #{cmt.shortSha}
+                        </span>
+                        <span className="text-slate-400 font-mono">
+                          {format(new Date(cmt.date), 'dd MMM HH:mm')}
+                        </span>
+                      </div>
+                      <p className="text-xs font-extrabold text-slate-800 line-clamp-2 leading-snug">
+                        {cmt.message}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1">Author: {cmt.author}</p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setUpdateVersion(`v2.4.5-${cmt.shortSha}`);
+                        setUpdateNotes(`GitHub Push #${cmt.shortSha}: ${cmt.message}`);
+                        toast.success(`Selected GitHub commit #${cmt.shortSha} as target update version!`);
+                      }}
+                      className="w-full py-1.5 bg-white border border-teal-300 hover:bg-teal-50 text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Select for Broadcast
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Realtime Broadcast History & Version Status Audit Trail */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">

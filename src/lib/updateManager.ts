@@ -18,12 +18,47 @@ export interface SystemUpdateLogRecord {
   timestamp: string;
 }
 
+export interface GitHubCommitRecord {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 export type UpdateStatusState = 'up_to_date' | 'soft_update_available' | 'force_update_pending';
 
 export const UPDATE_CHANNEL_NAME = 'mes_system_updates_channel';
 export const UPDATE_EVENT_NAME = 'system_update_event';
 export const LAST_APPLIED_VERSION_KEY = 'hyper_mes_last_applied_version';
 export const UPDATE_HISTORY_LOCAL_KEY = 'hyper_mes_update_broadcast_history_v1';
+
+const INITIAL_SYSTEM_RELEASES: SystemUpdateLogRecord[] = [
+  {
+    id: 'release-245',
+    version: '2.4.5',
+    type: 'soft_update',
+    message: 'Active manufacturing build: Formulations categorization, domain security, and realtime push engine.',
+    admin_email: 'admin@hyperfeeds.co.zw',
+    timestamp: '2026-07-30T15:30:00Z',
+  },
+  {
+    id: 'release-244',
+    version: '2.4.4',
+    type: 'soft_update',
+    message: 'System access audit logging, MD executive role, and security enhancements.',
+    admin_email: 'admin@hyperfeeds.co.zw',
+    timestamp: '2026-07-30T10:00:00Z',
+  },
+  {
+    id: 'release-240',
+    version: '2.4.0',
+    type: 'soft_update',
+    message: 'Sage 50 inter-branch posting review engine and GRN approval workflow.',
+    admin_email: 'admin@hyperfeeds.co.zw',
+    timestamp: '2026-07-28T14:00:00Z',
+  },
+];
 
 export function getInstalledVersion(): string {
   return APP_VERSION;
@@ -52,7 +87,6 @@ function getLocalHistory(): SystemUpdateLogRecord[] {
 function saveLocalHistoryRecord(rec: SystemUpdateLogRecord) {
   try {
     const list = getLocalHistory();
-    // Filter out duplicate if same version and type exists
     const filtered = list.filter(r => !(r.version === rec.version && r.type === rec.type));
     const updated = [rec, ...filtered].slice(0, 50);
     localStorage.setItem(UPDATE_HISTORY_LOCAL_KEY, JSON.stringify(updated));
@@ -152,32 +186,38 @@ export async function fetchRecentSystemUpdates(): Promise<SystemUpdateLogRecord[
     console.warn('Error fetching system updates history from DB:', e);
   }
 
-  // Merge local & DB records, prioritizing local timestamp if present
+  // Merge local, DB, and initial system releases
   const map = new Map<string, SystemUpdateLogRecord>();
-  [...localRecords, ...dbRecords].forEach(rec => {
+  [...localRecords, ...dbRecords, ...INITIAL_SYSTEM_RELEASES].forEach(rec => {
     const key = `${rec.version}-${rec.type}`;
     if (!map.has(key)) {
       map.set(key, rec);
     }
   });
 
-  const merged = Array.from(map.values()).sort(
+  return Array.from(map.values()).sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
+}
 
-  // Fallback initial record if empty so user always sees the base active build
-  if (merged.length === 0) {
-    return [{
-      id: 'init-1',
-      version: APP_VERSION,
-      type: 'soft_update',
-      message: 'Base system release operational.',
-      admin_email: 'admin@hyperfeeds.co.zw',
-      timestamp: new Date().toISOString(),
-    }];
+export async function fetchGitHubCommits(): Promise<GitHubCommitRecord[]> {
+  try {
+    const res = await fetch('https://api.github.com/repos/Jkaseke1/HYPER-MES/commits?per_page=6');
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((item: any) => ({
+      sha: item.sha,
+      shortSha: item.sha.substring(0, 7),
+      message: item.commit?.message?.split('\n')[0] || 'System update push',
+      author: item.commit?.author?.name || 'Developer',
+      date: item.commit?.author?.date || new Date().toISOString(),
+    }));
+  } catch (e) {
+    console.warn('GitHub commits fetch skipped:', e);
+    return [];
   }
-
-  return merged;
 }
 
 export function computeUpdateStatus(
