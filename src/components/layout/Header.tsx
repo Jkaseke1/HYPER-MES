@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
-import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload } from '../../lib/updateManager';
+import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload, fetchRecentSystemUpdates } from '../../lib/updateManager';
 import { APP_VERSION } from '../../config/version';
 
 interface NotificationItem {
@@ -25,11 +25,13 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const updateRef = useRef<HTMLDivElement>(null);
 
   // System Update state
   const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
   const [forceUpdateModal, setForceUpdateModal] = useState<SystemUpdatePayload | null>(null);
   const [countdown, setCountdown] = useState<number>(5);
+  const [updateMenuOpen, setUpdateMenuOpen] = useState(false);
 
   useEffect(() => {
     async function checkForUpdates() {
@@ -118,10 +120,13 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       if (open && dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
+      if (updateMenuOpen && updateRef.current && !updateRef.current.contains(event.target as Node)) {
+        setUpdateMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
+  }, [open, updateMenuOpen]);
 
   function formatDate(value: string) {
     const date = new Date(value);
@@ -155,19 +160,90 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Soft Update Notification Banner (Non-disruptive) */}
-        {softUpdate && (
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-xs font-bold rounded-full shadow-md animate-pulse">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Update Available ({softUpdate.version || APP_VERSION})</span>
-            <button
-              onClick={() => window.location.reload()}
-              className="ml-1 px-2 py-0.5 bg-white text-teal-800 rounded-md text-[11px] font-extrabold hover:bg-teal-50 transition-colors flex items-center gap-1 shadow-xs"
-            >
-              <RefreshCw className="w-3 h-3" /> Update Now
-            </button>
-          </div>
-        )}
+        {/* User System Version & Update Status Tab */}
+        <div className="relative" ref={updateRef}>
+          <button
+            onClick={() => setUpdateMenuOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-full transition-all border shadow-xs ${
+              softUpdate
+                ? 'bg-gradient-to-r from-amber-500 via-teal-600 to-emerald-600 text-white border-amber-300 animate-pulse hover:scale-105'
+                : 'bg-teal-50/80 text-teal-800 border-teal-200 hover:bg-teal-100'
+            }`}
+          >
+            {softUpdate ? (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Update Available ({softUpdate.version})</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-white text-teal-900 rounded text-[10px] font-black uppercase shadow-xs">
+                  Apply
+                </span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>MES {APP_VERSION}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </>
+            )}
+          </button>
+
+          {/* System Update Details Popover Card */}
+          {updateMenuOpen && (
+            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 p-4 animate-in fade-in zoom-in-95 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">HYPER MES System Version</h4>
+                    <p className="text-[10px] text-slate-400 font-mono">Active Build: {APP_VERSION}</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Online
+                </span>
+              </div>
+
+              {softUpdate ? (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-800 font-extrabold text-xs">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    <span>New Update Available ({softUpdate.version})</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    {softUpdate.message || 'New manufacturing features, BOM optimizations, and performance enhancements.'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    Announced by: {softUpdate.admin_email || 'System Admin'}
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Apply & Refresh Now
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-700 font-extrabold text-xs">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>System Up to Date</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    You are running the latest production build of HYPER MES ({APP_VERSION}). System operating at optimal performance.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3 h-3 text-slate-500" /> Check for Updates / Refresh
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* LIVE ONLINE/OFFLINE STATUS LIGHT BADGE */}
         <NetworkStatusBadge />
