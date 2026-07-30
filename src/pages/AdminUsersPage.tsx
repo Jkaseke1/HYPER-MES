@@ -1077,6 +1077,7 @@ export default function AdminUsersPage() {
                     ⚡ Force Push Critical Update to Everyone
                   </>
                 )}
+              </button>
             </div>
           </div>
 
