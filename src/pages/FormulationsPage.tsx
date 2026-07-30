@@ -165,18 +165,6 @@ export default function FormulationsPage() {
   }, []);
 
   useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
-
-  const filtered = formulations.filter(f => {
-    if (filter !== 'All' && f.category !== filter) return false;
-    if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !f.code.toLowerCase().includes(search.toLowerCase())) return false;
-    
-    // Filter by ingredient status
-    const hasIngredients = (formulationIngredientCounts[f.id] || 0) > 0;
-    if (ingredientFilter === 'with' && !hasIngredients) return false;
-    if (ingredientFilter === 'without' && hasIngredients) return false;
-    
-    return true;
-  });
   
   const withIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) > 0);
   const withoutIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) === 0);
