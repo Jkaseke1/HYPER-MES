@@ -915,34 +915,53 @@ export default function AdminUsersPage() {
                       );
                     })
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* System Updates & Version Control Tab */}
+{/* System Updates & Version Control Tab */}
       {activeTab === 'system_updates' && (
         <div className="space-y-6">
-          {/* Header Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Header Control Card */}
+          <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center font-black shadow-md">
-                <Sparkles className="w-6 h-6" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-lg">
+                <Sparkles className="w-7 h-7" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-800 uppercase tracking-wider">HYPER MES Version Control & Realtime Push Engine</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Control system updates, announce new builds, or force-push critical updates to all active sessions</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-black tracking-wide text-white uppercase">HYPER MES Realtime Release & Deployment Hub</h3>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold rounded-full flex items-center gap-1">
+                    <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> LIVE ENGINE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">Broadcast new software builds & feature updates instantly to all connected user sessions across all branches</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 bg-slate-900 text-white px-4 py-2.5 rounded-xl font-mono text-xs shadow-sm">
-              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <div>
-                <p className="text-[10px] text-slate-400 uppercase font-bold">Active Build</p>
-                <p className="text-sm font-black text-emerald-400">{APP_VERSION}</p>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="bg-slate-800/80 border border-slate-700 px-4 py-2.5 rounded-xl font-mono text-xs shadow-inner">
+                <p className="text-[10px] text-slate-400 uppercase font-bold">Installed Build</p>
+                <p className="text-base font-black text-emerald-400">{APP_VERSION}</p>
               </div>
+
+              <button
+                onClick={handleSoftUpdate}
+                disabled={broadcasting || isSoftAlreadySent}
+                className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 ${
+                  isSoftAlreadySent
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 cursor-not-allowed'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 hover:scale-[1.02]'
+                }`}
+              >
+                {isSoftAlreadySent ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Broadcast Active ({updateVersion})
+                  </>
+                ) : broadcasting ? (
+                  'Pushing Update...'
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-slate-950" /> 🚀 1-Click Broadcast Update to Users
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -956,13 +975,13 @@ export default function AdminUsersPage() {
                   </div>
                   <div>
                     <h4 className="text-sm font-extrabold text-slate-900">Option 1: Announce Soft Update (Recommended)</h4>
-                    <p className="text-xs text-slate-500">Non-disruptive update notification header banner for logged-in users</p>
+                    <p className="text-xs text-slate-500">Non-disruptive header banner notification across all active user sessions</p>
                   </div>
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  Shows a top header banner <strong>"✨ MES Update Available — [Update Now]"</strong> across all logged in user sessions. 
-                  Users can continue working safely without interruption and apply the update when convenient.
+                  Displays a top header banner <strong>"✨ MES Update Available — [Update Now]"</strong> on all user screens. 
+                  Users can complete active manufacturing entries safely and update when convenient.
                 </p>
 
                 <div className="space-y-3">
@@ -972,7 +991,7 @@ export default function AdminUsersPage() {
                       type="text"
                       value={updateVersion}
                       onChange={(e) => setUpdateVersion(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 font-mono font-bold"
                       placeholder="e.g., v2.4.6"
                     />
                   </div>
@@ -991,14 +1010,14 @@ export default function AdminUsersPage() {
 
               <button
                 onClick={handleSoftUpdate}
-                disabled={broadcasting || softBroadcastSent === updateVersion}
+                disabled={broadcasting || isSoftAlreadySent}
                 className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
-                  softBroadcastSent === updateVersion
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none'
+                  isSoftAlreadySent
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none font-extrabold'
                     : 'bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50'
                 }`}
               >
-                {softBroadcastSent === updateVersion ? (
+                {isSoftAlreadySent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     Soft Update Broadcast Sent ({updateVersion})
@@ -1038,14 +1057,14 @@ export default function AdminUsersPage() {
 
               <button
                 onClick={handleForceUpdate}
-                disabled={broadcasting || forceBroadcastSent === updateVersion}
+                disabled={broadcasting || isForceAlreadySent}
                 className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
-                  forceBroadcastSent === updateVersion
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none'
+                  isForceAlreadySent
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none font-extrabold'
                     : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50'
                 }`}
               >
-                {forceBroadcastSent === updateVersion ? (
+                {isForceAlreadySent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     Critical Force Update Pushed ({updateVersion})
@@ -1060,6 +1079,7 @@ export default function AdminUsersPage() {
                 )}
               </button>
             </div>
+          </div>
           </div>
 
           {/* GitHub Commits & Deployment Stream */}

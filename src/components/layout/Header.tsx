@@ -32,6 +32,29 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [countdown, setCountdown] = useState<number>(5);
 
   useEffect(() => {
+    async function checkForUpdates() {
+      try {
+        const history = await fetchRecentSystemUpdates();
+        if (history && history.length > 0) {
+          const latest = history[0];
+          // Check if latest broadcast exists
+          if (latest && latest.type === 'soft_update') {
+            setSoftUpdate({
+              type: 'soft_update',
+              version: latest.version,
+              message: latest.message,
+              timestamp: latest.timestamp,
+              admin_email: latest.admin_email,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Error checking initial updates in Header:', e);
+      }
+    }
+
+    checkForUpdates();
+
     const channel = supabase
       .channel(UPDATE_CHANNEL_NAME)
       .on('broadcast', { event: UPDATE_EVENT_NAME }, (response) => {
