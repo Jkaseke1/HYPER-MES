@@ -48,15 +48,22 @@ export default function AdminUsersPage() {
   const [updateVersion, setUpdateVersion] = useState(APP_VERSION);
   const [updateNotes, setUpdateNotes] = useState('New manufacturing features, BOM optimizations, and performance enhancements.');
   const [broadcasting, setBroadcasting] = useState(false);
+  const [softBroadcastSent, setSoftBroadcastSent] = useState<string | null>(null);
+  const [forceBroadcastSent, setForceBroadcastSent] = useState<string | null>(null);
 
   async function handleSoftUpdate() {
     if (!updateVersion.trim()) {
       toast.error('Please enter a version number.');
       return;
     }
+    if (softBroadcastSent === updateVersion) {
+      toast.error('Update announcement has already been broadcasted for this version.');
+      return;
+    }
     setBroadcasting(true);
     try {
       await broadcastSystemUpdate('soft_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
+      setSoftBroadcastSent(updateVersion);
       toast.success(`Soft update broadcasted! Active users will see the "Update Now" banner.`);
     } catch (e: any) {
       toast.error(`Broadcast failed: ${e.message}`);
@@ -66,11 +73,16 @@ export default function AdminUsersPage() {
   }
 
   async function handleForceUpdate() {
+    if (forceBroadcastSent === updateVersion) {
+      toast.error('Critical update has already been force-pushed for this version.');
+      return;
+    }
     if (!confirm(`Are you sure you want to FORCE PUSH update (${updateVersion}) to ALL active users? This will automatically refresh their browsers in 5 seconds.`)) return;
     
     setBroadcasting(true);
     try {
       await broadcastSystemUpdate('force_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
+      setForceBroadcastSent(updateVersion);
       toast.success(`FORCE UPDATE PUSHED! All active user sessions are now refreshing.`);
     } catch (e: any) {
       toast.error(`Force broadcast failed: ${e.message}`);
@@ -936,11 +948,26 @@ export default function AdminUsersPage() {
 
               <button
                 onClick={handleSoftUpdate}
-                disabled={broadcasting}
-                className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={broadcasting || softBroadcastSent === updateVersion}
+                className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
+                  softBroadcastSent === updateVersion
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none'
+                    : 'bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50'
+                }`}
               >
-                <Sparkles className="w-4 h-4" />
-                {broadcasting ? 'Broadcasting Update...' : 'Announce Soft Update to Users'}
+                {softBroadcastSent === updateVersion ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Soft Update Broadcast Sent ({updateVersion})
+                  </>
+                ) : broadcasting ? (
+                  'Broadcasting Update...'
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Announce Soft Update to Users
+                  </>
+                )}
               </button>
             </div>
 
@@ -968,11 +995,26 @@ export default function AdminUsersPage() {
 
               <button
                 onClick={handleForceUpdate}
-                disabled={broadcasting}
-                className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={broadcasting || forceBroadcastSent === updateVersion}
+                className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
+                  forceBroadcastSent === updateVersion
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none'
+                    : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50'
+                }`}
               >
-                <Zap className="w-4 h-4 animate-bounce" />
-                {broadcasting ? 'Pushing Force Reload...' : '⚡ Force Push Critical Update to Everyone'}
+                {forceBroadcastSent === updateVersion ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Critical Force Update Pushed ({updateVersion})
+                  </>
+                ) : broadcasting ? (
+                  'Pushing Force Reload...'
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 animate-bounce" />
+                    ⚡ Force Push Critical Update to Everyone
+                  </>
+                )}
               </button>
             </div>
           </div>
