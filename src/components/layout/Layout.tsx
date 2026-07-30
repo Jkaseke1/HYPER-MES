@@ -4,6 +4,9 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import OfflineBanner from '../ui/OfflineBanner';
 
+import { useAuth } from '../../context/AuthContext';
+import { logUserAccess } from '../../lib/userAccessLogger';
+
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/sales-orders': 'Sales Orders',
@@ -40,8 +43,24 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { user, profile } = useAuth();
 
   const title = pageTitles[location.pathname] || 'Hyperfeeds MES';
+
+  // Record user access log on page view
+  useEffect(() => {
+    if (user?.email) {
+      logUserAccess({
+        user_id: user.id,
+        user_email: user.email,
+        user_name: profile?.full_name || user.email.split('@')[0],
+        role: profile?.role || 'user',
+        event_type: 'page_view',
+        module: title,
+        action_details: `Accessed ${title} page (${location.pathname})`,
+      });
+    }
+  }, [location.pathname, user, profile, title]);
 
   // Close mobile menu on route change
   useEffect(() => {
