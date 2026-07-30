@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Search, Shield, Users, Building2, Edit2, Trash2, Key, Clock, Activity, FileText, Globe, Laptop, RefreshCw, CheckCircle2, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -16,6 +17,7 @@ interface UserWithDetails extends Profile {
 }
 
 export default function AdminUsersPage() {
+  const location = useLocation();
   const { loading: authLoading } = useAuth();
   const { isAdmin, hasPermission, loading: permissionsLoading } = usePermissions();
   const [users, setUsers] = useState<UserWithDetails[]>([]);
@@ -25,6 +27,14 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'access_logs'>('users');
+  
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'access_logs' || tabParam === 'roles' || tabParam === 'users') {
+      setActiveTab(tabParam as any);
+    }
+  }, [location.search]);
   
   // Access Logs state
   const [accessLogs, setAccessLogs] = useState<any[]>([]);

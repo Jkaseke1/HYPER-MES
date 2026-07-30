@@ -157,6 +157,7 @@ const navGroups: NavGroup[] = [
     icon: Shield,
     items: [
       { to: '/admin/users', icon: Users, label: 'User Management' },
+      { to: '/admin/users?tab=access_logs', icon: Clock, label: 'System Access Logs' },
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
