@@ -915,7 +915,14 @@ export default function AdminUsersPage() {
                       );
                     })
                   )}
-{/* System Updates & Version Control Tab */}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Updates & Version Control Tab */}
       {activeTab === 'system_updates' && (
         <div className="space-y-6">
           {/* Header Control Card */}
