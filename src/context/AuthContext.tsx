@@ -13,6 +13,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 function validateHyperfeedsDomain(email: string): Error | null {
   const cleanEmail = (email || '').trim().toLowerCase();
   if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
