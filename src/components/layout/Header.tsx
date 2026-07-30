@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, Search, Menu } from 'lucide-react';
+import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
+import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload } from '../../lib/updateManager';
+import { APP_VERSION } from '../../config/version';
 
 interface NotificationItem {
   id: string;
@@ -23,6 +25,42 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // System Update state
+  const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
+  const [forceUpdateModal, setForceUpdateModal] = useState<SystemUpdatePayload | null>(null);
+  const [countdown, setCountdown] = useState<number>(5);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(UPDATE_CHANNEL_NAME)
+      .on('broadcast', { event: UPDATE_EVENT_NAME }, (response) => {
+        const payload: SystemUpdatePayload = response.payload;
+        if (payload.type === 'soft_update') {
+          setSoftUpdate(payload);
+        } else if (payload.type === 'force_update') {
+          setForceUpdateModal(payload);
+          setCountdown(5);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!forceUpdateModal) return;
+    if (countdown <= 0) {
+      window.location.reload();
+      return;
+    }
+    const timer = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [forceUpdateModal, countdown]);
 
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
@@ -94,6 +132,20 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        {/* Soft Update Notification Banner (Non-disruptive) */}
+        {softUpdate && (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-xs font-bold rounded-full shadow-md animate-pulse">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Update Available ({softUpdate.version || APP_VERSION})</span>
+            <button
+              onClick={() => window.location.reload()}
+              className="ml-1 px-2 py-0.5 bg-white text-teal-800 rounded-md text-[11px] font-extrabold hover:bg-teal-50 transition-colors flex items-center gap-1 shadow-xs"
+            >
+              <RefreshCw className="w-3 h-3" /> Update Now
+            </button>
+          </div>
+        )}
+
         {/* LIVE ONLINE/OFFLINE STATUS LIGHT BADGE */}
         <NetworkStatusBadge />
 
@@ -159,6 +211,32 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
           </div>
         </div>
       </div>
+
+      {/* FORCE UPDATE MODAL OVERLAY */}
+      {forceUpdateModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center border-2 border-red-500 animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-600">
+              <AlertTriangle className="w-8 h-8 animate-bounce" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-2">Critical System Update Pushed</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              An administrator has pushed a critical system update ({forceUpdateModal.version}). Your active session will automatically refresh in:
+            </p>
+            
+            <div className="w-20 h-20 bg-red-50 text-red-600 font-mono font-black text-3xl rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-red-200 shadow-inner">
+              {countdown}s
+            </div>
+
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4 animate-spin" /> Refresh Now
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

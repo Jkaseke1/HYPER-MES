@@ -49,10 +49,46 @@ const emptyForm: FormState = {
 type IngRow = { raw_material_id: string; quantity: number; unit: string; percentage: number; is_critical: boolean };
 const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', percentage: 0, is_critical: false });
 
+export function getFormulationCategory(name: string, existingCategory?: string | null): string {
+  if (existingCategory && existingCategory.trim() !== '' && existingCategory.toLowerCase() !== 'null' && existingCategory.toLowerCase() !== 'other') {
+    return existingCategory.trim();
+  }
+  const n = (name || '').toLowerCase();
+  if (n.includes('beef')) return 'Beef Cattle';
+  if (n.includes('dairy') || n.includes('heifer') || n.includes('calf') || n.includes('lactat')) return 'Dairy Cattle';
+  if (n.includes('broiler')) return 'Broiler';
+  if (n.includes('layer') || n.includes('pullet')) return 'Layer';
+  if (n.includes('breeder')) return 'Breeder';
+  if (n.includes('pig') || n.includes('sow') || n.includes('weaner') || n.includes('creep') || n.includes('finisher') || n.includes('porker') || n.includes('swine')) return 'Pig';
+  if (n.includes('horse') || n.includes('equine') || n.includes('mare')) return 'Horse';
+  if (n.includes('rabbit')) return 'Rabbit';
+  if (n.includes('dog') || n.includes('canine') || n.includes('hound')) return 'Dog Food';
+  if (n.includes('cat') || n.includes('feline')) return 'Cat Food';
+  if (n.includes('fish') || n.includes('aqua') || n.includes('tilapia') || n.includes('trout')) return 'Fish';
+  if (n.includes('game') || n.includes('bird') || n.includes('ostrich') || n.includes('quail') || n.includes('pheasant')) return 'Game Bird';
+  return 'Broiler';
+}
+
+const DEFAULT_CATEGORIES = [
+  { code: 'Broiler', name: 'Broiler' },
+  { code: 'Layer', name: 'Layer' },
+  { code: 'Breeder', name: 'Breeder' },
+  { code: 'Beef Cattle', name: 'Beef Cattle' },
+  { code: 'Dairy Cattle', name: 'Dairy Cattle' },
+  { code: 'Pig', name: 'Pig' },
+  { code: 'Horse', name: 'Horse' },
+  { code: 'Rabbit', name: 'Rabbit' },
+  { code: 'Dog Food', name: 'Dog Food' },
+  { code: 'Cat Food', name: 'Cat Food' },
+  { code: 'Fish', name: 'Fish' },
+  { code: 'Game Bird', name: 'Game Bird' },
+  { code: 'Other', name: 'Other' },
+];
+
 export default function FormulationsPage() {
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
-  const [categories, setCategories] = useState<{ code: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ code: string; name: string }[]>(DEFAULT_CATEGORIES);
   const [formulationIngredientCounts, setFormulationIngredientCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
@@ -74,6 +110,19 @@ export default function FormulationsPage() {
   const [bomEditIngs, setBomEditIngs] = useState<FormulationIngredient[]>([]);
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
+
+  const filtered = formulations.filter(f => {
+    const categoryName = getFormulationCategory(f.name, f.category);
+    if (filter !== 'All' && categoryName.toLowerCase() !== filter.toLowerCase() && f.category?.toLowerCase() !== filter.toLowerCase()) return false;
+    if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !f.code.toLowerCase().includes(search.toLowerCase())) return false;
+    
+    // Filter by ingredient status
+    const hasIngredients = (formulationIngredientCounts[f.id] || 0) > 0;
+    if (ingredientFilter === 'with' && !hasIngredients) return false;
+    if (ingredientFilter === 'without' && hasIngredients) return false;
+    
+    return true;
+  });
 
   const fetchFormulations = useCallback(async () => {
     setLoading(true);
@@ -390,13 +439,20 @@ export default function FormulationsPage() {
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
 
   const catColor: Record<string, string> = {
-    broiler: 'bg-amber-50 text-amber-700',
-    layer: 'bg-orange-50 text-orange-700',
-    dairy: 'bg-sky-50 text-sky-700',
-    pig: 'bg-rose-50 text-rose-700',
-    horse: 'bg-teal-50 text-teal-700',
-    pet: 'bg-cyan-50 text-cyan-700',
-    other: 'bg-slate-100 text-slate-600',
+    'Broiler': 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold',
+    'Layer': 'bg-amber-100 text-amber-800 border border-amber-200 font-bold',
+    'Breeder': 'bg-purple-100 text-purple-800 border border-purple-200 font-bold',
+    'Beef Cattle': 'bg-red-100 text-red-800 border border-red-200 font-bold',
+    'Dairy Cattle': 'bg-sky-100 text-sky-800 border border-sky-200 font-bold',
+    'Pig': 'bg-rose-100 text-rose-800 border border-rose-200 font-bold',
+    'Horse': 'bg-teal-100 text-teal-800 border border-teal-200 font-bold',
+    'Rabbit': 'bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold',
+    'Dog Food': 'bg-orange-100 text-orange-800 border border-orange-200 font-bold',
+    'Cat Food': 'bg-yellow-100 text-yellow-800 border border-yellow-200 font-bold',
+    'Fish': 'bg-blue-100 text-blue-800 border border-blue-200 font-bold',
+    'Game Bird': 'bg-lime-100 text-lime-800 border border-lime-200 font-bold',
+    'Chemicals': 'bg-slate-200 text-slate-800 border border-slate-300 font-bold',
+    'Other': 'bg-slate-100 text-slate-700 border border-slate-200 font-semibold',
   };
 
   const totalFormulas = formulations.length;
@@ -555,8 +611,8 @@ export default function FormulationsPage() {
                             <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">{f.code}</code>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${catColor[f.category] || catColor.other}`}>
-                              {formatLabel(f.category)}
+                            <span className={`px-2.5 py-1 text-xs rounded-full inline-block ${catColor[getFormulationCategory(f.name, f.category)] || catColor['Other']}`}>
+                              {getFormulationCategory(f.name, f.category)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -652,8 +708,8 @@ export default function FormulationsPage() {
                             <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">{f.code}</code>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${catColor[f.category] || catColor.other}`}>
-                              {formatLabel(f.category)}
+                            <span className={`px-2.5 py-1 text-xs rounded-full inline-block ${catColor[getFormulationCategory(f.name, f.category)] || catColor['Other']}`}>
+                              {getFormulationCategory(f.name, f.category)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">

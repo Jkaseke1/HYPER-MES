@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Search, Shield, Users, Building2, Edit2, Trash2, Key, Clock, Activity, FileText, Globe, Laptop, RefreshCw, CheckCircle2, Filter } from 'lucide-react';
+import { Plus, Search, Shield, Users, Building2, Edit2, Trash2, Key, Clock, Activity, FileText, Globe, Laptop, RefreshCw, CheckCircle2, Filter, Sparkles, Zap, Radio } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,8 @@ import StatCard from '../components/ui/StatCard';
 import toast from 'react-hot-toast';
 import type { Profile, Branch } from '../types/database';
 import type { Role, Permission, UserRole, UserBranchAccess } from '../types/permissions';
+import { APP_VERSION, APP_BUILD_TIME } from '../config/version';
+import { broadcastSystemUpdate } from '../lib/updateManager';
 
 interface UserWithDetails extends Profile {
   user_roles: (UserRole & { roles: Role })[];
@@ -20,18 +22,19 @@ export default function AdminUsersPage() {
   const location = useLocation();
   const { loading: authLoading } = useAuth();
   const { isAdmin, hasPermission, loading: permissionsLoading } = usePermissions();
+  const { profile } = useAuth();
   const [users, setUsers] = useState<UserWithDetails[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'access_logs'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'access_logs' | 'system_updates'>('users');
   
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
-    if (tabParam === 'access_logs' || tabParam === 'roles' || tabParam === 'users') {
+    if (tabParam === 'access_logs' || tabParam === 'roles' || tabParam === 'users' || tabParam === 'system_updates') {
       setActiveTab(tabParam as any);
     }
   }, [location.search]);
@@ -40,6 +43,41 @@ export default function AdminUsersPage() {
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [logFilter, setLogFilter] = useState<'all' | 'login' | 'page_view' | 'action'>('all');
   const [logSearch, setLogSearch] = useState('');
+
+  // System Updates Broadcast state
+  const [updateVersion, setUpdateVersion] = useState(APP_VERSION);
+  const [updateNotes, setUpdateNotes] = useState('New manufacturing features, BOM optimizations, and performance enhancements.');
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  async function handleSoftUpdate() {
+    if (!updateVersion.trim()) {
+      toast.error('Please enter a version number.');
+      return;
+    }
+    setBroadcasting(true);
+    try {
+      await broadcastSystemUpdate('soft_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
+      toast.success(`Soft update broadcasted! Active users will see the "Update Now" banner.`);
+    } catch (e: any) {
+      toast.error(`Broadcast failed: ${e.message}`);
+    } finally {
+      setBroadcasting(false);
+    }
+  }
+
+  async function handleForceUpdate() {
+    if (!confirm(`Are you sure you want to FORCE PUSH update (${updateVersion}) to ALL active users? This will automatically refresh their browsers in 5 seconds.`)) return;
+    
+    setBroadcasting(true);
+    try {
+      await broadcastSystemUpdate('force_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
+      toast.success(`FORCE UPDATE PUSHED! All active user sessions are now refreshing.`);
+    } catch (e: any) {
+      toast.error(`Force broadcast failed: ${e.message}`);
+    } finally {
+      setBroadcasting(false);
+    }
+  }
   
   // User modal state
   const [userModal, setUserModal] = useState(false);
@@ -522,6 +560,7 @@ export default function AdminUsersPage() {
           { key: 'users', label: 'Users', icon: Users },
           { key: 'roles', label: 'Roles & Permissions', icon: Shield },
           { key: 'access_logs', label: 'System Access Logs', icon: Clock },
+          { key: 'system_updates', label: 'System Updates & Version Control', icon: Sparkles },
         ].map(tab => (
           <button
             key={tab.key}
@@ -823,6 +862,118 @@ export default function AdminUsersPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Updates & Version Control Tab */}
+      {activeTab === 'system_updates' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center font-black shadow-md">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-800 uppercase tracking-wider">HYPER MES Version Control & Realtime Push Engine</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Control system updates, announce new builds, or force-push critical updates to all active sessions</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 bg-slate-900 text-white px-4 py-2.5 rounded-xl font-mono text-xs shadow-sm">
+              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase font-bold">Active Build</p>
+                <p className="text-sm font-black text-emerald-400">{APP_VERSION}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Option 1: Soft Update Notification (Non-Disruptive) */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">Option 1: Announce Soft Update (Recommended)</h4>
+                    <p className="text-xs text-slate-500">Non-disruptive update notification header banner for logged-in users</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                  Shows a top header banner <strong>"✨ MES Update Available — [Update Now]"</strong> across all logged in user sessions. 
+                  Users can continue working safely without interruption and apply the update when convenient.
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Target Version Tag</label>
+                    <input
+                      type="text"
+                      value={updateVersion}
+                      onChange={(e) => setUpdateVersion(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                      placeholder="e.g., v2.4.6"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Release Announcement Notes</label>
+                    <textarea
+                      value={updateNotes}
+                      onChange={(e) => setUpdateNotes(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                      placeholder="Summary of new MES enhancements..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSoftUpdate}
+                disabled={broadcasting}
+                className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Sparkles className="w-4 h-4" />
+                {broadcasting ? 'Broadcasting Update...' : 'Announce Soft Update to Users'}
+              </button>
+            </div>
+
+            {/* Option 2: Force Push Critical Update (Immediate) */}
+            <div className="bg-white p-6 rounded-2xl border border-red-200 shadow-sm flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-red-900">Option 2: Force Push Critical Update (Immediate)</h4>
+                    <p className="text-xs text-red-500">Auto-refreshes all active user sessions immediately</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                  Triggers an instant modal countdown <strong>(5 seconds)</strong> on all active browser sessions across all branches and forces an immediate reload to the latest code. Use for critical system updates.
+                </p>
+
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[11px] text-red-700 font-medium">
+                  ⚠️ Note: Forces all active user screens to refresh within 5 seconds.
+                </div>
+              </div>
+
+              <button
+                onClick={handleForceUpdate}
+                disabled={broadcasting}
+                className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Zap className="w-4 h-4 animate-bounce" />
+                {broadcasting ? 'Pushing Force Reload...' : '⚡ Force Push Critical Update to Everyone'}
+              </button>
             </div>
           </div>
         </div>
