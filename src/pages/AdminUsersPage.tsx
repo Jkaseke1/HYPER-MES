@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import type { Profile, Branch } from '../types/database';
 import type { Role, Permission, UserRole, UserBranchAccess } from '../types/permissions';
 import { APP_VERSION, APP_BUILD_TIME } from '../config/version';
-import { broadcastSystemUpdate, fetchRecentSystemUpdates, fetchGitHubCommits, computeUpdateStatus, SystemUpdateLogRecord, GitHubCommitRecord } from '../lib/updateManager';
+import { broadcastSystemUpdate, fetchRecentSystemUpdates, fetchGitHubCommits, computeUpdateStatus, getNextVersion, SystemUpdateLogRecord, GitHubCommitRecord } from '../lib/updateManager';
 
 interface UserWithDetails extends Profile {
   user_roles: (UserRole & { roles: Role })[];
@@ -45,7 +45,7 @@ export default function AdminUsersPage() {
   const [logSearch, setLogSearch] = useState('');
 
   // System Updates Broadcast state
-  const [updateVersion, setUpdateVersion] = useState(APP_VERSION);
+  const [updateVersion, setUpdateVersion] = useState(getNextVersion(APP_VERSION));
   const [updateNotes, setUpdateNotes] = useState('New manufacturing features, BOM optimizations, and performance enhancements.');
   const [broadcasting, setBroadcasting] = useState(false);
   const [softBroadcastSent, setSoftBroadcastSent] = useState<string | null>(null);
@@ -1126,9 +1126,9 @@ export default function AdminUsersPage() {
 
                     <button
                       onClick={() => {
-                        setUpdateVersion(`v2.4.5-${cmt.shortSha}`);
+                        setUpdateVersion(`${getNextVersion(APP_VERSION)}-${cmt.shortSha}`);
                         setUpdateNotes(`GitHub Push #${cmt.shortSha}: ${cmt.message}`);
-                        toast.success(`Selected GitHub commit #${cmt.shortSha} as target update version!`);
+                        toast.success(`Selected GitHub commit #${cmt.shortSha} as target version ${getNextVersion(APP_VERSION)}-${cmt.shortSha}!`);
                       }}
                       className="w-full py-1.5 bg-white border border-teal-300 hover:bg-teal-50 text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
                     >

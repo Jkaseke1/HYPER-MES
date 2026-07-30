@@ -33,15 +33,8 @@ export const UPDATE_EVENT_NAME = 'system_update_event';
 export const LAST_APPLIED_VERSION_KEY = 'hyper_mes_last_applied_version';
 export const UPDATE_HISTORY_LOCAL_KEY = 'hyper_mes_update_broadcast_history_v1';
 
+// Initial past releases list (excluding active base version v2.4.5)
 const INITIAL_SYSTEM_RELEASES: SystemUpdateLogRecord[] = [
-  {
-    id: 'release-245',
-    version: '2.4.5',
-    type: 'soft_update',
-    message: 'Active manufacturing build: Formulations categorization, domain security, and realtime push engine.',
-    admin_email: 'admin@hyperfeeds.co.zw',
-    timestamp: '2026-07-30T15:30:00Z',
-  },
   {
     id: 'release-244',
     version: '2.4.4',
@@ -62,6 +55,16 @@ const INITIAL_SYSTEM_RELEASES: SystemUpdateLogRecord[] = [
 
 export function getInstalledVersion(): string {
   return APP_VERSION;
+}
+
+export function getNextVersion(currentVer: string = APP_VERSION): string {
+  const clean = currentVer.replace('v', '').trim();
+  const parts = clean.split('.').map(n => parseInt(n, 10));
+  if (parts.length === 3 && !isNaN(parts[2])) {
+    parts[2] += 1;
+    return `v${parts.join('.')}`;
+  }
+  return `v${clean}-next`;
 }
 
 export function saveLastAppliedVersion(version: string) {
@@ -198,6 +201,17 @@ export async function fetchRecentSystemUpdates(): Promise<SystemUpdateLogRecord[
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
+}
+
+export async function fetchPendingUpdates(): Promise<SystemUpdateLogRecord[]> {
+  const allHistory = await fetchRecentSystemUpdates();
+  const cleanCurrent = APP_VERSION.replace('v', '').trim().toLowerCase();
+
+  return allHistory.filter(rec => {
+    const cleanRecVer = (rec.version || '').replace('v', '').trim().toLowerCase();
+    const isApplied = localStorage.getItem(`hyper_mes_applied_${cleanRecVer}`) === 'true';
+    return cleanRecVer !== cleanCurrent && !isApplied;
+  });
 }
 
 export async function fetchGitHubCommits(): Promise<GitHubCommitRecord[]> {
