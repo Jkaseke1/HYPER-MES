@@ -207,7 +207,12 @@ export default function AdminUsersPage() {
         },
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (authError.message?.includes('Database error') || (authError as any).status === 500) {
+          throw new Error('Database trigger issue on user creation. Please run the SQL fix script in Supabase SQL Editor.');
+        }
+        throw authError;
+      }
 
       if (authData.user) {
         const userId = authData.user.id;
