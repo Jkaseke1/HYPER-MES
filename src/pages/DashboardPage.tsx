@@ -8,7 +8,7 @@ import {
   Layers, Scale, Sparkles, ShieldCheck, Factory, Truck, Database, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow } from '../types/database';
+import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow, DispatchOrder } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
 
@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [snapshotStockMap, setSnapshotStockMap] = useState<Record<string, number>>({});
   const [trends, setTrends] = useState<MonthlyTrendRow[]>([]);
   const [inventoryForecasts, setInventoryForecasts] = useState<InventoryForecastRow[]>([]);
+  const [recentDispatches, setRecentDispatches] = useState<DispatchOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [varianceAlerts, setVarianceAlerts] = useState<{ raw_material_name: string; stock_variance: number }[]>([]);
   const [liveOrders, setLiveOrders] = useState<ProductionOrder[]>([]);
@@ -52,7 +53,7 @@ export default function DashboardPage() {
   const fetchDashboardData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes] =
+    const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes, recentDispatchRes] =
       await Promise.all([
         supabase.from('production_orders').select('planned_qty, actual_qty, status'),
         supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
@@ -65,6 +66,7 @@ export default function DashboardPage() {
         supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
         supabase.from('sage_stock_balances').select('*'),
         supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
+        supabase.from('dispatch_orders').select('*, branches(name)').order('created_at', { ascending: false }).limit(5),
       ]);
 
     const orders = ordersRes.data || [];
@@ -83,6 +85,7 @@ export default function DashboardPage() {
       efficiency,
     });
     setRecentOrders((recentRes.data as ProductionOrder[]) || []);
+    setRecentDispatches((recentDispatchRes.data as DispatchOrder[]) || []);
     
     const allMaterials = (stockRes.data as RawMaterial[]) || [];
     setLowStockItems(allMaterials);
@@ -400,31 +403,102 @@ export default function DashboardPage() {
       {/* Analytics Charts & Dual-Source Stock Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         
-        {/* Operations Trends Chart */}
-        <div className="xl:col-span-2 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">12-Month Operations Trends & Analytics</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Production Output (t) vs RM Consumption vs Branch Dispatches</p>
+        {/* Left Main Column: Operations Trends Chart + Live Dispatch & Logistics Activity Hub */}
+        <div className="xl:col-span-2 space-y-5">
+          {/* Operations Trends Chart */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">12-Month Operations Trends & Analytics</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Production Output (t) vs RM Consumption vs Branch Dispatches</p>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-semibold">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded" /> Production</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-blue-500 rounded" /> Consumption</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-400 border-t border-dashed" /> Dispatch</span>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-xs font-semibold">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded" /> Production</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-blue-500 rounded" /> Consumption</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-400 border-t border-dashed" /> Dispatch</span>
-            </div>
+
+            <ResponsiveContainer width="100%" height={290}>
+              <ComposedChart data={trendChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
+                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
+                <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                <Bar dataKey="production" fill="#10b981" radius={[6, 6, 0, 0]} name="Production (t)" />
+                <Bar dataKey="consumption" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Consumption (t)" />
+                <Line type="monotone" dataKey="dispatch" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
 
-          <ResponsiveContainer width="100%" height={290}>
-            <ComposedChart data={trendChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
-              <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-              <Bar dataKey="production" fill="#10b981" radius={[6, 6, 0, 0]} name="Production (t)" />
-              <Bar dataKey="consumption" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Consumption (t)" />
-              <Line type="monotone" dataKey="dispatch" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {/* Live Dispatch & Logistics Activity Hub */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-purple-600" />
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Live Dispatch & Logistics Activity</h3>
+                  <p className="text-[11px] text-slate-400">Real-time status of outgoing shipments, D-Notes & Sage posting</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
+                {stats.pendingDispatches} Pending Dispatches
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Dispatch Ref</th>
+                    <th className="px-4 py-3 text-left">Destination / Type</th>
+                    <th className="px-4 py-3 text-right">Weight (kg)</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Sage Posting</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentDispatches.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No recent dispatch activity</td>
+                    </tr>
+                  ) : (
+                    recentDispatches.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                          {d.dispatch_number}
+                          {d.physical_dnote_number && (
+                            <span className="ml-2 text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded font-mono">D-Note #{d.physical_dnote_number}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-800">
+                          {d.dispatch_type === 'customer_direct' ? (d.customer_name || 'Direct Customer') : ((d.branches as any)?.name || 'Branch Transfer')}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-extrabold text-slate-900">
+                          {d.total_weight.toLocaleString()} <span className="font-normal text-slate-400">kg</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={d.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {d.accounts_posting_status === 'approved' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                              <Sparkles className="w-3 h-3 text-purple-600" /> Posted to Sage
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         {/* Right Sidebar Widgets */}
