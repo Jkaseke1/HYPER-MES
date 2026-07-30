@@ -28,7 +28,7 @@ export default function DeliveryNoteModal({ order, items, isOpen, onClose }: Del
   const emptyRowsCount = Math.max(0, MAX_ROWS - items.length);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden my-auto border border-slate-200">
         
         {/* Modal Top Control Bar (Hidden when printing) */}

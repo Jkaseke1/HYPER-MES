@@ -250,9 +250,14 @@ export default function DispatchPage() {
 
   const openDNoteModal = async (order: DispatchOrder) => {
     setDNoteOrder(order);
-    const { data } = await supabase.from('dispatch_items').select('*, formulations(name, code, sage_code)').eq('dispatch_order_id', order.id);
-    if (data) setDNoteItems(data as DispatchItem[]);
-    setShowDNote(true);
+    if (viewOrder?.id === order.id && viewItems.length > 0) {
+      setDNoteItems(viewItems);
+      setShowDNote(true);
+    } else {
+      setShowDNote(true);
+      const { data } = await supabase.from('dispatch_items').select('*, formulations(name, code, sage_code)').eq('dispatch_order_id', order.id);
+      if (data) setDNoteItems(data as DispatchItem[]);
+    }
   };
 
   const updateStatus = async (id: string, status: string) => {
