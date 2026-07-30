@@ -33,14 +33,36 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [countdown, setCountdown] = useState<number>(5);
   const [updateMenuOpen, setUpdateMenuOpen] = useState(false);
 
+  async function handleApplyAndRefresh(targetVer?: string) {
+    const verToMark = (targetVer || softUpdate?.version || APP_VERSION).trim().toLowerCase().replace('v', '');
+    try {
+      localStorage.setItem(`hyper_mes_applied_${verToMark}`, 'true');
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch (e) {
+      console.warn('Error clearing caches on update apply:', e);
+    }
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.location.href = `${cleanUrl}?v=${Date.now()}${window.location.hash}`;
+  }
+
   useEffect(() => {
     async function checkForUpdates() {
       try {
         const history = await fetchRecentSystemUpdates();
         if (history && history.length > 0) {
           const latest = history[0];
-          // Check if latest broadcast exists
-          if (latest && latest.type === 'soft_update') {
+          const cleanLatest = (latest.version || '').trim().toLowerCase().replace('v', '');
+          const cleanCurrent = (APP_VERSION || '').trim().toLowerCase().replace('v', '');
+          const isAppliedLocally = localStorage.getItem(`hyper_mes_applied_${cleanLatest}`) === 'true';
+
+          if (latest && latest.type === 'soft_update' && cleanLatest !== cleanCurrent && !isAppliedLocally) {
             setSoftUpdate({
               type: 'soft_update',
               version: latest.version,
@@ -48,6 +70,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
               timestamp: latest.timestamp,
               admin_email: latest.admin_email,
             });
+          } else {
+            setSoftUpdate(null);
           }
         }
       } catch (e) {
@@ -62,7 +86,11 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       .on('broadcast', { event: UPDATE_EVENT_NAME }, (response) => {
         const payload: SystemUpdatePayload = response.payload;
         if (payload.type === 'soft_update') {
-          setSoftUpdate(payload);
+          const cleanVer = (payload.version || '').trim().toLowerCase().replace('v', '');
+          const cleanCurr = (APP_VERSION || '').trim().toLowerCase().replace('v', '');
+          if (cleanVer !== cleanCurr) {
+            setSoftUpdate(payload);
+          }
         } else if (payload.type === 'force_update') {
           setForceUpdateModal(payload);
           setCountdown(5);
@@ -78,7 +106,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   useEffect(() => {
     if (!forceUpdateModal) return;
     if (countdown <= 0) {
-      window.location.reload();
+      handleApplyAndRefresh(forceUpdateModal.version);
       return;
     }
     const timer = setInterval(() => {
@@ -218,7 +246,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     Announced by: {softUpdate.admin_email || 'System Admin'}
                   </p>
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => handleApplyAndRefresh()}
                     className="w-full py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-2"
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Apply & Refresh Now
@@ -234,7 +262,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     You are running the latest production build of HYPER MES ({APP_VERSION}). System operating at optimal performance.
                   </p>
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => handleApplyAndRefresh()}
                     className="w-full py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
                   >
                     <RefreshCw className="w-3 h-3 text-slate-500" /> Check for Updates / Refresh
