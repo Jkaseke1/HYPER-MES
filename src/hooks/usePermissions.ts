@@ -154,6 +154,25 @@ function getLegacyPermissions(role: string): string[] {
   switch (role) {
     case 'admin':
       return ['admin.full']; // Admin gets everything
+
+    case 'md':
+      return [
+        ...basePermissions,
+        'raw_materials.view',
+        'formulations.view',
+        'planning.view',
+        'production.view',
+        'warehouse.view',
+        'dispatch.view',
+        'sales.view',
+        'reports.view', 'reports.export',
+        'reconciliation.view',
+        'quality.view',
+        'maintenance.view',
+        'payroll.view',
+        'chick.view',
+        'settings.view',
+      ];
     
     case 'production_manager':
       return [

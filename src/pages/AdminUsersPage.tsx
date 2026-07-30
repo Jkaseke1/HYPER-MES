@@ -256,15 +256,22 @@ export default function AdminUsersPage() {
       return;
     }
 
+    const cleanEmail = userForm.email.trim().toLowerCase();
+    if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
+      toast.error('Access restricted: Only official @hyperfeeds.co.zw email addresses are allowed.');
+      return;
+    }
+
     setSaving(true);
     try {
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: userForm.email,
+        email: cleanEmail,
         password: userForm.password,
         options: {
           data: {
             full_name: userForm.full_name,
+            role: userForm.role,
           },
         },
       });
@@ -1115,11 +1122,12 @@ export default function AdminUsersPage() {
                 onChange={(e) => setUserForm({ ...userForm, role: e.target.value as Profile['role'] })}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
               >
-                <option value="operator">Operator</option>
-                <option value="supervisor">Supervisor</option>
+                <option value="md">Managing Director (MD)</option>
                 <option value="production_manager">Production Manager</option>
                 <option value="warehouse_manager">Warehouse Manager</option>
-                <option value="finance">Finance</option>
+                <option value="finance">Finance / Accountant</option>
+                <option value="supervisor">Supervisor</option>
+                <option value="operator">Operator</option>
                 <option value="admin">Administrator</option>
               </select>
             </div>

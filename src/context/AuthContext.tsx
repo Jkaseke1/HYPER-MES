@@ -9,11 +9,17 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, role?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+function validateHyperfeedsDomain(email: string): Error | null {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
+    return new Error('Access restricted: Only official @hyperfeeds.co.zw email addresses are allowed to access HYPER MES.');
+  }
+  return null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -59,17 +65,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
+    const domainError = validateHyperfeedsDomain(email);
+    if (domainError) return { error: domainError };
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   }
 
-  async function signUp(email: string, password: string, fullName: string) {
-    const { error } = await supabase.auth.signUp({
+  async function signUp(email: string, password: string, fullName: string, role: string = 'operator') {
+    const domainError = validateHyperfeedsDomain(email);
+    if (domainError) return { error: domainError };
+
+    const { data: authData, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: { data: { full_name: fullName, role } },
     });
-    return { error: error as Error | null };
+
+    if (error) return { error: error as Error | null };
+
+    if (authData?.user) {
+      try {
+        // Upsert profile with selected role
+        await supabase.from('profiles').upsert([
+          {
+            id: authData.user.id,
+            email: email.trim().toLowerCase(),
+            full_name: fullName,
+            role: role as any,
+            updated_at: new Date().toISOString(),
+          }
+        ]);
+
+        // Find role_id in roles table
+        const { data: roleRow } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('code', role)
+          .maybeSingle();
+
+        if (roleRow?.id) {
+          await supabase.from('user_roles').upsert([
+            {
+              user_id: authData.user.id,
+              role_id: roleRow.id,
+            }
+          ]);
+        }
+      } catch (err) {
+        console.warn('Failed to assign user role on signup:', err);
+      }
+    }
+
+    return { error: null };
   }
 
   async function signOut() {

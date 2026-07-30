@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState('operator');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -15,13 +16,20 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
+      setError('Access restricted: Only official @hyperfeeds.co.zw email addresses are allowed to access HYPER MES.');
+      return;
+    }
+
     setLoading(true);
 
     if (isLogin) {
       const { error: err } = await signIn(email, password);
       if (err) setError(err.message);
     } else {
-      const { error: err } = await signUp(email, password, fullName);
+      const { error: err } = await signUp(email, password, fullName, role);
       if (err) setError(err.message);
     }
     setLoading(false);
@@ -83,17 +91,39 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                    placeholder="Enter your name"
-                    required
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                      placeholder="Enter your name"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">System Role / Designation</label>
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white font-medium text-slate-800"
+                      required
+                    >
+                      <option value="md">Managing Director (MD)</option>
+                      <option value="production_manager">Production Manager</option>
+                      <option value="warehouse_manager">Warehouse Manager</option>
+                      <option value="finance">Finance / Accountant</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="operator">Operator</option>
+                      <option value="quality_controller">Quality Controller</option>
+                      <option value="viewer">Viewer (Read Only)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">Select your designated organizational role for system permissions.</p>
+                  </div>
+                </>
               )}
 
               <div>

@@ -180,18 +180,23 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
     setExpandedGroup((prev) => (prev === label ? null : label));
   };
 
+  const { profile, signOut: doSignOut } = useAuth() as any;
+  const isAdminOrMd = profile?.role === 'admin' || profile?.role === 'md';
+
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = useMemo(() => {
-    if (!normalizedQuery) return navGroups;
-    return navGroups
+    let groups = navGroups;
+    if (!isAdminOrMd) {
+      groups = groups.filter((g) => g.label !== 'Administration');
+    }
+    if (!normalizedQuery) return groups;
+    return groups
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => item.label.toLowerCase().includes(normalizedQuery)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [normalizedQuery]);
-
-  const { profile, signOut: doSignOut } = useAuth() as any;
+  }, [normalizedQuery, isAdminOrMd]);
   const initials = (profile?.full_name || profile?.email || 'U').split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase();
 
   return (
