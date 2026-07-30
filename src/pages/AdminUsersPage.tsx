@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Search, Shield, Users, Building2, Edit2, Trash2, Key, Clock, Activity, FileText, Globe, Laptop, RefreshCw, CheckCircle2, Filter, Sparkles, Zap, Radio } from 'lucide-react';
 import { format } from 'date-fns';
@@ -63,19 +63,42 @@ export default function AdminUsersPage() {
     }
   }, [activeTab, loadUpdateHistory]);
 
+  const cleanCurrentVer = (updateVersion || '').trim().toLowerCase().replace('v', '');
+
+  const isSoftAlreadySent = useMemo(() => {
+    if (!cleanCurrentVer) return false;
+    const foundInHistory = updateHistory.some(
+      (r) => r.type === 'soft_update' && (r.version || '').trim().toLowerCase().replace('v', '') === cleanCurrentVer
+    );
+    const foundInStorage = localStorage.getItem(`broadcast_sent_soft_${cleanCurrentVer}`) === 'true';
+    return foundInHistory || foundInStorage || (softBroadcastSent || '').trim().toLowerCase().replace('v', '') === cleanCurrentVer;
+  }, [cleanCurrentVer, updateHistory, softBroadcastSent]);
+
+  const isForceAlreadySent = useMemo(() => {
+    if (!cleanCurrentVer) return false;
+    const foundInHistory = updateHistory.some(
+      (r) => r.type === 'force_update' && (r.version || '').trim().toLowerCase().replace('v', '') === cleanCurrentVer
+    );
+    const foundInStorage = localStorage.getItem(`broadcast_sent_force_${cleanCurrentVer}`) === 'true';
+    return foundInHistory || foundInStorage || (forceBroadcastSent || '').trim().toLowerCase().replace('v', '') === cleanCurrentVer;
+  }, [cleanCurrentVer, updateHistory, forceBroadcastSent]);
+
   async function handleSoftUpdate() {
     if (!updateVersion.trim()) {
       toast.error('Please enter a version number.');
       return;
     }
-    if (softBroadcastSent === updateVersion) {
-      toast.error('Update announcement has already been broadcasted for this version.');
+    if (isSoftAlreadySent) {
+      toast.error(`Update announcement (${updateVersion}) has already been broadcasted.`);
       return;
     }
     setBroadcasting(true);
     try {
       await broadcastSystemUpdate('soft_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
       setSoftBroadcastSent(updateVersion);
+      try {
+        localStorage.setItem(`broadcast_sent_soft_${cleanCurrentVer}`, 'true');
+      } catch (e) {}
       toast.success(`Soft update broadcasted! Active users will see the "Update Now" banner.`);
       loadUpdateHistory();
     } catch (e: any) {
@@ -86,8 +109,8 @@ export default function AdminUsersPage() {
   }
 
   async function handleForceUpdate() {
-    if (forceBroadcastSent === updateVersion) {
-      toast.error('Critical update has already been force-pushed for this version.');
+    if (isForceAlreadySent) {
+      toast.error(`Critical update (${updateVersion}) has already been force-pushed.`);
       return;
     }
     if (!confirm(`Are you sure you want to FORCE PUSH update (${updateVersion}) to ALL active users? This will automatically refresh their browsers in 5 seconds.`)) return;
@@ -96,6 +119,9 @@ export default function AdminUsersPage() {
     try {
       await broadcastSystemUpdate('force_update', updateVersion, updateNotes, profile?.email || 'admin@hyperfeeds.co.zw');
       setForceBroadcastSent(updateVersion);
+      try {
+        localStorage.setItem(`broadcast_sent_force_${cleanCurrentVer}`, 'true');
+      } catch (e) {}
       toast.success(`FORCE UPDATE PUSHED! All active user sessions are now refreshing.`);
       loadUpdateHistory();
     } catch (e: any) {
