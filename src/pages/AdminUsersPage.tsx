@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Shield, Users, Building2, Edit2, Trash2, Key } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import Modal from '../components/ui/Modal';
 import StatCard from '../components/ui/StatCard';
@@ -14,7 +15,8 @@ interface UserWithDetails extends Profile {
 }
 
 export default function AdminUsersPage() {
-  const { isAdmin, hasPermission } = usePermissions();
+  const { loading: authLoading } = useAuth();
+  const { isAdmin, hasPermission, loading: permissionsLoading } = usePermissions();
   const [users, setUsers] = useState<UserWithDetails[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -400,6 +402,15 @@ export default function AdminUsersPage() {
   const adminCount = users.filter(u => u.user_roles?.some(ur => ur.roles?.code === 'admin')).length;
   const activeRoles = roles.filter(r => r.is_active).length;
 
+  if (loading || permissionsLoading || authLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 text-slate-500">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-600 rounded-full animate-spin mb-3" />
+        <p className="text-xs font-semibold text-slate-600">Loading User Management & Access Control...</p>
+      </div>
+    );
+  }
+
   if (!isAdmin() && !hasPermission('admin.users')) {
     return (
       <div className="p-6">
@@ -408,14 +419,6 @@ export default function AdminUsersPage() {
           <h2 className="text-lg font-semibold text-red-800">Access Denied</h2>
           <p className="text-sm text-red-600 mt-1">You don't have permission to access this page.</p>
         </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-600 rounded-full animate-spin" />
       </div>
     );
   }

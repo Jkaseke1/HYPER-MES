@@ -183,7 +183,7 @@ function KPICard({ label, value, sub, icon: Icon, accent }: { label: string; val
 }
 
 export default function SagePostingReviewPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [reviews, setReviews] = useState<SagePostingReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
@@ -308,7 +308,18 @@ export default function SagePostingReviewPage() {
 
   const toggleExpand = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  // ── Access Denied ──────────────────────────────────────────
+  // ── Loading & Access Check ─────────────────────────────────
+  if (loading || authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-500">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
+          <p className="text-xs font-semibold text-slate-600">Loading Sage Posting Reviews...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isFinance) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
