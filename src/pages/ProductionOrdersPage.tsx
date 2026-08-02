@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -955,17 +956,50 @@ export default function ProductionOrdersPage() {
     setShowEditQty(true);
   };
 
+  const [refreshingStock, setRefreshingStock] = useState(false);
+
   // Refresh Sage stock balances for current order
-  const refreshSageStock = async () => {
+  const refreshSageStock = async (showToast = true) => {
     if (!selected || detailMaterials.length === 0) return;
-    const materialIds = detailMaterials.map(m => m.raw_material_id);
-    await loadSageStockBalances(materialIds);
+    if (showToast) setRefreshingStock(true);
+    try {
+      const materialIds = detailMaterials.map(m => m.raw_material_id);
+      await loadSageStockBalances(materialIds);
+
+      // Re-fetch raw_materials to update current_stock in detailMaterials state
+      const { data: rmData } = await supabase
+        .from('raw_materials')
+        .select('id, name, code, current_stock, cost_per_unit, unit')
+        .in('id', materialIds);
+
+      if (rmData && rmData.length > 0) {
+        const rmMap = new Map(rmData.map(r => [r.id, r]));
+        setDetailMaterials(prev => prev.map(m => {
+          const freshRm = rmMap.get(m.raw_material_id);
+          return freshRm ? { ...m, raw_materials: { ...m.raw_materials, ...freshRm } } : m;
+        }));
+      }
+
+      // Clear stale error message banner when refreshed
+      setWorkflowError(null);
+
+      if (showToast) {
+        toast.success('Stock balances refreshed');
+      }
+    } catch (err: any) {
+      console.error('Error refreshing Sage stock:', err);
+      if (showToast) {
+        toast.error('Failed to refresh stock balances');
+      }
+    } finally {
+      if (showToast) setRefreshingStock(false);
+    }
   };
 
   // Auto-refresh Sage stock when order detail loads
   useEffect(() => {
     if (selected && detailMaterials.length > 0) {
-      refreshSageStock();
+      refreshSageStock(false);
     }
   }, [selected?.id, detailMaterials.length]);
 
@@ -974,7 +1008,7 @@ export default function ProductionOrdersPage() {
     if (!selected || detailMaterials.length === 0) return;
     
     const interval = setInterval(() => {
-      refreshSageStock();
+      refreshSageStock(false);
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
@@ -1869,12 +1903,12 @@ export default function ProductionOrdersPage() {
                   </div>
                   {detailTab === 'materials' && (
                     <button
-                      onClick={refreshSageStock}
-                      disabled={saving}
-                      className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1 transition-colors shrink-0"
+                      onClick={() => refreshSageStock(true)}
+                      disabled={saving || refreshingStock}
+                      className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
                     >
-                      <Clock className="w-3.5 h-3.5" />
-                      Refresh Sage Stock
+                      <RefreshCw className={`w-3.5 h-3.5 ${refreshingStock ? 'animate-spin text-teal-600' : ''}`} />
+                      {refreshingStock ? 'Refreshing...' : 'Refresh Sage Stock'}
                     </button>
                   )}
                 </div>

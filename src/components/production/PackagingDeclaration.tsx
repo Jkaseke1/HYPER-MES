@@ -130,24 +130,72 @@ export default function PackagingDeclaration({
         (s) => Number(s.bag_size_kg) === targetBagSizeKg
       );
 
+      const candidatePool = matchingSizeSkus.length > 0 ? matchingSizeSkus : availableSkus;
       let matchedSku: PackagingSKU | undefined;
 
-      if (matchingSizeSkus.length > 0) {
-        // Try keyword matching against formulationName e.g. "Broiler", "Starter", "Pig", etc.
-        if (formulationName) {
-          const words = formulationName.toLowerCase().split(/[\s/_-]+/);
-          matchedSku = matchingSizeSkus.find((s) => {
-            const desc = (s.description + ' ' + s.sku_code).toLowerCase();
-            return words.some((w) => w.length > 3 && desc.includes(w));
-          });
-        }
-        if (!matchedSku) {
-          matchedSku = matchingSizeSkus[0];
+      if (formulationName) {
+        const cleanName = formulationName.toLowerCase();
+        
+        // Extract meaningful words (length >= 3, excluding generic size tokens)
+        const words = cleanName
+          .replace(/\d+\s*kg/gi, '')
+          .split(/[\s/_-]+/)
+          .filter(w => w.length >= 3 && !['feed', 'bags', 'bag', 'mesh'].includes(w));
+
+        // Derive formulation acronym/initials (e.g. Broiler Finisher Pellets -> BFP)
+        const initials = words.map(w => w[0]).join('');
+
+        let bestScore = -999;
+
+        for (const sku of candidatePool) {
+          let score = 0;
+          const skuCode = (sku.sku_code || '').toLowerCase();
+          const skuDesc = (sku.description || '').toLowerCase();
+          const combined = `${skuCode} ${skuDesc}`;
+
+          // A. Acronym/Code Prefix Match
+          if (skuCode.startsWith(initials)) {
+            score += 50;
+          }
+
+          // B. Keyword Match Count
+          for (const word of words) {
+            if (combined.includes(word)) {
+              score += 20;
+            }
+          }
+
+          // C. Stage / Product Category Penalties for Mismatches
+          const productStages = [
+            'starter', 'grower', 'finisher', 'developer', 'layer', 
+            'pig', 'road', 'runner', 'rabbit', 'crumbs', 'pellets', 
+            'mash', 'concentrate', 'creep', 'weaner', 'boar', 'sow', 'dairy', 'beef'
+          ];
+
+          for (const stage of productStages) {
+            const formHasStage = cleanName.includes(stage);
+            const skuHasStage = combined.includes(stage);
+            if (formHasStage && !skuHasStage) {
+              score -= 15; // SKU lacks a stage specified in formulation
+            } else if (!formHasStage && skuHasStage) {
+              score -= 10; // SKU has a stage not in formulation
+            }
+          }
+
+          // D. Bag Size Exact Match Bonus
+          if (Number(sku.bag_size_kg) === targetBagSizeKg) {
+            score += 15;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            matchedSku = sku;
+          }
         }
       }
 
       if (!matchedSku) {
-        matchedSku = availableSkus[0];
+        matchedSku = candidatePool[0] || availableSkus[0];
       }
 
       if (matchedSku && matchedSku.bag_size_kg > 0) {
