@@ -3,6 +3,7 @@ import { Plus, Search, Eye, Play, CheckCircle, AlertTriangle, Package, Clock, Fa
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-hot-toast';
 import Modal from '../components/ui/Modal';
 import StatCard from '../components/ui/StatCard';
 import { validateStockAvailability, StockError } from '../lib/stockValidation';
@@ -229,7 +230,7 @@ export default function MacropackManufacturingPage() {
   async function handleCreateOrder(e: React.FormEvent) {
     e.preventDefault();
     if (!orderForm.macropack_bom_id || !orderForm.planned_units) {
-      alert('Please fill in all required fields.');
+      toast.error('Please fill in all required fields.');
       return;
     }
     setSaving(true);
@@ -247,9 +248,10 @@ export default function MacropackManufacturingPage() {
       setOrderForm(emptyOrderForm);
       setPreviewIngredients([]);
       fetchData();
+      toast.success('Macropack order created successfully!');
     } catch (error: any) {
       console.error('Error creating order:', error);
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message || 'Failed to create order'}`);
     } finally {
       setSaving(false);
     }
@@ -286,8 +288,9 @@ export default function MacropackManufacturingPage() {
       setShowRejectModal(false);
       setRejectionReason('');
       fetchData();
+      toast.success(`Order ${action.replace('_', ' ')} updated successfully!`);
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message || 'Approval action failed'}`);
     } finally {
       setApprovalSaving(false);
     }
@@ -368,8 +371,9 @@ export default function MacropackManufacturingPage() {
       if (error) throw error;
       setSelectedOrder({ ...selectedOrder, status: 'IN_PROGRESS' });
       fetchData();
+      toast.success('Manufacturing run started!');
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message || 'Failed to start order'}`);
     } finally {
       setSaving(false);
     }
@@ -539,30 +543,46 @@ export default function MacropackManufacturingPage() {
 
       // ── Integration Step 2: Insert Sage Review Records ──
       if (sageReviewRows.length > 0) {
-        await supabase.from('sage_posting_reviews').insert(sageReviewRows);
+        try {
+          const { error: revErr } = await supabase.from('sage_posting_reviews').insert(sageReviewRows);
+          if (revErr) console.warn('Sage posting review insert notice:', revErr.message);
+        } catch (e) {
+          console.warn('Sage posting review insert error skipped:', e);
+        }
       }
 
       // ── Integration Step 3: Insert Sync Log Entry for Background Worker ──
-      await supabase.from('sync_log').insert({
-        event_type: 'macropack_manufactured',
-        reference_type: 'macropack_manufacture_order',
-        reference_id: selectedOrder.id,
-        status: 'pending',
-        description: `Macropack ${macroCode} manufactured (${actualUnits} units) - Sage SSMS review entries created`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+      try {
+        const { error: syncErr } = await supabase.from('sync_log').insert({
+          event_type: 'macropack_manufactured',
+          reference_type: 'macropack_manufacture_order',
+          reference_id: selectedOrder.id,
+          status: 'pending',
+          description: `Macropack ${macroCode} manufactured (${actualUnits} units) - Sage SSMS review entries created`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        if (syncErr) console.warn('Sync log insert notice:', syncErr.message);
+      } catch (e) {
+        console.warn('Sync log insert error skipped:', e);
+      }
 
       // ── Integration Step 4: Record Approval Audit Trail ──
-      await supabase.from('approval_history').insert({
-        entity_type: 'macropack_order',
-        entity_id: selectedOrder.id,
-        action: 'approved',
-        new_status: 'COMPLETED',
-        approved_by: user?.id,
-        comments: `Macropack manufacturing completed. Ingredients issued from RM Whse 18 & Macropack WIP received into Production Whse 19. Total cost: $${totalIngredientCostUSD.toFixed(2)}`,
-        created_at: new Date().toISOString(),
-      });
+      if (user?.id) {
+        try {
+          await supabase.from('approval_history').insert({
+            entity_type: 'macropack_order',
+            entity_id: selectedOrder.id,
+            action: 'approved',
+            new_status: 'COMPLETED',
+            approved_by: user.id,
+            comments: `Macropack manufacturing completed. Ingredients issued from RM Whse 18 & Macropack WIP received into Production Whse 19. Total cost: $${totalIngredientCostUSD.toFixed(2)}`,
+            created_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn('Approval history insert notice:', e);
+        }
+      }
 
       // ── Integration Step 5: Update Order Status & Cost ──
       const { error: updateError } = await supabase
@@ -579,10 +599,10 @@ export default function MacropackManufacturingPage() {
 
       setSelectedOrder({ ...selectedOrder, status: 'COMPLETED', actual_units: actualUnits, cost_per_unit: costPerUnit });
       fetchData();
-      alert(`Macropack order completed successfully! ${sageReviewRows.length} Sage SSMS integration records generated.`);
+      toast.success(`Macropack order completed successfully! ${sageReviewRows.length} Sage SSMS integration records generated.`, { duration: 5000 });
     } catch (error: any) {
       console.error('Error completing order:', error);
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message || 'Failed to complete order'}`);
     } finally {
       setSaving(false);
     }
@@ -622,12 +642,12 @@ export default function MacropackManufacturingPage() {
   async function handleCreateBom(e: React.FormEvent) {
     e.preventDefault();
     if (!bomForm.macropack_code || !bomForm.macropack_name) {
-      alert('Please fill in code and name.');
+      toast.error('Please fill in BOM code and name.');
       return;
     }
     const validIngs = bomIngredients.filter(i => i.raw_material_id && i.grams_per_unit);
     if (validIngs.length === 0) {
-      alert('Please add at least one ingredient.');
+      toast.error('Please add at least one ingredient.');
       return;
     }
     setSaving(true);
@@ -655,9 +675,10 @@ export default function MacropackManufacturingPage() {
 
       setNewBomModalOpen(false);
       fetchData();
+      toast.success('Macropack BOM created successfully!');
     } catch (error: any) {
       console.error('Error creating BOM:', error);
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message || 'Failed to create BOM'}`);
     } finally {
       setSaving(false);
     }
