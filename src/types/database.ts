@@ -365,3 +365,107 @@ export interface DispatchItem {
   formulations?: Formulation;
 }
 
+/* ── Fleet & Logistics Types ── */
+export interface FleetVehicle {
+  id: string;
+  registration_number: string;
+  make_model: string;
+  vehicle_type: 'rigid_truck' | 'horse_trailer' | 'flatbed' | 'tipper' | 'van' | 'hired_truck';
+  ownership: 'owned' | 'hired' | 'contracted';
+  capacity_tons: number;
+  current_odometer_km: number;
+  status: 'available' | 'allocated' | 'in_transit' | 'maintenance' | 'breakdown' | 'decommissioned';
+  assigned_driver_name?: string;
+  driver_phone?: string;
+  fuel_tank_capacity_l?: number;
+  avg_fuel_consumption_kml?: number;
+  service_interval_km?: number;
+  last_service_odometer_km?: number;
+  last_service_date?: string;
+  next_service_due_km?: number;
+  license_expiry_date?: string;
+  insurance_expiry_date?: string;
+  transporter_vendor_name?: string;
+  hire_rate_per_ton?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface FleetAllocation {
+  id: string;
+  allocation_number: string;
+  vehicle_id: string;
+  driver_name: string;
+  driver_phone?: string;
+  allocation_type: 'dispatch_delivery' | 'material_transfer' | 'rm_pickup' | 'customer_delivery' | 'other';
+  reference_order_number?: string;
+  destination: string;
+  planned_tonnage: number;
+  start_odometer_km: number;
+  end_odometer_km?: number;
+  fuel_issued_liters?: number;
+  fuel_cost_usd?: number;
+  dispatch_time?: string;
+  expected_return_time?: string;
+  actual_return_time?: string;
+  status: 'allocated' | 'loading' | 'in_transit' | 'delivered' | 'returned' | 'cancelled';
+  notes?: string;
+  created_at: string;
+  vehicles?: FleetVehicle;
+}
+
+export interface FleetMaintenanceRecord {
+  id: string;
+  maintenance_number: string;
+  vehicle_id: string;
+  service_type: 'preventative' | 'corrective' | 'tire_replacement' | 'brake_service' | 'major_overhaul' | 'inspection';
+  description: string;
+  work_done_by: string;
+  odometer_reading_km: number;
+  cost_usd: number;
+  parts_replaced?: string;
+  service_date: string;
+  completion_date?: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  notes?: string;
+  created_at: string;
+  vehicles?: FleetVehicle;
+}
+
+export interface FleetBreakdown {
+  id: string;
+  incident_number: string;
+  vehicle_id: string;
+  driver_name: string;
+  incident_date_time: string;
+  location: string;
+  nature_of_breakdown: 'engine_failure' | 'tire_blowout' | 'brake_system' | 'gearbox_transmission' | 'electrical' | 'accident' | 'other';
+  description: string;
+  cargo_status: 'intact' | 'partially_damaged' | 'transshipped' | 'lost';
+  rescue_vehicle_id?: string;
+  downtime_hours?: number;
+  repair_cost_usd?: number;
+  status: 'reported' | 'mechanic_dispatched' | 'towed' | 'repaired_on_site' | 'resolved';
+  resolved_at?: string;
+  resolution_notes?: string;
+  created_at: string;
+  vehicles?: FleetVehicle;
+  rescue_vehicle?: FleetVehicle;
+}
+
+export interface FleetHiredTruck {
+  id: string;
+  vendor_name: string;
+  contact_person: string;
+  phone: string;
+  email?: string;
+  truck_registration: string;
+  capacity_tons: number;
+  rate_per_ton_usd: number;
+  rate_per_trip_usd?: number;
+  active_contract: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+

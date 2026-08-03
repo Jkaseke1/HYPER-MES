@@ -48,6 +48,7 @@ import ChickPurchaseOrders from './pages/chick/ChickPurchaseOrders';
 import ChickNightIntake from './pages/chick/ChickNightIntake';
 import ChickDeliveryDeclaration from './pages/chick/ChickDeliveryDeclaration';
 import ChickInvoiceCapture from './pages/chick/ChickInvoiceCapture';
+import FleetManagementPage from './pages/FleetManagementPage';
 import ChickReconciliationPage from './pages/chick/ChickReconciliationPage';
 import StockTakePage from './pages/StockTakePage';
 import StockTakeDetailPage from './pages/StockTakeDetailPage';
@@ -130,6 +131,7 @@ export default function App() {
               <Route path="macropack" element={<MacropackManufacturingPage />} />
               <Route path="warehouse" element={<WarehousePage />} />
               <Route path="dispatch" element={<DispatchPage />} />
+              <Route path="fleet" element={<FleetManagementPage />} />
               <Route path="reconciliation" element={<ReconciliationPage />} />
               <Route path="sync-log" element={<SyncLogPage />} />
               <Route path="production-report" element={<ProductionReportPage />} />
