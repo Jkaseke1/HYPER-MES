@@ -419,6 +419,8 @@ export default function MacropackManufacturingPage() {
     if (!selectedOrder) return;
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+
       const issueData = issueRows
         .filter(r => r.actual_grams_dispensed !== '' && r.actual_grams_dispensed !== null)
         .map(r => ({
@@ -457,19 +459,127 @@ export default function MacropackManufacturingPage() {
         }
       }
 
+      // ── Integration Step 1: Calculate Ingredient Cost & Prepare Sage Reviews ──
+      const rmIds = issueRows.map(r => r.raw_material_id);
+      const { data: rawMaterials } = await supabase
+        .from('raw_materials')
+        .select('id, code, name, cost_per_unit_usd, cost_per_unit, current_stock')
+        .in('id', rmIds);
+
+      const rmMap = new Map((rawMaterials || []).map((rm: any) => [rm.id, rm]));
+      let totalIngredientCostUSD = 0;
+      const sageReviewRows: any[] = [];
+      const trDate = format(new Date(), 'yyyy-MM-dd');
+      const macroCode = selectedOrder.macropack_boms?.macropack_code || 'MP';
+
+      for (const row of issueRows) {
+        const rm = rmMap.get(row.raw_material_id);
+        const actualKg = typeof row.actual_grams_dispensed === 'number'
+          ? row.actual_grams_dispensed
+          : parseFloat(String(row.actual_grams_dispensed || 0));
+
+        if (actualKg > 0) {
+          const unitCost = rm?.cost_per_unit_usd || rm?.cost_per_unit || 0;
+          const lineCost = actualKg * unitCost;
+          totalIngredientCostUSD += lineCost;
+
+          // Deduct MES raw material stock
+          if (rm && typeof rm.current_stock === 'number') {
+            const newStock = Math.max(0, rm.current_stock - actualKg);
+            await supabase
+              .from('raw_materials')
+              .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+              .eq('id', rm.id);
+          }
+
+          // Build Sage posting review for ingredient issue from RM Warehouse (WhseID 18)
+          sageReviewRows.push({
+            sync_event_id: selectedOrder.id,
+            event_type: 'macropack_completed',
+            event_description: `Macropack micro-ingredient issue: ${rm?.name || row.ingredient_name}`,
+            sage_code: rm?.code || row.ingredient_code,
+            transaction_type: 'ISSUE',
+            sage_tx_code: 'ISSUE',
+            quantity: -actualKg,
+            unit_cost: unitCost,
+            total_value: lineCost,
+            warehouse_id: 18,
+            warehouse_code: 'RAW',
+            reference: `MP-${macroCode}`.substring(0, 20),
+            description: `Macropack issue ${rm?.name || row.ingredient_name}`.substring(0, 40),
+            transaction_date: trDate,
+            status: 'pending',
+          });
+        }
+      }
+
+      const actualUnits = selectedOrder.planned_units || 1;
+      const costPerUnit = actualUnits > 0 ? totalIngredientCostUSD / actualUnits : 0;
+
+      // Build Sage posting review for manufactured Macropack WIP receipt into Production Warehouse (WhseID 19)
+      if (selectedOrder.macropack_boms?.macropack_code) {
+        sageReviewRows.push({
+          sync_event_id: selectedOrder.id,
+          event_type: 'macropack_completed',
+          event_description: `Macropack WIP manufactured receipt: ${selectedOrder.macropack_boms?.macropack_name}`,
+          sage_code: selectedOrder.macropack_boms?.macropack_code,
+          transaction_type: 'RECEIPT',
+          sage_tx_code: 'RECEIPT',
+          quantity: actualUnits,
+          unit_cost: costPerUnit,
+          total_value: totalIngredientCostUSD,
+          warehouse_id: 19,
+          warehouse_code: 'PROD',
+          reference: `MP-${macroCode}`.substring(0, 20),
+          description: `Macropack WIP ${selectedOrder.macropack_boms?.macropack_name}`.substring(0, 40),
+          transaction_date: trDate,
+          status: 'pending',
+        });
+      }
+
+      // ── Integration Step 2: Insert Sage Review Records ──
+      if (sageReviewRows.length > 0) {
+        await supabase.from('sage_posting_reviews').insert(sageReviewRows);
+      }
+
+      // ── Integration Step 3: Insert Sync Log Entry for Background Worker ──
+      await supabase.from('sync_log').insert({
+        event_type: 'macropack_manufactured',
+        reference_type: 'macropack_manufacture_order',
+        reference_id: selectedOrder.id,
+        status: 'pending',
+        description: `Macropack ${macroCode} manufactured (${actualUnits} units) - Sage SSMS review entries created`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      // ── Integration Step 4: Record Approval Audit Trail ──
+      await supabase.from('approval_history').insert({
+        entity_type: 'macropack_order',
+        entity_id: selectedOrder.id,
+        action: 'approved',
+        new_status: 'COMPLETED',
+        approved_by: user?.id,
+        comments: `Macropack manufacturing completed. Ingredients issued from RM Whse 18 & Macropack WIP received into Production Whse 19. Total cost: $${totalIngredientCostUSD.toFixed(2)}`,
+        created_at: new Date().toISOString(),
+      });
+
+      // ── Integration Step 5: Update Order Status & Cost ──
       const { error: updateError } = await supabase
         .from('macropack_manufacture_orders')
         .update({
           status: 'COMPLETED',
-          actual_units: selectedOrder.planned_units,
+          actual_units: actualUnits,
+          cost_per_unit: costPerUnit,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', selectedOrder.id);
 
       if (updateError) throw updateError;
 
-      setSelectedOrder({ ...selectedOrder, status: 'COMPLETED', actual_units: selectedOrder.planned_units });
+      setSelectedOrder({ ...selectedOrder, status: 'COMPLETED', actual_units: actualUnits, cost_per_unit: costPerUnit });
       fetchData();
-      alert('Macropack manufacturing order successfully completed!');
+      alert(`Macropack order completed successfully! ${sageReviewRows.length} Sage SSMS integration records generated.`);
     } catch (error: any) {
       console.error('Error completing order:', error);
       alert(`Error: ${error.message}`);
@@ -943,6 +1053,15 @@ export default function MacropackManufacturingPage() {
                     className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
                   >
                     <CheckCircle className="w-3.5 h-3.5" /> Declare Packaging & Complete Order
+                  </button>
+                )}
+                {selectedOrder.status === 'COMPLETED' && (
+                  <button
+                    onClick={() => completeOrderTransaction([], '')}
+                    disabled={saving}
+                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> Re-trigger Sage SSMS Integration Sync
                   </button>
                 )}
                 {['PENDING_RM', 'PENDING_SUPERVISOR'].includes(selectedOrder.status) && (
