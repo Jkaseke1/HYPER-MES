@@ -1356,16 +1356,24 @@ export default function MacropackManufacturingPage() {
       )}
 
       {/* Packaging Declaration Modal */}
-      {showPackagingModal && (
+      {showPackagingModal && selectedOrder && (
         <PackagingDeclarationModal
           open={showPackagingModal}
           onClose={() => setShowPackagingModal(false)}
           onConfirm={handlePackagingConfirm}
+          onReject={async (reason) => {
+            setRejectionReason(reason);
+            setShowPackagingModal(false);
+            await handleApprovalAction('reject');
+          }}
           bomPackagingItems={bomPackagingItems}
           items={bomPackagingItems}
-          plannedQty={selectedOrder?.planned_units || 0}
-          rateLabel={`${selectedOrder?.planned_units || 0} units`}
-          title="Macropack Packaging Declaration"
+          plannedQty={selectedOrder.planned_units || 0}
+          rateLabel={`${selectedOrder.planned_units || 0} units`}
+          title="Macropack Packaging & Final Production Approval"
+          productName={selectedOrder.macropack_boms?.macropack_name}
+          productCode={selectedOrder.macropack_boms?.macropack_code}
+          totalIngredientKg={issueRows.reduce((sum, r) => sum + (parseFloat(String(r.actual_grams_dispensed || 0))), 0)}
         />
       )}
     </div>
