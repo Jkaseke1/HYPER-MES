@@ -18,9 +18,10 @@ export default function LoginPage() {
     setError('');
 
     const cleanEmail = email.trim().toLowerCase();
-    const allowedDomains = ['@hyperfeeds.com', '@hyperfeeds.co.zw', '@hyperfeedsnutrition.co.zw'];
-    if (!allowedDomains.some(domain => cleanEmail.endsWith(domain))) {
-      setError('Access restricted: Only official Hyperfeeds email addresses (@hyperfeeds.com / @hyperfeeds.co.zw) are allowed to access HYPER MES.');
+    const isExactAdmin = cleanEmail === 'admin@hyperfeeds.com';
+    const isOfficialDomain = cleanEmail.endsWith('@hyperfeeds.co.zw') || cleanEmail.endsWith('@hyperfeedsnutrition.co.zw');
+    if (!isExactAdmin && !isOfficialDomain) {
+      setError('Access restricted: Only official @hyperfeeds.co.zw email addresses or admin@hyperfeeds.com are allowed.');
       return;
     }
 
