@@ -201,6 +201,19 @@ export default function ProductionOrdersPage() {
     });
   };
 
+  const getOrderFormulationName = (order: ProductionOrder | null): string => {
+    if (!order) return '';
+    if (order.formulations?.name) return order.formulations.name;
+    if (order.formulation_id) {
+      const found = formulations.find((f) => f.id === order.formulation_id);
+      if (found?.name) return found.name;
+    }
+    if ((order as any).product_name) return (order as any).product_name;
+    if ((order as any).description) return (order as any).description;
+    if (order.notes && !order.notes.trim().startsWith('{')) return order.notes.trim();
+    return '';
+  };
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size, nominal_speed), machines(name, code), profiles!operator_id(full_name, email)').order('created_at', { ascending: false });
@@ -674,7 +687,7 @@ export default function ProductionOrdersPage() {
       // Refresh the selected order data
       const { data: refreshedOrder } = await supabase
         .from('production_orders')
-        .select('*')
+        .select('*, formulations(name, code, batch_size, nominal_speed), machines(name, code), profiles!operator_id(full_name, email)')
         .eq('id', selected.id)
         .single();
 
@@ -1772,7 +1785,7 @@ export default function ProductionOrdersPage() {
                   )}
                 </div>
                 <p className="text-slate-300 text-xs mt-1 truncate">
-                  <span className="font-semibold text-white">{selected?.formulations?.name}</span> • Line: <span className="font-semibold text-white">{selected?.machines?.name || 'Main Plant'}</span> • Bag size: {selected?.unit_size || '25'}kg
+                  <span className="font-semibold text-white">{getOrderFormulationName(selected) || 'Production Order'}</span> • Line: <span className="font-semibold text-white">{selected?.machines?.name || 'Main Plant'}</span> • Bag size: {selected?.unit_size || '50'}kg
                   {selected?.profiles?.full_name && <span className="text-slate-400"> • Created by {selected.profiles.full_name}</span>}
                 </p>
               </div>
@@ -2721,7 +2734,7 @@ export default function ProductionOrdersPage() {
                 }
                 formulationId={selected.formulation_id}
                 unitSize={selected.unit_size}
-                formulationName={selected.formulations?.name}
+                formulationName={getOrderFormulationName(selected)}
                 onSave={handlePkgConfirm}
                 disabled={saving}
               />

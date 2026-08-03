@@ -1165,6 +1165,14 @@ export default function ProductionOrdersPage() {
           <PackagingDeclaration
             actualOutputQty={output.actual_qty}
             formulationId={selected.formulation_id}
+            unitSize={selected.unit_size}
+            formulationName={
+              selected.formulations?.name ||
+              formulations.find((f) => f.id === selected.formulation_id)?.name ||
+              (selected as any).product_name ||
+              (selected as any).description ||
+              selected.notes
+            }
             onSave={handlePackagingDeclarationSave}
             disabled={saving}
           />
