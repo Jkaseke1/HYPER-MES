@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { APP_VERSION } from '../config/version';
+import { APP_VERSION, APP_BUILD_TIME } from '../config/version';
 
 export interface SystemUpdatePayload {
   type: 'soft_update' | 'force_update';
@@ -213,21 +213,19 @@ export async function fetchPendingUpdates(): Promise<SystemUpdateLogRecord[]> {
   const commits = await fetchGitHubCommits();
   if (commits.length > 0) {
     const latestCommit = commits[0];
-    
-    if (!installedSha) {
-      localStorage.setItem(INSTALLED_SHA_KEY, latestCommit.sha);
-    } else if (installedSha !== latestCommit.sha) {
-      const isApplied = localStorage.getItem(`hyper_mes_applied_${latestCommit.shortSha}`) === 'true';
-      if (!isApplied) {
-        pending.push({
-          id: latestCommit.sha,
-          version: `v2.4.6-${latestCommit.shortSha}`,
-          type: 'soft_update',
-          message: `New build deployed: ${latestCommit.message}`,
-          admin_email: latestCommit.author,
-          timestamp: latestCommit.date,
-        });
-      }
+    const commitTime = new Date(latestCommit.date).getTime();
+    const buildTime = new Date(APP_BUILD_TIME).getTime();
+    const isApplied = localStorage.getItem(`hyper_mes_applied_${latestCommit.shortSha}`) === 'true';
+
+    if (!isApplied && (installedSha !== latestCommit.sha || commitTime > buildTime)) {
+      pending.push({
+        id: latestCommit.sha,
+        version: `v2.4.6-${latestCommit.shortSha}`,
+        type: 'soft_update',
+        message: `New software build ready: ${latestCommit.message}`,
+        admin_email: latestCommit.author,
+        timestamp: latestCommit.date,
+      });
     }
   }
 
