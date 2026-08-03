@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, ArrowRight, Package, Truck, Trash2, X } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -47,6 +47,8 @@ export default function MaterialTransferPage() {
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [selectedTransferIds, setSelectedTransferIds] = useState<string[]>([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Multi-line transfer state
   const [transferLines, setTransferLines] = useState<Array<{
@@ -237,7 +239,6 @@ export default function MaterialTransferPage() {
     }
   }
 
-
   const filteredTransfers = transfers.filter((transfer) => {
     const matchesSearch =
       !searchTerm ||
@@ -255,6 +256,68 @@ export default function MaterialTransferPage() {
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
 
+  const toggleSelectAll = () => {
+    const inBufferFiltered = filteredTransfers.filter(t => t.status === 'in_buffer');
+    if (selectedTransferIds.length >= inBufferFiltered.length && inBufferFiltered.length > 0) {
+      setSelectedTransferIds([]);
+    } else {
+      setSelectedTransferIds(inBufferFiltered.map(t => t.id));
+    }
+  };
+
+  const toggleSelectTransfer = (id: string) => {
+    if (selectedTransferIds.includes(id)) {
+      setSelectedTransferIds(selectedTransferIds.filter(i => i !== id));
+    } else {
+      setSelectedTransferIds([...selectedTransferIds, id]);
+    }
+  };
+
+  async function bulkApproveTransfers(targetTransfers?: MaterialTransfer[]) {
+    const transfersToApprove = targetTransfers || transfers.filter(t => selectedTransferIds.includes(t.id) && t.status === 'in_buffer');
+    if (transfersToApprove.length === 0) {
+      alert('No eligible in-buffer transfers selected for approval');
+      return;
+    }
+
+    setBulkProcessing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('User not authenticated');
+
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (const transfer of transfersToApprove) {
+        const { error } = await supabase.rpc('approve_material_transfer_to_production', {
+          p_transfer_id: transfer.id,
+          p_approved_by: user.id,
+        });
+
+        if (error) {
+          errors.push(`${transfer.raw_materials?.name || transfer.id}: ${error.message}`);
+        } else {
+          successCount++;
+        }
+      }
+
+      if (errors.length > 0) {
+        alert(`Bulk approval processed. ${successCount} succeeded, ${errors.length} failed:\n${errors.join('\n')}`);
+      } else {
+        setSuccessMessage(`Successfully approved ${successCount} material transfer(s) to Production Floor!`);
+        setTimeout(() => setSuccessMessage(''), 4000);
+      }
+
+      setSelectedTransferIds([]);
+      fetchData();
+    } catch (err: any) {
+      console.error('Bulk approval error:', err);
+      alert(`Bulk approval failed: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -271,13 +334,25 @@ export default function MaterialTransferPage() {
           <h1 className="text-2xl font-bold text-slate-800">Material Transfer</h1>
           <p className="text-sm text-slate-500 mt-1">Transfer raw materials from warehouse to production</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Transfer
-        </button>
+        <div className="flex items-center gap-3">
+          {statusCounts.in_buffer > 0 && (
+            <button
+              onClick={() => bulkApproveTransfers(transfers.filter(t => t.status === 'in_buffer'))}
+              disabled={bulkProcessing || loading}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-50"
+            >
+              {bulkProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Bulk Approve In-Buffer ({statusCounts.in_buffer})
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Transfer
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -309,6 +384,34 @@ export default function MaterialTransferPage() {
           </div>
         </div>
       </div>
+
+      {/* Bulk Action Banner */}
+      {selectedTransferIds.length > 0 && (
+        <div className="flex items-center justify-between p-3.5 bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2.5 py-1 rounded-lg">
+              {selectedTransferIds.length} Selected
+            </span>
+            <p className="text-xs text-slate-300 font-medium">Ready for bulk approval to Production Floor</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedTransferIds([])}
+              className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => bulkApproveTransfers()}
+              disabled={bulkProcessing}
+              className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow disabled:opacity-50"
+            >
+              {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Approve Selected ({selectedTransferIds.length})
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -344,6 +447,18 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
+                <th className="w-10 px-3 py-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={
+                      filteredTransfers.filter(t => t.status === 'in_buffer').length > 0 &&
+                      selectedTransferIds.length >= filteredTransfers.filter(t => t.status === 'in_buffer').length
+                    }
+                    onChange={toggleSelectAll}
+                    className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                    title="Select all in-buffer transfers"
+                  />
+                </th>
                 {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
@@ -354,7 +469,7 @@ export default function MaterialTransferPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={11} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
@@ -364,8 +479,25 @@ export default function MaterialTransferPage() {
                   const quantity = Math.abs(transfer.quantity || 0);
                   const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
                   const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
+                  const isSelected = selectedTransferIds.includes(transfer.id);
                   return (
-                    <tr key={transfer.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setViewTransfer(transfer)}>
+                    <tr
+                      key={transfer.id}
+                      className={`hover:bg-slate-50 cursor-pointer ${isSelected ? 'bg-teal-50/40' : ''}`}
+                      onClick={() => setViewTransfer(transfer)}
+                    >
+                      <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        {transfer.status === 'in_buffer' ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectTransfer(transfer.id)}
+                            className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-slate-300 text-xs">•</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5 text-sm text-slate-600">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
