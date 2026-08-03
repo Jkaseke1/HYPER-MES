@@ -11,6 +11,7 @@ import StockOverrideModal from '../components/stock/StockOverrideModal';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
 import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
 import MacropackReconReport from '../components/reports/MacropackReconReport';
+import ApprovalHistory from '../components/approval/ApprovalHistory';
 
 /* ── Types ── */
 interface MacropackBom {
@@ -125,6 +126,8 @@ export default function MacropackManufacturingPage() {
   // Detail view
   const [selectedOrder, setSelectedOrder] = useState<ManufactureOrder | null>(null);
   const [issueRows, setIssueRows] = useState<IssueRow[]>([]);
+  const [declaredPackaging, setDeclaredPackaging] = useState<any[]>([]);
+  const [orderDetailTab, setOrderDetailTab] = useState<'ingredients' | 'output' | 'audit'>('ingredients');
   const [selectedBom, setSelectedBom] = useState<MacropackBom | null>(null);
   const [selectedBomIngredients, setSelectedBomIngredients] = useState<BomIngredient[]>([]);
 
@@ -292,17 +295,27 @@ export default function MacropackManufacturingPage() {
 
   async function openOrderDetail(order: ManufactureOrder) {
     setSelectedOrder(order);
+    setOrderDetailTab('ingredients');
     setOrderDetailModalOpen(true);
 
-    const { data: ings } = await supabase
-      .from('macropack_bom_ingredients')
-      .select('raw_material_id, grams_per_unit, raw_materials(id, code, name)')
-      .eq('macropack_bom_id', order.macropack_bom_id);
+    const [ingsRes, issuesRes, pkgIssuesRes] = await Promise.all([
+      supabase
+        .from('macropack_bom_ingredients')
+        .select('raw_material_id, grams_per_unit, raw_materials(id, code, name)')
+        .eq('macropack_bom_id', order.macropack_bom_id),
+      supabase
+        .from('macropack_manufacture_issues')
+        .select('*')
+        .eq('manufacture_order_id', order.id),
+      supabase
+        .from('macropack_packaging_issues')
+        .select('*')
+        .eq('order_id', order.id),
+    ]);
 
-    const { data: issues } = await supabase
-      .from('macropack_manufacture_issues')
-      .select('*')
-      .eq('manufacture_order_id', order.id);
+    const ings = ingsRes.data || [];
+    const issues = issuesRes.data || [];
+    setDeclaredPackaging(pkgIssuesRes.data || []);
 
     const issueMap: Record<string, any> = {};
     (issues || []).forEach((iss: any) => { issueMap[iss.raw_material_id] = iss; });
@@ -843,13 +856,14 @@ export default function MacropackManufacturingPage() {
       </Modal>
 
       {/* ── Order Details & Dispensing Modal ── */}
-      <Modal open={orderDetailModalOpen} onClose={() => setOrderDetailModalOpen(false)} title="Order Details & Dispensing">
+      <Modal open={orderDetailModalOpen} onClose={() => setOrderDetailModalOpen(false)} title="Macropack Order Execution & Audit">
         {selectedOrder && (
           <div className="space-y-5 p-1">
+            {/* Dark Top Header */}
             <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="text-xs font-bold text-teal-400 uppercase tracking-widest">Macropack Order</div>
+                  <div className="text-xs font-bold text-teal-400 uppercase tracking-widest">Macropack Premix Order</div>
                   <h3 className="text-xl font-black text-white">{selectedOrder.macropack_boms?.macropack_name}</h3>
                   <div className="text-xs font-mono text-teal-300 mt-0.5">{selectedOrder.macropack_boms?.macropack_code}</div>
                 </div>
@@ -858,123 +872,213 @@ export default function MacropackManufacturingPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs border-t border-slate-800">
-                <div>
-                  <span className="text-slate-400">Planned Batch Qty:</span>
-                  <div className="font-bold text-white text-base">{selectedOrder.planned_units?.toLocaleString()} kg</div>
+              {/* Quick KPI Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-800">
+                <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Planned Units</span>
+                  <div className="font-extrabold text-white text-base font-mono mt-0.5">{selectedOrder.planned_units?.toLocaleString()} units</div>
                 </div>
-                <div>
-                  <span className="text-slate-400">Manufacture Date:</span>
-                  <div className="font-bold text-white text-base">{selectedOrder.manufacture_date}</div>
+                <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Actual Units Output</span>
+                  <div className="font-extrabold text-emerald-400 text-base font-mono mt-0.5">{(selectedOrder.actual_units || selectedOrder.planned_units || 0).toLocaleString()} units</div>
                 </div>
-                <div>
-                  <span className="text-slate-400">Target Line:</span>
-                  <div className="font-bold text-teal-400 text-base">Premix Line 1</div>
+                <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Production Yield</span>
+                  <div className="font-extrabold text-teal-300 text-base font-mono mt-0.5">
+                    {selectedOrder.planned_units > 0
+                      ? Math.round(((selectedOrder.actual_units || selectedOrder.planned_units || 0) / selectedOrder.planned_units) * 100)
+                      : 100}%
+                  </div>
+                </div>
+                <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Manufacture Date</span>
+                  <div className="font-extrabold text-white text-base mt-0.5">{selectedOrder.manufacture_date}</div>
                 </div>
               </div>
             </div>
 
-            {/* Workflow Control Buttons */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {selectedOrder.status === 'DRAFT' && (
-                <button
-                  onClick={() => handleApprovalAction('submit')}
-                  disabled={approvalSaving}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-                >
-                  <Send className="w-3.5 h-3.5" /> Submit for RM Approval
-                </button>
-              )}
-              {selectedOrder.status === 'PENDING_RM' && (
-                <button
-                  onClick={() => handleApprovalAction('approve_rm')}
-                  disabled={approvalSaving}
-                  className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-                >
-                  <ThumbsUp className="w-3.5 h-3.5" /> Approve RM Allocation
-                </button>
-              )}
-              {selectedOrder.status === 'PENDING_SUPERVISOR' && (
-                <button
-                  onClick={() => handleApprovalAction('approve_supervisor')}
-                  disabled={approvalSaving}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Supervisor Sign-off
-                </button>
-              )}
-              {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
-                <button
-                  onClick={handleStartOrder}
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-                >
-                  <Play className="w-3.5 h-3.5" /> Start Manufacturing Run
-                </button>
-              )}
-              {selectedOrder.status === 'IN_PROGRESS' && (
-                <button
-                  onClick={handleCompleteOrder}
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Declare Packaging & Complete Order
-                </button>
-              )}
+            {/* Workflow Control Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-100 rounded-xl border border-slate-200">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedOrder.status === 'DRAFT' && (
+                  <button
+                    onClick={() => handleApprovalAction('submit')}
+                    disabled={approvalSaving}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Submit for RM Allocation
+                  </button>
+                )}
+                {selectedOrder.status === 'PENDING_RM' && (
+                  <button
+                    onClick={() => handleApprovalAction('approve_rm')}
+                    disabled={approvalSaving}
+                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" /> Approve RM Allocation
+                  </button>
+                )}
+                {selectedOrder.status === 'PENDING_SUPERVISOR' && (
+                  <button
+                    onClick={() => handleApprovalAction('approve_supervisor')}
+                    disabled={approvalSaving}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Supervisor Sign-off
+                  </button>
+                )}
+                {(selectedOrder.status === 'APPROVED' || selectedOrder.status === 'PLANNED') && (
+                  <button
+                    onClick={handleStartOrder}
+                    disabled={saving}
+                    className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <Play className="w-3.5 h-3.5" /> Start Manufacturing Run
+                  </button>
+                )}
+                {selectedOrder.status === 'IN_PROGRESS' && (
+                  <button
+                    onClick={handleCompleteOrder}
+                    disabled={saving}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Declare Packaging & Complete Order
+                  </button>
+                )}
+                {['PENDING_RM', 'PENDING_SUPERVISOR'].includes(selectedOrder.status) && (
+                  <button
+                    onClick={() => handleApprovalAction('reject')}
+                    disabled={approvalSaving}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition-all shadow-md"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Reject Order
+                  </button>
+                )}
+              </div>
+
+              {/* Detail Navigation Tabs */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200">
+                {(['ingredients', 'output', 'audit'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setOrderDetailTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      orderDetailTab === tab ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tab === 'ingredients' ? 'Ingredients & Dispensing' : tab === 'output' ? 'Output & Packaging' : 'Approval Audit'}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Dispensing Ingredients Table */}
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
-              <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 font-bold text-xs text-slate-800 uppercase tracking-wider">
-                Micro-Ingredient Dispensing Table
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="px-3.5 py-2.5 text-left">Code</th>
-                      <th className="px-3.5 py-2.5 text-left">Ingredient</th>
-                      <th className="px-3.5 py-2.5 text-right">Expected (kg)</th>
-                      <th className="px-3.5 py-2.5 text-right">Actual Dispensed (kg)</th>
-                      <th className="px-3.5 py-2.5 text-right">Variance %</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-medium">
-                    {issueRows.map((row) => (
-                      <tr key={row.raw_material_id}>
-                        <td className="px-3.5 py-2.5 font-mono text-teal-800 font-bold">{row.ingredient_code}</td>
-                        <td className="px-3.5 py-2.5 text-slate-800 font-bold">{row.ingredient_name}</td>
-                        <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">
-                          {(row.expected_grams / 1000).toFixed(3)} kg
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right">
-                          {selectedOrder.status === 'IN_PROGRESS' ? (
-                            <input
-                              type="number"
-                              step="0.001"
-                              value={row.actual_grams_dispensed}
-                              onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
-                              className="w-24 text-right border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-teal-500"
-                            />
-                          ) : (
-                            <span className="font-mono font-bold text-slate-900">
-                              {typeof row.actual_grams_dispensed === 'number' ? row.actual_grams_dispensed.toFixed(3) : '—'} kg
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono font-bold">
-                          {row.variance_pct !== null ? (
-                            <span className={Math.abs(row.variance_pct) > 2 ? 'text-red-600' : 'text-emerald-600'}>
-                              {row.variance_pct.toFixed(1)}%
-                            </span>
-                          ) : '—'}
-                        </td>
+            {/* TAB 1: Ingredients & Dispensing Table */}
+            {orderDetailTab === 'ingredients' && (
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                  <span className="font-bold text-xs text-slate-800 uppercase tracking-wider">Micro-Ingredient Dispensing Table</span>
+                  <span className="text-xs font-bold text-teal-700 font-mono">{issueRows.length} Items</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-3.5 py-2.5 text-left">Code</th>
+                        <th className="px-3.5 py-2.5 text-left">Ingredient</th>
+                        <th className="px-3.5 py-2.5 text-right">Expected (kg)</th>
+                        <th className="px-3.5 py-2.5 text-right">Actual Dispensed (kg)</th>
+                        <th className="px-3.5 py-2.5 text-right">Variance %</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-medium">
+                      {issueRows.map((row) => (
+                        <tr key={row.raw_material_id}>
+                          <td className="px-3.5 py-2.5 font-mono text-teal-800 font-bold">{row.ingredient_code}</td>
+                          <td className="px-3.5 py-2.5 text-slate-800 font-bold">{row.ingredient_name}</td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">
+                            {(row.expected_grams / 1000).toFixed(3)} kg
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            {selectedOrder.status === 'IN_PROGRESS' ? (
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={row.actual_grams_dispensed}
+                                onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
+                                className="w-24 text-right border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-teal-500"
+                              />
+                            ) : (
+                              <span className="font-mono font-bold text-slate-900">
+                                {typeof row.actual_grams_dispensed === 'number' ? row.actual_grams_dispensed.toFixed(3) : '—'} kg
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold">
+                            {row.variance_pct !== null ? (
+                              <span className={Math.abs(row.variance_pct) > 2 ? 'text-red-600' : 'text-emerald-600'}>
+                                {row.variance_pct.toFixed(1)}%
+                              </span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* TAB 2: Output & Packaging */}
+            {orderDetailTab === 'output' && (
+              <div className="space-y-4">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white p-4 space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-xs text-slate-800 uppercase tracking-wider border-b pb-2">
+                    <Package className="w-4 h-4 text-teal-600" />
+                    Declared Packaging Consumption
+                  </div>
+
+                  {declaredPackaging.length > 0 ? (
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Item Code</th>
+                          <th className="px-3 py-2 text-left">Description</th>
+                          <th className="px-3 py-2 text-right">Expected</th>
+                          <th className="px-3 py-2 text-right">Actual Used</th>
+                          <th className="px-3 py-2 text-right">Variance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {declaredPackaging.map((pkg, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 font-mono font-bold text-slate-800">{pkg.item_code}</td>
+                            <td className="px-3 py-2 text-slate-800 font-medium">{pkg.description}</td>
+                            <td className="px-3 py-2 text-right font-mono text-slate-600">{pkg.expected_qty}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">{pkg.actual_qty}</td>
+                            <td className="px-3 py-2 text-right font-mono text-slate-600">{pkg.variance_qty || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
+                      No packaging declared yet for this order. When completing production, declared packaging will be recorded here.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: Approval Audit */}
+            {orderDetailTab === 'audit' && (
+              <div className="border border-slate-200 rounded-2xl bg-white p-5 space-y-4 shadow-sm">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <ShieldCheck className="w-4 h-4 text-teal-600" />
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Macropack Approval & Audit Trail</h3>
+                </div>
+                <ApprovalHistory entityType="macropack_order" entityId={selectedOrder.id} />
+              </div>
+            )}
 
             <div className="flex justify-end pt-3">
               <button
@@ -1053,7 +1157,10 @@ export default function MacropackManufacturingPage() {
           open={showPackagingModal}
           onClose={() => setShowPackagingModal(false)}
           onConfirm={handlePackagingConfirm}
+          bomPackagingItems={bomPackagingItems}
           items={bomPackagingItems}
+          plannedQty={selectedOrder?.planned_units || 0}
+          rateLabel={`${selectedOrder?.planned_units || 0} units`}
           title="Macropack Packaging Declaration"
         />
       )}

@@ -21,10 +21,12 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onConfirm: (actuals: PackagingActual[], notes: string) => Promise<void>;
-  bomPackagingItems: PackagingItem[];
-  plannedQty: number;
-  rateLabel: string;
+  bomPackagingItems?: PackagingItem[];
+  items?: PackagingItem[];
+  plannedQty?: number;
+  rateLabel?: string;
   saving?: boolean;
+  title?: string;
 }
 
 export default function PackagingDeclarationModal({
@@ -32,22 +34,26 @@ export default function PackagingDeclarationModal({
   onClose,
   onConfirm,
   bomPackagingItems,
+  items,
   plannedQty,
   rateLabel,
   saving = false,
+  title = "Declare Packaging Used"
 }: Props) {
   const [actuals, setActuals] = useState<PackagingActual[]>([]);
   const [notes, setNotes] = useState('');
 
+  const packagingList = bomPackagingItems || items || [];
+
   useEffect(() => {
     if (open) {
-      setActuals(bomPackagingItems.map(item => ({
+      setActuals(packagingList.map(item => ({
         ...item,
-        actual_qty: String(item.expected_qty),
+        actual_qty: String(item.expected_qty || 0),
       })));
       setNotes('');
     }
-  }, [open, bomPackagingItems]);
+  }, [open, bomPackagingItems, items]);
 
   function updateActual(idx: number, value: string) {
     const updated = [...actuals];
@@ -56,14 +62,14 @@ export default function PackagingDeclarationModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Declare Packaging Used" size="lg">
+    <Modal open={open} onClose={onClose} title={title} size="lg">
       <div className="space-y-4">
         <div className="flex items-start gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3">
           <Package className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
           <p className="text-xs text-teal-800">
             Record the actual packaging consumed for this batch.
-            {bomPackagingItems.length > 0 && (
-              <> Expected quantities are pre-filled based on BOM rate ({rateLabel}).</>
+            {packagingList.length > 0 && (
+              <> Expected quantities are pre-filled based on BOM rate ({rateLabel || 'Standard'}).</>
             )}
           </p>
         </div>
