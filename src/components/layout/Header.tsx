@@ -35,6 +35,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [updateMenuOpen, setUpdateMenuOpen] = useState(false);
 
   async function handleApplyAllUpdates() {
+    toast.success('Installing latest MES update & refreshing application...');
     try {
       pendingUpdates.forEach((up) => {
         const cleanVer = (up.version || '').trim().toLowerCase().replace('v', '');
@@ -55,8 +56,10 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     } catch (e) {
       console.warn('Error clearing caches on update apply:', e);
     }
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.location.href = `${cleanUrl}?v=${Date.now()}${window.location.hash}`;
+    setTimeout(() => {
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.location.href = `${cleanUrl}?v=${Date.now()}${window.location.hash}`;
+    }, 500);
   }
 
   useEffect(() => {

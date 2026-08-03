@@ -927,166 +927,64 @@ export default function AdminUsersPage() {
       {/* System Updates & Version Control Tab */}
       {activeTab === 'system_updates' && (
         <div className="space-y-6">
-          {/* Header Control Card */}
-          <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-lg">
-                <Sparkles className="w-7 h-7" />
+          {/* Top Banner */}
+          <div className="bg-slate-900 text-white p-6 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
+                <Sparkles className="w-6 h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-black tracking-wide text-white uppercase">HYPER MES Realtime Release & Deployment Hub</h3>
-                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold rounded-full flex items-center gap-1">
-                    <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> LIVE ENGINE
+                  <h3 className="text-lg font-black text-white">System Version Control & Release Log</h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <Radio className="w-3 h-3 text-emerald-400 animate-pulse" /> LIVE PRODUCTION
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 mt-1">Broadcast new software builds & feature updates instantly to all connected user sessions across all branches</p>
+                <p className="text-xs text-slate-300 mt-1">
+                  Code changes and new builds are compiled automatically. Users install updates directly via the top screen header menu.
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="bg-slate-800/80 border border-slate-700 px-4 py-2.5 rounded-xl font-mono text-xs shadow-inner">
-                <p className="text-[10px] text-slate-400 uppercase font-bold">Installed Build</p>
-                <p className="text-base font-black text-emerald-400">{APP_VERSION}</p>
+            <div className="bg-slate-800/80 border border-slate-700 px-5 py-3 rounded-2xl font-mono text-xs shadow-inner flex items-center gap-3">
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase font-bold">Installed Production Build</p>
+                <p className="text-lg font-black text-emerald-400">{APP_VERSION}</p>
               </div>
-
-              <button
-                onClick={handleSoftUpdate}
-                disabled={broadcasting || isSoftAlreadySent}
-                className={`px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 ${
-                  isSoftAlreadySent
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 cursor-not-allowed'
-                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 hover:scale-[1.02]'
-                }`}
-              >
-                {isSoftAlreadySent ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Broadcast Active ({updateVersion})
-                  </>
-                ) : broadcasting ? (
-                  'Pushing Update...'
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-slate-950" /> 🚀 1-Click Broadcast Update to Users
-                  </>
-                )}
-              </button>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Option 1: Soft Update Notification (Non-Disruptive) */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-extrabold text-slate-900">Option 1: Announce Soft Update (Recommended)</h4>
-                    <p className="text-xs text-slate-500">Non-disruptive header banner notification across all active user sessions</p>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  Displays a top header banner <strong>"✨ MES Update Available — [Update Now]"</strong> on all user screens. 
-                  Users can complete active manufacturing entries safely and update when convenient.
-                </p>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Target Version Tag</label>
-                    <input
-                      type="text"
-                      value={updateVersion}
-                      onChange={(e) => setUpdateVersion(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 font-mono font-bold"
-                      placeholder="e.g., v2.4.6"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Release Announcement Notes</label>
-                    <textarea
-                      value={updateNotes}
-                      onChange={(e) => setUpdateNotes(e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                      placeholder="Summary of new MES enhancements..."
-                    />
-                  </div>
-                </div>
+          {/* Version Info & Self-Installation Guidance Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+              <div className="flex items-center gap-2 text-teal-700 font-extrabold text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Automated Update Distribution
               </div>
-
-              <button
-                onClick={handleSoftUpdate}
-                disabled={broadcasting || isSoftAlreadySent}
-                className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
-                  isSoftAlreadySent
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none font-extrabold'
-                    : 'bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50'
-                }`}
-              >
-                {isSoftAlreadySent ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    Soft Update Broadcast Sent ({updateVersion})
-                  </>
-                ) : broadcasting ? (
-                  'Broadcasting Update...'
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Announce Soft Update to Users
-                  </>
-                )}
-              </button>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                When new software builds are committed to GitHub main branch, the PWA service worker automatically registers the new assets.
+              </p>
             </div>
 
-            {/* Option 2: Force Push Critical Update (Immediate) */}
-            <div className="bg-white p-6 rounded-2xl border border-red-200 shadow-sm flex flex-col justify-between space-y-4">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold">
-                    <Zap className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-extrabold text-red-900">Option 2: Force Push Critical Update (Immediate)</h4>
-                    <p className="text-xs text-red-500">Auto-refreshes all active user sessions immediately</p>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  Triggers an instant modal countdown <strong>(5 seconds)</strong> on all active browser sessions across all branches and forces an immediate reload to the latest code. Use for critical system updates.
-                </p>
-
-                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[11px] text-red-700 font-medium">
-                  ⚠️ Note: Forces all active user screens to refresh within 5 seconds.
-                </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+              <div className="flex items-center gap-2 text-purple-700 font-extrabold text-xs">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                User-Initiated Self Installation
               </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Users can click the top header pill <strong>[ MES {APP_VERSION} ]</strong> at any time to inspect release notes and trigger an instant 1-click update.
+              </p>
+            </div>
 
-              <button
-                onClick={handleForceUpdate}
-                disabled={broadcasting || isForceAlreadySent}
-                className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
-                  isForceAlreadySent
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none font-extrabold'
-                    : 'bg-red-600 hover:bg-red-700 text-white disabled:opacity-50'
-                }`}
-              >
-                {isForceAlreadySent ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    Critical Force Update Pushed ({updateVersion})
-                  </>
-                ) : broadcasting ? (
-                  'Pushing Force Reload...'
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 animate-bounce" />
-                    ⚡ Force Push Critical Update to Everyone
-                  </>
-                )}
-              </button>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+              <div className="flex items-center gap-2 text-blue-700 font-extrabold text-xs">
+                <Globe className="w-4 h-4 text-blue-600" />
+                Zero Downtime Deployments
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Operators can safely finish active manufacturing batches before installing updates without losing work or interrupting active sessions.
+              </p>
             </div>
           </div>
 
@@ -1126,29 +1024,25 @@ export default function AdminUsersPage() {
                       <p className="text-[10px] text-slate-500 mt-1">Author: {cmt.author}</p>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setUpdateVersion(`${getNextVersion(APP_VERSION)}-${cmt.shortSha}`);
-                        setUpdateNotes(`GitHub Push #${cmt.shortSha}: ${cmt.message}`);
-                        toast.success(`Selected GitHub commit #${cmt.shortSha} as target version ${getNextVersion(APP_VERSION)}-${cmt.shortSha}!`);
-                      }}
-                      className="w-full py-1.5 bg-white border border-teal-300 hover:bg-teal-50 text-teal-700 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" /> Select for Broadcast
-                    </button>
+                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Deployed to Production
+                      </span>
+                      <span className="text-[10px] text-slate-400">Available to Users</span>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Realtime Broadcast History & Version Status Audit Trail */}
+          {/* System Version Release & Audit Trail */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
                   <Activity className="w-4 h-4 text-teal-600" />
-                  Broadcast History & System Update Audit Trail
+                  System Version Release & Audit Trail
                 </h4>
                 <p className="text-xs text-slate-500">Live log of all soft update announcements and critical force pushes across branches</p>
               </div>
