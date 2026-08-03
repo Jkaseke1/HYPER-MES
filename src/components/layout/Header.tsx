@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
 import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload, fetchRecentSystemUpdates, fetchPendingUpdates, SystemUpdateLogRecord } from '../../lib/updateManager';
 import { APP_VERSION } from '../../config/version';
+import { toast } from 'react-hot-toast';
 
 interface NotificationItem {
   id: string;
@@ -35,7 +36,10 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [updateMenuOpen, setUpdateMenuOpen] = useState(false);
 
   async function handleApplyAllUpdates() {
-    toast.success('Installing latest MES update & refreshing application...');
+    try {
+      toast.success('Installing latest MES update & refreshing application...');
+    } catch (e) {}
+
     try {
       pendingUpdates.forEach((up) => {
         const cleanVer = (up.version || '').trim().toLowerCase().replace('v', '');
@@ -48,12 +52,6 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         const cleanVer = (softUpdate.version || '').trim().toLowerCase().replace('v', '');
         localStorage.setItem(`hyper_mes_applied_${cleanVer}`, 'true');
       }
-      // Also fetch and set latest github commit sha if available
-      const commits = await fetchGitHubCommits();
-      if (commits.length > 0) {
-        localStorage.setItem('hyper_mes_installed_sha', commits[0].sha);
-        localStorage.setItem(`hyper_mes_applied_${commits[0].shortSha}`, 'true');
-      }
       if ('caches' in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((k) => caches.delete(k)));
@@ -64,11 +62,10 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       }
     } catch (e) {
       console.warn('Error clearing caches on update apply:', e);
-    }
-    setTimeout(() => {
+    } finally {
       const cleanUrl = window.location.origin + window.location.pathname;
       window.location.href = `${cleanUrl}?v=${Date.now()}${window.location.hash}`;
-    }, 500);
+    }
   }
 
   useEffect(() => {
