@@ -17,8 +17,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function validateHyperfeedsDomain(email: string): Error | null {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
-    return new Error('Access restricted: Only official @hyperfeeds.co.zw email addresses are allowed to access HYPER MES.');
+  const allowed = ['@hyperfeeds.com', '@hyperfeeds.co.zw', '@hyperfeedsnutrition.co.zw'];
+  if (!allowed.some(d => cleanEmail.endsWith(d))) {
+    return new Error('Access restricted: Only official Hyperfeeds email addresses (@hyperfeeds.com / @hyperfeeds.co.zw) are allowed to access HYPER MES.');
   }
   return null;
 }

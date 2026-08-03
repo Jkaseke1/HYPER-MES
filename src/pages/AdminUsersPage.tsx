@@ -350,8 +350,9 @@ export default function AdminUsersPage() {
     }
 
     const cleanEmail = userForm.email.trim().toLowerCase();
-    if (!cleanEmail.endsWith('@hyperfeeds.co.zw') && !cleanEmail.endsWith('@hyperfeedsnutrition.co.zw')) {
-      toast.error('Access restricted: Only official @hyperfeeds.co.zw email addresses are allowed.');
+    const allowedDomains = ['@hyperfeeds.com', '@hyperfeeds.co.zw', '@hyperfeedsnutrition.co.zw'];
+    if (!allowedDomains.some(domain => cleanEmail.endsWith(domain))) {
+      toast.error('Access restricted: Only official Hyperfeeds email addresses (@hyperfeeds.com / @hyperfeeds.co.zw) are allowed.');
       return;
     }
 
