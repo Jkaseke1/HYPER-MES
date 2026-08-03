@@ -40,10 +40,19 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       pendingUpdates.forEach((up) => {
         const cleanVer = (up.version || '').trim().toLowerCase().replace('v', '');
         localStorage.setItem(`hyper_mes_applied_${cleanVer}`, 'true');
+        if (up.id) {
+          localStorage.setItem('hyper_mes_installed_sha', up.id);
+        }
       });
       if (softUpdate) {
         const cleanVer = (softUpdate.version || '').trim().toLowerCase().replace('v', '');
         localStorage.setItem(`hyper_mes_applied_${cleanVer}`, 'true');
+      }
+      // Also fetch and set latest github commit sha if available
+      const commits = await fetchGitHubCommits();
+      if (commits.length > 0) {
+        localStorage.setItem('hyper_mes_installed_sha', commits[0].sha);
+        localStorage.setItem(`hyper_mes_applied_${commits[0].shortSha}`, 'true');
       }
       if ('caches' in window) {
         const keys = await caches.keys();

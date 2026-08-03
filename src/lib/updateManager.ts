@@ -203,15 +203,49 @@ export async function fetchRecentSystemUpdates(): Promise<SystemUpdateLogRecord[
   );
 }
 
+export const INSTALLED_SHA_KEY = 'hyper_mes_installed_sha';
+
 export async function fetchPendingUpdates(): Promise<SystemUpdateLogRecord[]> {
+  const pending: SystemUpdateLogRecord[] = [];
+  const installedSha = localStorage.getItem(INSTALLED_SHA_KEY);
+
+  // 1. Check for new GitHub deployment commits
+  const commits = await fetchGitHubCommits();
+  if (commits.length > 0) {
+    const latestCommit = commits[0];
+    
+    if (!installedSha) {
+      localStorage.setItem(INSTALLED_SHA_KEY, latestCommit.sha);
+    } else if (installedSha !== latestCommit.sha) {
+      const isApplied = localStorage.getItem(`hyper_mes_applied_${latestCommit.shortSha}`) === 'true';
+      if (!isApplied) {
+        pending.push({
+          id: latestCommit.sha,
+          version: `v2.4.6-${latestCommit.shortSha}`,
+          type: 'soft_update',
+          message: `New build deployed: ${latestCommit.message}`,
+          admin_email: latestCommit.author,
+          timestamp: latestCommit.date,
+        });
+      }
+    }
+  }
+
+  // 2. Check traditional release logs
   const allHistory = await fetchRecentSystemUpdates();
   const cleanCurrent = APP_VERSION.replace('v', '').trim().toLowerCase();
 
-  return allHistory.filter(rec => {
+  for (const rec of allHistory) {
     const cleanRecVer = (rec.version || '').replace('v', '').trim().toLowerCase();
     const isApplied = localStorage.getItem(`hyper_mes_applied_${cleanRecVer}`) === 'true';
-    return cleanRecVer !== cleanCurrent && !isApplied;
-  });
+    if (cleanRecVer !== cleanCurrent && !isApplied) {
+      if (!pending.some(p => p.version === rec.version)) {
+        pending.push(rec);
+      }
+    }
+  }
+
+  return pending;
 }
 
 export async function fetchGitHubCommits(): Promise<GitHubCommitRecord[]> {
