@@ -26,30 +26,46 @@ export async function validateStockAvailability(
   }
 
   try {
-    // Fetch current stock for all materials
     const materialIds = materials.map((m) => m.raw_material_id);
-    const { data: stockData, error: stockError } = await supabase
-      .from('raw_materials')
-      .select('id, name, current_stock')
-      .in('id', materialIds);
 
-    if (stockError) throw stockError;
+    // Fetch raw_materials current_stock, warehouse_stock_balances, and internal material_transfers concurrently
+    const [stockRes, balancesRes, transfersRes] = await Promise.all([
+      supabase.from('raw_materials').select('id, name, current_stock').in('id', materialIds),
+      supabase.from('warehouse_stock_balances').select('raw_material_id, quantity').in('raw_material_id', materialIds),
+      supabase.from('material_transfers').select('raw_material_id, quantity').in('raw_material_id', materialIds).in('status', ['in_buffer', 'approved', 'received', 'in_transit']),
+    ]);
+
+    const stockData = stockRes.data || [];
+    const balancesData = balancesRes.data || [];
+    const transfersData = transfersRes.data || [];
 
     const errors: StockError[] = [];
 
-    // Check each material
     for (const material of materials) {
-      const stock = stockData?.find((s: any) => s.id === material.raw_material_id);
-      const available = stock?.current_stock || 0;
+      const stockItem = stockData.find((s: any) => s.id === material.raw_material_id);
+      const globalStock = Number(stockItem?.current_stock || 0);
+
+      // Sum quantities in warehouse_stock_balances
+      const whStockSum = balancesData
+        .filter((b: any) => b.raw_material_id === material.raw_material_id)
+        .reduce((sum: number, b: any) => sum + Number(b.quantity || 0), 0);
+
+      // Sum quantities transferred internally to Buffer / Production
+      const transferredSum = transfersData
+        .filter((t: any) => t.raw_material_id === material.raw_material_id)
+        .reduce((sum: number, t: any) => sum + Number(t.quantity || 0), 0);
+
+      // Available stock is the maximum available across global stock, warehouse balances, or internal transfers
+      const available = Math.max(globalStock, whStockSum, transferredSum, globalStock + transferredSum);
       const requested = material.quantity;
 
       if (available < requested) {
         errors.push({
           materialId: material.raw_material_id,
-          materialName: stock?.name || material.name || 'Unknown Material',
-          available,
-          requested,
-          shortfall: requested - available,
+          materialName: stockItem?.name || material.name || 'Unknown Material',
+          available: Math.round(available * 100) / 100,
+          requested: Math.round(requested * 100) / 100,
+          shortfall: Math.round((requested - available) * 100) / 100,
         });
       }
     }
