@@ -55,10 +55,7 @@ export default function DispatchPage() {
   const [dnoteOrder, setDNoteOrder] = useState<DispatchOrder | null>(null);
   const [dnoteItems, setDNoteItems] = useState<DispatchItem[]>([]);
 
-  // Branch Confirmation Modal State
-  const [showBranchConfirmModal, setShowBranchConfirmModal] = useState(false);
-  const [branchConfirmOrder, setBranchConfirmOrder] = useState<DispatchOrder | null>(null);
-  const [branchNotes, setBranchNotes] = useState('');
+
 
   // Accounts Approval Modal State
   const [showAccountsApproveModal, setShowAccountsApproveModal] = useState(false);
@@ -311,24 +308,117 @@ export default function DispatchPage() {
     fetchOrders();
   };
 
-  // Branch Confirm Delivery Action
+  // Branch Confirmation & Variance Modal State
+  const [showBranchConfirmModal, setShowBranchConfirmModal] = useState(false);
+  const [branchConfirmOrder, setBranchConfirmOrder] = useState<DispatchOrder | null>(null);
+  const [branchConfirmItems, setBranchConfirmItems] = useState<Array<{
+    id: string;
+    product_name: string;
+    product_code: string;
+    batch_number: string;
+    dispatched_qty: number;
+    unit: string;
+    received_qty: number;
+    damaged_qty: number;
+    variance_reason: string;
+    line_notes: string;
+  }>>([]);
+  const [receiverName, setReceiverName] = useState('');
+  const [driverSigned, setDriverSigned] = useState(true);
+  const [branchNotes, setBranchNotes] = useState('');
+
+  const openBranchConfirmModal = async (order: DispatchOrder) => {
+    setBranchConfirmOrder(order);
+    setBranchNotes(order.branch_confirmation_notes || '');
+    setReceiverName(profile?.full_name || '');
+    setDriverSigned(true);
+
+    const { data: itemsData } = await supabase
+      .from('dispatch_items')
+      .select('*, formulations(name, code, sage_code)')
+      .eq('dispatch_order_id', order.id);
+
+    const mapped = (itemsData || []).map((it: any) => ({
+      id: it.id,
+      product_name: it.formulations?.name || 'Finished Product',
+      product_code: it.formulations?.code || it.formulations?.sage_code || 'FG-PROD',
+      batch_number: it.batch_number || 'N/A',
+      dispatched_qty: Number(it.quantity || 0),
+      unit: it.unit || 'kg',
+      received_qty: Number(it.quantity || 0),
+      damaged_qty: 0,
+      variance_reason: 'Full Delivery - Intact',
+      line_notes: '',
+    }));
+
+    setBranchConfirmItems(mapped);
+    setShowBranchConfirmModal(true);
+  };
+
+  const updateBranchItem = (idx: number, field: string, value: any) => {
+    setBranchConfirmItems(prev => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return updated;
+    });
+  };
+
+  // Branch Confirm Delivery Action with Variance Declaration
   const handleConfirmBranchDelivery = async () => {
     if (!branchConfirmOrder) return;
     setSaving(true);
     try {
+      const totalDispatched = branchConfirmItems.reduce((s, i) => s + i.dispatched_qty, 0);
+      const totalReceived = branchConfirmItems.reduce((s, i) => s + i.received_qty, 0);
+      const totalDamaged = branchConfirmItems.reduce((s, i) => s + i.damaged_qty, 0);
+      const totalVariance = totalReceived - totalDispatched;
+
+      const lineBreakdown = branchConfirmItems.map(i => {
+        const lineVar = i.received_qty - i.dispatched_qty;
+        return `${i.product_name} (${i.product_code}): Sent ${i.dispatched_qty} ${i.unit}, Recv ${i.received_qty} ${i.unit}${lineVar !== 0 ? ` [Var: ${lineVar > 0 ? '+' : ''}${lineVar} ${i.unit}]` : ''}${i.damaged_qty > 0 ? ` [Damaged: ${i.damaged_qty}]` : ''}${i.variance_reason !== 'Full Delivery - Intact' ? ` Reason: ${i.variance_reason}` : ''}`;
+      }).join('; ');
+
+      const formattedNotes = `Receiver: ${receiverName || profile?.full_name || 'Branch Manager'}. Driver Signed: ${driverSigned ? 'Yes' : 'No'}. ${
+        totalVariance !== 0 ? `[VARIANCE: ${totalVariance > 0 ? '+' : ''}${totalVariance} kg] ` : '[FULL RECEIPT] '
+      }${totalDamaged > 0 ? `[DAMAGED: ${totalDamaged} bags/units] ` : ''}${branchNotes ? `Remarks: ${branchNotes}. ` : ''}Details: ${lineBreakdown}`;
+
       const updates = {
         status: 'delivered',
         delivered_at: new Date().toISOString(),
         branch_confirmation_status: 'confirmed',
+        branch_confirmed_by: receiverName || profile?.full_name || 'Branch Receiver',
         branch_confirmed_at: new Date().toISOString(),
-        branch_confirmation_notes: branchNotes,
+        branch_confirmation_notes: formattedNotes,
       };
+
       const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', branchConfirmOrder.id);
       if (error) throw error;
-      
-      toast.success(`Branch delivery confirmed for ${branchConfirmOrder.dispatch_number}!`);
-      setShowBranchConfirmModal(false);
 
+      // Log stock movement for received stock at branch
+      const movements = branchConfirmItems.map(item => ({
+        warehouse_id: branchConfirmOrder.warehouse_id,
+        raw_material_id: null,
+        movement_type: 'transfer_in',
+        quantity: item.received_qty,
+        unit: item.unit,
+        notes: `Branch Goods Receipt ${branchConfirmOrder.dispatch_number} — Recv ${item.received_qty} ${item.unit}`,
+        reference_type: 'dispatch_order',
+        reference_id: branchConfirmOrder.id,
+        batch_number: item.batch_number || null,
+        movement_date: new Date().toISOString(),
+      }));
+
+      if (movements.length > 0) {
+        await supabase.from('stock_movements').insert(movements);
+      }
+
+      if (totalVariance < 0 || totalDamaged > 0) {
+        toast.error(`Branch Receipt Confirmed with Variance: ${Math.abs(totalVariance)} kg shortfall, ${totalDamaged} damaged!`, { duration: 6000 });
+      } else {
+        toast.success(`Branch Goods Receipt confirmed for ${branchConfirmOrder.dispatch_number}!`);
+      }
+
+      setShowBranchConfirmModal(false);
       if (viewOrder?.id === branchConfirmOrder.id) {
         setViewOrder({ ...viewOrder, ...updates });
       }
@@ -688,7 +778,7 @@ export default function DispatchPage() {
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => { setBranchConfirmOrder(o); setBranchNotes(o.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                                  onClick={() => openBranchConfirmModal(o)}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
                                 >
                                   <Check className="w-3 h-3" /> Confirm Receipt
@@ -1198,7 +1288,7 @@ export default function DispatchPage() {
                         </span>
                       ) : (
                         <button
-                          onClick={() => { setBranchConfirmOrder(viewOrder); setBranchNotes(viewOrder.branch_confirmation_notes || ''); setShowBranchConfirmModal(true); }}
+                          onClick={() => openBranchConfirmModal(viewOrder)}
                           className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-md"
                         >
                           <Check className="w-4 h-4" /> Step 3: Confirm Branch Receipt
@@ -1406,53 +1496,210 @@ export default function DispatchPage() {
         items={dnoteItems}
       />
 
-      {/* BRANCH CONFIRM DELIVERY MODAL */}
+      {/* BRANCH CONFIRM DELIVERY & VARIANCE DECLARATION MODAL */}
       <Dialog open={showBranchConfirmModal} onOpenChange={setShowBranchConfirmModal}>
-        <DialogContent className="max-w-md w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="p-2.5 bg-emerald-100 rounded-xl text-emerald-800">
-                <Check className="w-5 h-5" />
+        <DialogContent className="max-w-4xl w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
+          {branchConfirmOrder && (
+            <div className="space-y-4">
+              {/* Header Banner */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-sm">
+                    <Building className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-slate-900 text-lg">Branch Delivery Receiving & Declaration</h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300 font-mono">
+                        {branchConfirmOrder.dispatch_number}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Receiving Branch: <strong className="text-slate-800">{(branchConfirmOrder.branches as any)?.name || 'Branch'}</strong> | Vehicle: <strong className="text-slate-800">{branchConfirmOrder.vehicle_number || 'Unassigned'}</strong> (Driver: {branchConfirmOrder.driver_name || 'N/A'})
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Step 3: Confirm Branch Delivery</h3>
-                <p className="text-xs text-slate-500">Verify stock delivery at receiving branch</p>
+
+              {/* Summary Cards */}
+              {(() => {
+                const totalSent = branchConfirmItems.reduce((s, i) => s + i.dispatched_qty, 0);
+                const totalRecv = branchConfirmItems.reduce((s, i) => s + i.received_qty, 0);
+                const totalDamaged = branchConfirmItems.reduce((s, i) => s + i.damaged_qty, 0);
+                const variance = totalRecv - totalSent;
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">Sent / Dispatched</span>
+                      <span className="text-base font-black text-slate-900 font-mono">{totalSent.toLocaleString()} kg</span>
+                    </div>
+                    <div className="bg-teal-50 p-3 rounded-xl border border-teal-200">
+                      <span className="text-[10px] text-teal-700 uppercase font-bold block">Branch Received</span>
+                      <span className="text-base font-black text-teal-900 font-mono">{totalRecv.toLocaleString()} kg</span>
+                    </div>
+                    <div className={`p-3 rounded-xl border ${variance < 0 ? 'bg-red-50 border-red-200 text-red-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
+                      <span className="text-[10px] uppercase font-bold block opacity-75">Net Variance</span>
+                      <span className="text-base font-black font-mono">
+                        {variance > 0 ? `+${variance}` : variance < 0 ? `${variance}` : '0 (Intact)'} kg
+                      </span>
+                    </div>
+                    <div className={`p-3 rounded-xl border ${totalDamaged > 0 ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                      <span className="text-[10px] uppercase font-bold block opacity-75">Damaged / Wet</span>
+                      <span className="text-base font-black font-mono">{totalDamaged} bags/units</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Line-by-Line Receipt Declaration Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                  <span className="font-bold text-xs text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <Package className="w-4 h-4 text-teal-600" /> Line-by-Line Receipt Declaration ({branchConfirmItems.length} Products)
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">Specify actual offloaded quantities & discrepancy reason</span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-bold">
+                      <tr>
+                        <th className="px-3.5 py-2.5 text-left">Product / Code</th>
+                        <th className="px-3.5 py-2.5 text-left">Batch #</th>
+                        <th className="px-3.5 py-2.5 text-right">Dispatched</th>
+                        <th className="px-3.5 py-2.5 text-right text-teal-800">Received Qty</th>
+                        <th className="px-3.5 py-2.5 text-right text-amber-800">Damaged Qty</th>
+                        <th className="px-3.5 py-2.5 text-left">Discrepancy Reason</th>
+                        <th className="px-3.5 py-2.5 text-left">Line Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-medium">
+                      {branchConfirmItems.map((item, idx) => {
+                        const lineVariance = item.received_qty - item.dispatched_qty;
+                        return (
+                          <tr key={item.id} className={lineVariance < 0 || item.damaged_qty > 0 ? 'bg-amber-50/40' : 'hover:bg-slate-50'}>
+                            <td className="px-3.5 py-2.5">
+                              <div className="font-bold text-slate-900">{item.product_name}</div>
+                              <div className="font-mono text-[10px] text-teal-700">{item.product_code}</div>
+                            </td>
+                            <td className="px-3.5 py-2.5 font-mono text-slate-600">{item.batch_number}</td>
+                            <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-700">
+                              {item.dispatched_qty.toLocaleString()} {item.unit}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right">
+                              <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={item.received_qty}
+                                onChange={(e) => updateBranchItem(idx, 'received_qty', Number(e.target.value))}
+                                className="w-24 text-right border border-teal-300 rounded-lg px-2 py-1 font-mono font-extrabold focus:ring-2 focus:ring-teal-500 outline-none bg-teal-50"
+                              />
+                              {lineVariance !== 0 && (
+                                <span className={`block text-[10px] font-mono font-bold ${lineVariance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                  {lineVariance > 0 ? `+${lineVariance}` : `${lineVariance}`} {item.unit}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right">
+                              <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={item.damaged_qty}
+                                onChange={(e) => updateBranchItem(idx, 'damaged_qty', Number(e.target.value))}
+                                className="w-20 text-right border border-amber-300 rounded-lg px-2 py-1 font-mono font-bold focus:ring-2 focus:ring-amber-500 outline-none bg-amber-50"
+                              />
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <select
+                                value={item.variance_reason}
+                                onChange={(e) => updateBranchItem(idx, 'variance_reason', e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg p-1 text-[11px] font-medium outline-none focus:ring-1 focus:ring-teal-500"
+                              >
+                                <option value="Full Delivery - Intact">Full Delivery - Intact</option>
+                                <option value="Short-Landed / Truck Offloaded Less">Short-Landed / Truck Offloaded Less</option>
+                                <option value="Wet / Moisture Damage">Wet / Moisture Damage</option>
+                                <option value="Torn / Open Bags">Torn / Open Bags</option>
+                                <option value="Spillage in Transit">Spillage in Transit</option>
+                                <option value="Driver Discrepancy / Broken Seal">Driver Discrepancy / Broken Seal</option>
+                              </select>
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <input
+                                type="text"
+                                placeholder="e.g. 2 bags wet"
+                                value={item.line_notes}
+                                onChange={(e) => updateBranchItem(idx, 'line_notes', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1 text-[11px]"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Receiver Information & Remarks */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase">Received By (Branch Staff Name) *</label>
+                    <input
+                      type="text"
+                      value={receiverName}
+                      onChange={(e) => setReceiverName(e.target.value)}
+                      placeholder="Enter branch staff receiver name..."
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold bg-white"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={driverSigned}
+                      onChange={(e) => setDriverSigned(e.target.checked)}
+                      className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300"
+                    />
+                    <span>Driver Acknowledged & Signed Delivery Note Remarks</span>
+                  </label>
+                </div>
+
+                <div className="space-y-1 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase">General Receiving Inspection Remarks</label>
+                  <textarea
+                    value={branchNotes}
+                    onChange={(e) => setBranchNotes(e.target.value)}
+                    placeholder="e.g. Offloaded 18 good bags, 2 bags short. Driver signed physical delivery note with short-landed remark."
+                    rows={3}
+                    className="w-full border border-slate-300 rounded-xl p-2 text-xs bg-white focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowBranchConfirmModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmBranchDelivery}
+                  disabled={saving}
+                  className="px-5 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 hover:scale-[1.01] transition-all"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> {saving ? 'Submitting Receipt...' : 'Confirm Branch Receipt & Submit Declaration'}
+                </button>
               </div>
             </div>
-
-            <p className="text-xs text-slate-700 font-medium">
-              Confirm that dispatch <strong className="font-mono text-slate-900">{branchConfirmOrder?.dispatch_number}</strong> was received in full and in good order at the receiving branch.
-            </p>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-600 uppercase">Receiving Inspection Notes</label>
-              <textarea
-                value={branchNotes}
-                onChange={(e) => setBranchNotes(e.target.value)}
-                placeholder="e.g. All bags received intact. No seal tampering or moisture damage."
-                rows={3}
-                className="w-full border border-slate-300 rounded-xl p-2.5 text-xs bg-slate-50 focus:bg-white"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowBranchConfirmModal(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBranchDelivery}
-                disabled={saving}
-                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md"
-              >
-                {saving ? 'Confirming...' : 'Confirm Delivery Received'}
-              </button>
-            </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
