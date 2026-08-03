@@ -268,6 +268,22 @@ export default function MacropackManufacturingPage() {
       if (action === 'submit') {
         updatePayload = { status: 'PENDING_RM', submitted_by: user?.id, submitted_at: now };
       } else if (action === 'approve_rm') {
+        // Enforce strict Raw Material stock availability check before approving RM allocation
+        const ingredientsToCheck = issueRows.map(r => ({
+          raw_material_id: r.raw_material_id,
+          quantity: r.expected_grams / 1000,
+          name: r.ingredient_name
+        }));
+        if (ingredientsToCheck.length > 0) {
+          const stockCheck = await validateStockAvailability(ingredientsToCheck);
+          if (!stockCheck.isValid) {
+            setStockErrors(stockCheck.errors);
+            setShowStockOverride(true);
+            toast.error(`RM Allocation blocked: ${stockCheck.errors.length} raw material(s) out of stock!`);
+            setApprovalSaving(false);
+            return;
+          }
+        }
         updatePayload = { status: 'PENDING_SUPERVISOR', rm_approved_by: user?.id, rm_approved_at: now };
       } else if (action === 'approve_supervisor') {
         updatePayload = { status: 'APPROVED', supervisor_approved_by: user?.id, supervisor_approved_at: now };
@@ -364,6 +380,38 @@ export default function MacropackManufacturingPage() {
     if (!selectedOrder) return;
     setSaving(true);
     try {
+      // Validate raw material stock availability before starting run
+      const ingredientsToCheck = issueRows.map(r => ({
+        raw_material_id: r.raw_material_id,
+        quantity: r.expected_grams / 1000,
+        name: r.ingredient_name
+      }));
+
+      if (ingredientsToCheck.length > 0) {
+        const stockCheck = await validateStockAvailability(ingredientsToCheck);
+        if (!stockCheck.isValid) {
+          setStockErrors(stockCheck.errors);
+          setPendingCompleteCallback(() => async () => {
+            await executeStartOrder();
+          });
+          setShowStockOverride(true);
+          toast.error(`Cannot start run: ${stockCheck.errors.length} raw material(s) out of stock!`);
+          setSaving(false);
+          return;
+        }
+      }
+
+      await executeStartOrder();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message || 'Failed to start order'}`);
+      setSaving(false);
+    }
+  }
+
+  async function executeStartOrder() {
+    if (!selectedOrder) return;
+    setSaving(true);
+    try {
       const { error } = await supabase
         .from('macropack_manufacture_orders')
         .update({ status: 'IN_PROGRESS' })
@@ -372,8 +420,6 @@ export default function MacropackManufacturingPage() {
       setSelectedOrder({ ...selectedOrder, status: 'IN_PROGRESS' });
       fetchData();
       toast.success('Manufacturing run started!');
-    } catch (error: any) {
-      toast.error(`Error: ${error.message || 'Failed to start order'}`);
     } finally {
       setSaving(false);
     }
