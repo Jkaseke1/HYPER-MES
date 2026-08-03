@@ -234,6 +234,17 @@ function getLegacyPermissions(role: string): string[] {
         'reconciliation.view', 'reconciliation.create',
       ];
     
+    case 'logistics':
+      return [
+        ...basePermissions,
+        'dispatch.view', 'dispatch.create', 'dispatch.approve',
+        'warehouse.view', 'warehouse.transfer',
+        'grn.view', 'grn.create',
+        'raw_materials.view',
+        'chick.view',
+        'reports.view', 'reports.export',
+      ];
+    
     default:
       return basePermissions;
   }

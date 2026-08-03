@@ -1266,8 +1266,12 @@ export default function AdminUsersPage() {
                 >
                   <option value="operator">Operator</option>
                   <option value="supervisor">Supervisor</option>
-                  <option value="manager">Manager</option>
-                  <option value="admin">Admin</option>
+                  <option value="production_manager">Production Manager</option>
+                  <option value="warehouse_manager">Warehouse Manager</option>
+                  <option value="logistics">Logistics Officer</option>
+                  <option value="finance">Finance / Accountant</option>
+                  <option value="md">Managing Director (MD)</option>
+                  <option value="admin">Administrator</option>
                 </select>
               </div>
             </div>
@@ -1517,6 +1521,7 @@ export default function AdminUsersPage() {
                 <option value="md">Managing Director (MD)</option>
                 <option value="production_manager">Production Manager</option>
                 <option value="warehouse_manager">Warehouse Manager</option>
+                <option value="logistics">Logistics Officer</option>
                 <option value="finance">Finance / Accountant</option>
                 <option value="supervisor">Supervisor</option>
                 <option value="operator">Operator</option>

@@ -1,7 +1,7 @@
 export interface Profile {
   id: string;
   full_name: string;
-  role: 'md' | 'production_manager' | 'supervisor' | 'warehouse_manager' | 'operator' | 'finance' | 'admin' | 'raw_material_manager' | 'accountant' | string;
+  role: 'md' | 'production_manager' | 'supervisor' | 'warehouse_manager' | 'logistics' | 'operator' | 'finance' | 'admin' | 'raw_material_manager' | 'accountant' | string;
   email: string;
   phone: string;
   created_at: string;

@@ -35,14 +35,14 @@ export const APPROVAL_PERMISSIONS = {
   grn: ['finance', 'accountant', 'admin'],  // Single approver: Finance only
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
   production_order: ['production_manager', 'admin'],
-  dispatch_order: ['warehouse_manager', 'admin'],
+  dispatch_order: ['warehouse_manager', 'logistics', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
-  material_transfer: ['production_manager', 'supervisor', 'admin'],  // Only Production approves final acceptance
-  material_transfer_step2: ['production_manager', 'supervisor', 'admin', 'finance'],  // Step 2: Buffer → Production (Production + Finance for testing)
-  weigh_bridge_ticket: ['warehouse_manager', 'procurement', 'admin'],
+  material_transfer: ['production_manager', 'supervisor', 'logistics', 'admin'],  // Only Production/Logistics approves final acceptance
+  material_transfer_step2: ['production_manager', 'supervisor', 'logistics', 'admin', 'finance'],  // Step 2: Buffer → Production
+  weigh_bridge_ticket: ['warehouse_manager', 'logistics', 'procurement', 'admin'],
   macropack_order: ['procurement', 'supervisor', 'production_manager', 'admin'],
-  chick_booking: ['finance', 'accountant', 'admin'],
+  chick_booking: ['finance', 'accountant', 'logistics', 'admin'],
 } as const;
 
 // GRN uses single-step approval: Finance approves directly (pending → approved)

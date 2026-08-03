@@ -115,11 +115,15 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
+    md: 'Managing Director',
     production_manager: 'Production Manager',
     supervisor: 'Supervisor',
     warehouse_manager: 'Warehouse Manager',
+    raw_material_manager: 'Raw Material Manager',
+    logistics: 'Logistics Officer',
     operator: 'Operator',
-    finance: 'Finance',
+    finance: 'Finance / Accountant',
+    accountant: 'Accountant',
   };
 
   useEffect(() => {

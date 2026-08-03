@@ -117,6 +117,7 @@ export default function LoginPage() {
                       <option value="md">Managing Director (MD)</option>
                       <option value="production_manager">Production Manager</option>
                       <option value="warehouse_manager">Warehouse Manager</option>
+                      <option value="logistics">Logistics Officer</option>
                       <option value="finance">Finance / Accountant</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="operator">Operator</option>
