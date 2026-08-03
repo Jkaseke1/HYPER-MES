@@ -427,6 +427,18 @@ export default function MacropackManufacturingPage() {
 
   async function handleCompleteOrder() {
     if (!selectedOrder) return;
+
+    // Mandatory Validation: Block declare packaging modal if ANY micro-ingredient actual dispensed (kg) is empty or blank
+    const missingDispensed = issueRows.filter(
+      r => r.actual_grams_dispensed === '' || r.actual_grams_dispensed === null || isNaN(parseFloat(String(r.actual_grams_dispensed)))
+    );
+
+    if (missingDispensed.length > 0) {
+      toast.error(`Please enter the Actual Dispensed (kg) for all ${missingDispensed.length} micro-ingredients before declaring packaging!`, { duration: 5000 });
+      setOrderDetailTab('ingredients');
+      return;
+    }
+
     const ingredientsToCheck = issueRows.map(r => ({
       raw_material_id: r.raw_material_id,
       quantity: r.expected_grams / 1000,
@@ -440,6 +452,7 @@ export default function MacropackManufacturingPage() {
         await completeOrderTransaction();
       });
       setShowStockOverride(true);
+      toast.error(`Cannot complete order: ${stockCheck.errors.length} raw material(s) out of stock!`);
       return;
     }
 
@@ -1189,9 +1202,14 @@ export default function MacropackManufacturingPage() {
                               <input
                                 type="number"
                                 step="0.001"
+                                placeholder="0.000"
                                 value={row.actual_grams_dispensed}
                                 onChange={(e) => handleIssueChange(row.raw_material_id, e.target.value)}
-                                className="w-24 text-right border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-teal-500"
+                                className={`w-28 text-right border rounded-lg px-2.5 py-1 text-xs font-mono font-bold outline-none transition-all ${
+                                  row.actual_grams_dispensed === '' || row.actual_grams_dispensed === null
+                                    ? 'border-amber-400 bg-amber-50/60 text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 font-extrabold'
+                                    : 'border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-teal-500'
+                                }`}
                               />
                             ) : (
                               <span className="font-mono font-bold text-slate-900">
