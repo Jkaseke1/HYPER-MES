@@ -250,8 +250,7 @@ export default function SagePostingReviewPage() {
         status: 'approved', 
         reviewed_by: profile?.id, 
         reviewed_at: new Date().toISOString(), 
-        updated_at: new Date().toISOString(),
-        rejection_reason: null
+        updated_at: new Date().toISOString()
       })
       .in('id', approvableIds);
     setActingKey(null);
@@ -274,7 +273,7 @@ export default function SagePostingReviewPage() {
     setActingKey(rejectGroup.key);
     const { error } = await supabase
       .from('sage_posting_reviews')
-      .update({ status: 'rejected', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), rejection_reason: rejectReason, updated_at: new Date().toISOString() })
+      .update({ status: 'rejected', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .in('id', pendingIds);
     setActingKey(null);
 
