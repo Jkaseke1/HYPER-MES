@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Wheat, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import HyperfeedsLogo from '../components/ui/HyperfeedsLogo';
 
 export default function LoginPage() {
   const { signIn, signUp } = useAuth();
@@ -38,55 +39,69 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+    <div className="min-h-screen bg-[#080824] flex">
+      {/* Left Hero Section */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0a0b30]">
         <img
           src="https://images.pexels.com/photos/2255459/pexels-photo-2255459.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750"
           alt="Animal feed production"
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover opacity-35 filter contrast-125"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 via-slate-900/50 to-transparent" />
-        <div className="relative z-10 flex flex-col justify-end p-12">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
-              <Wheat className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Hyperfeeds Nutrition</h1>
-              <p className="text-sm text-teal-300">Manufacturing Execution System</p>
-            </div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#06061c] via-[#0b0c36]/90 to-transparent" />
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          <div>
+            <HyperfeedsLogo height={65} />
           </div>
-          <p className="text-slate-300 text-lg max-w-md leading-relaxed">
-            Complete animal feed manufacturing lifecycle management -- from raw materials
-            to finished feed products, distributed across all branches.
-          </p>
+
+          <div className="space-y-4">
+            <div className="inline-block px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs font-mono font-bold uppercase tracking-wider">
+              Manufacturing Execution System (MES)
+            </div>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight leading-tight">
+              Precision Animal Nutrition & Feed Manufacturing
+            </h1>
+            <p className="text-slate-300 text-base max-w-md leading-relaxed font-medium">
+              Enterprise-grade manufacturing lifecycle management — from raw material intake to automated micro-dosing, batching, QC, and multi-branch dispatch.
+            </p>
+          </div>
+
+          <div className="text-xs text-slate-500 border-t border-slate-800/80 pt-4 flex justify-between items-center font-mono">
+            <span>Hyperfeeds Animal Nutrition © {new Date().getFullYear()}</span>
+            <span className="text-orange-400 font-bold">v2.4.7</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center">
-              <Wheat className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Hyperfeeds Nutrition</h1>
-              <p className="text-xs text-teal-400">MES</p>
-            </div>
+      {/* Right Login Form Section */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-[#06061e]">
+        <div className="w-full max-w-md space-y-6">
+          {/* Mobile Header Logo */}
+          <div className="lg:hidden flex flex-col items-center gap-2 mb-6 text-center">
+            <HyperfeedsLogo height={52} />
+            <p className="text-xs text-orange-400 font-bold uppercase tracking-wider font-mono">Manufacturing Execution System</p>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">
-                {isLogin ? 'Welcome back' : 'Create account'}
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                {isLogin ? 'Sign in to access the manufacturing system' : 'Register a new account'}
-              </p>
+          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-slate-100 relative overflow-hidden">
+            {/* Top Corporate Accent Strip */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-500 via-amber-500 to-[#0b0c36]" />
+
+            <div className="mb-6 pt-2 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                  {isLogin ? 'Sign In' : 'Create Account'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  {isLogin ? 'Enter your credentials to access Hyperfeeds MES' : 'Register a new employee user account'}
+                </p>
+              </div>
+              <div className="hidden sm:block">
+                <HyperfeedsLogo variant="compact" height={36} />
+              </div>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0" />
                 {error}
               </div>
             )}
@@ -95,23 +110,23 @@ export default function LoginPage() {
               {!isLogin && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Full Name</label>
                     <input
                       type="text"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                       placeholder="Enter your name"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">System Role / Designation</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">System Role / Designation</label>
                     <select
                       value={role}
                       onChange={(e) => setRole(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white font-medium text-slate-800"
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white font-bold text-slate-800"
                       required
                     >
                       <option value="md">Managing Director (MD)</option>
@@ -124,31 +139,30 @@ export default function LoginPage() {
                       <option value="quality_controller">Quality Controller</option>
                       <option value="viewer">Viewer (Read Only)</option>
                     </select>
-                    <p className="text-[11px] text-slate-400 mt-1">Select your designated organizational role for system permissions.</p>
                   </div>
                 </>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Email Address</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                   placeholder="you@hyperfeedsnutrition.co.zw"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Password</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 pr-10"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 pr-10"
                     placeholder="Enter password"
                     required
                     minLength={6}
@@ -166,20 +180,20 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-3 bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl text-sm font-black tracking-wide shadow-lg shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:scale-[1.01]"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isLogin ? 'Sign In' : 'Create Account'}
+                {isLogin ? 'SIGN IN TO MES' : 'CREATE ACCOUNT'}
               </button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-500">
+            <p className="mt-6 text-center text-xs font-medium text-slate-500">
               {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
               <button
                 onClick={() => { setIsLogin(!isLogin); setError(''); }}
-                className="text-teal-600 hover:text-teal-700 font-medium"
+                className="text-orange-600 hover:text-orange-700 font-extrabold underline underline-offset-2"
               >
-                {isLogin ? 'Sign up' : 'Sign in'}
+                {isLogin ? 'Register User' : 'Sign In'}
               </button>
             </p>
           </div>
