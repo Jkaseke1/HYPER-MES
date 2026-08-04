@@ -237,14 +237,23 @@ export default function SagePostingReviewPage() {
   }, [groups, searchQuery]);
 
   const approveGroup = async (group: ReviewGroup) => {
-    const pendingIds = group.lines.filter((l) => l.status === 'pending').map((l) => l.id);
-    if (pendingIds.length === 0) { toast.error('No pending lines in this package'); return; }
+    const approvableIds = group.lines
+      .filter((l) => l.status === 'pending' || l.status === 'rejected')
+      .map((l) => l.id);
+
+    if (approvableIds.length === 0) { toast.error('No approvable lines in this package (already posted)'); return; }
 
     setActingKey(group.key);
     const { error } = await supabase
       .from('sage_posting_reviews')
-      .update({ status: 'approved', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .in('id', pendingIds);
+      .update({ 
+        status: 'approved', 
+        reviewed_by: profile?.id, 
+        reviewed_at: new Date().toISOString(), 
+        updated_at: new Date().toISOString(),
+        rejection_reason: null
+      })
+      .in('id', approvableIds);
     setActingKey(null);
 
     if (error) {
@@ -513,7 +522,7 @@ export default function SagePostingReviewPage() {
                       <div className="text-[10px] text-slate-400 uppercase tracking-wide">Package Value</div>
                     </div>
 
-                    {hasPending && (
+                    {hasPending ? (
                       <div className="flex gap-2">
                         <button
                           disabled={actingKey === group.key}
@@ -536,7 +545,22 @@ export default function SagePostingReviewPage() {
                           Reject
                         </button>
                       </div>
-                    )}
+                    ) : group.status === 'rejected' || group.lines.some((l) => l.status === 'rejected') ? (
+                      <div className="flex gap-2">
+                        <button
+                          disabled={actingKey === group.key}
+                          onClick={() => approveGroup(group)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition-all disabled:opacity-50"
+                        >
+                          {actingKey === group.key ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          )}
+                          Re-Approve Package
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
