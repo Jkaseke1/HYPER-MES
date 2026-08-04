@@ -45,12 +45,25 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         const cleanVer = (up.version || '').trim().toLowerCase().replace('v', '');
         localStorage.setItem(`hyper_mes_applied_${cleanVer}`, 'true');
         if (up.id) {
+          localStorage.setItem(`hyper_mes_applied_${up.id}`, 'true');
           localStorage.setItem('hyper_mes_installed_sha', up.id);
+        }
+        if (up.version && up.version.includes('-')) {
+          const shaPart = up.version.split('-').pop();
+          if (shaPart) {
+            localStorage.setItem(`hyper_mes_applied_${shaPart}`, 'true');
+          }
         }
       });
       if (softUpdate) {
         const cleanVer = (softUpdate.version || '').trim().toLowerCase().replace('v', '');
         localStorage.setItem(`hyper_mes_applied_${cleanVer}`, 'true');
+        if (softUpdate.version && softUpdate.version.includes('-')) {
+          const shaPart = softUpdate.version.split('-').pop();
+          if (shaPart) {
+            localStorage.setItem(`hyper_mes_applied_${shaPart}`, 'true');
+          }
+        }
       }
       if ('caches' in window) {
         const keys = await caches.keys();

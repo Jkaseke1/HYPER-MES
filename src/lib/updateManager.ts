@@ -215,12 +215,18 @@ export async function fetchPendingUpdates(): Promise<SystemUpdateLogRecord[]> {
     const latestCommit = commits[0];
     const commitTime = new Date(latestCommit.date).getTime();
     const buildTime = new Date(APP_BUILD_TIME).getTime();
-    const isApplied = localStorage.getItem(`hyper_mes_applied_${latestCommit.shortSha}`) === 'true';
+    const isApplied = 
+      localStorage.getItem(`hyper_mes_applied_${latestCommit.shortSha}`) === 'true' ||
+      localStorage.getItem(`hyper_mes_applied_${latestCommit.sha}`) === 'true' ||
+      localStorage.getItem(`hyper_mes_applied_2.4.6-${latestCommit.shortSha}`) === 'true' ||
+      localStorage.getItem(`hyper_mes_applied_2.4.7-${latestCommit.shortSha}`) === 'true' ||
+      installedSha === latestCommit.sha ||
+      installedSha === latestCommit.shortSha;
 
-    if (!isApplied && (installedSha !== latestCommit.sha || commitTime > buildTime)) {
+    if (!isApplied && installedSha !== latestCommit.sha && commitTime > buildTime) {
       pending.push({
         id: latestCommit.sha,
-        version: `v2.4.6-${latestCommit.shortSha}`,
+        version: `${APP_VERSION}-${latestCommit.shortSha}`,
         type: 'soft_update',
         message: `New software build ready: ${latestCommit.message}`,
         admin_email: latestCommit.author,
