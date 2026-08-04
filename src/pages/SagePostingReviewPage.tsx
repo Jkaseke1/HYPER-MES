@@ -273,7 +273,13 @@ export default function SagePostingReviewPage() {
     setActingKey(rejectGroup.key);
     const { error } = await supabase
       .from('sage_posting_reviews')
-      .update({ status: 'rejected', reviewed_by: profile?.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({ 
+        status: 'rejected', 
+        reviewed_by: profile?.id, 
+        reviewed_at: new Date().toISOString(), 
+        updated_at: new Date().toISOString(),
+        sage_result: { rejection_reason: rejectReason, rejected_at: new Date().toISOString() }
+      })
       .in('id', pendingIds);
     setActingKey(null);
 
