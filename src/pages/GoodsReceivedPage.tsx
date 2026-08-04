@@ -518,34 +518,34 @@ export default function GoodsReceivedPage() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
           {/* Premium Header */}
-          <DialogHeader className="shrink-0 bg-gradient-to-r from-slate-950 via-slate-900 to-teal-950 text-white px-6 py-4 rounded-t-xl relative overflow-hidden">
+          <DialogHeader className="shrink-0 bg-gradient-to-r from-[#06061c] via-[#0b0c36] to-[#080829] text-white px-6 py-4 rounded-t-2xl relative overflow-hidden border-b border-orange-500/30">
             {/* Background decorative glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-transparent to-emerald-500/5 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-amber-500/5 pointer-events-none" />
             <div className="relative flex items-center justify-between pr-10">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-xl flex items-center justify-center shadow-xl shadow-teal-500/30">
+                <div className="w-11 h-11 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/25 ring-2 ring-orange-500/40">
                   <Package className="w-6 h-6 text-white" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-0.5">
-                    <DialogTitle className="text-xl font-extrabold tracking-tight">Create New GRN</DialogTitle>
-                    <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">DRAFT</span>
+                    <DialogTitle className="text-xl font-black tracking-tight text-white">Create New GRN</DialogTitle>
+                    <span className="text-[10px] font-extrabold bg-orange-500/20 text-orange-400 border border-orange-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">DRAFT</span>
                   </div>
-                  <DialogDescription className="text-slate-400 text-xs">
+                  <DialogDescription className="text-slate-300 text-xs font-medium">
                     Goods Received Note — Raw Material Inbound · Sage Auto-Post on Approval
                   </DialogDescription>
                 </div>
               </div>
-              <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400">
-                <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg">
-                  <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+              <div className="hidden sm:flex items-center gap-3 text-xs text-slate-300">
+                <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/30 px-3 py-1.5 rounded-xl font-mono text-orange-400 font-bold">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                   Sage Sync Ready
                 </div>
               </div>
             </div>
             <button
               onClick={() => setModalOpen(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center transition-colors"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center transition-colors text-white"
               aria-label="Close"
             >
               <X className="w-4 h-4 text-white" />
@@ -560,21 +560,21 @@ export default function GoodsReceivedPage() {
 
                 {/* GRN Header Panel */}
                 <div className="xl:col-span-8 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3">
+                  <div className="flex items-center justify-between bg-gradient-to-r from-[#0b0c36] to-[#121656] border-b border-orange-500/40 px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-white" />
+                      <div className="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center border border-orange-500/30">
+                        <FileText className="w-4 h-4 text-orange-400" />
                       </div>
-                      <p className="text-sm font-bold text-white tracking-wide">GRN Header</p>
+                      <p className="text-sm font-black text-white tracking-wide">GRN Header</p>
                     </div>
-                    <span className="text-[10px] font-bold bg-white/15 text-white border border-white/20 px-2.5 py-0.5 rounded-full">CORE DETAILS</span>
+                    <span className="text-[10px] font-extrabold bg-orange-500/20 text-orange-300 border border-orange-500/30 px-2.5 py-0.5 rounded-full font-mono">CORE DETAILS</span>
                   </div>
                   <div className="p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <Label htmlFor="supplier" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Supplier *</Label>
+                        <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
                         <Select value={supplierId} onValueChange={setSupplierId}>
-                          <SelectTrigger className="bg-slate-50 border-slate-200 font-medium focus:border-blue-500 focus:ring-blue-500/20">
+                          <SelectTrigger className="bg-slate-50 border-slate-200 font-medium focus:border-orange-500 focus:ring-orange-500/20">
                             <SelectValue placeholder="Select supplier..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -588,13 +588,13 @@ export default function GoodsReceivedPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label htmlFor="received_date" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Received Date *</Label>
+                        <Label htmlFor="received_date" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Received Date *</Label>
                         <Input
                           id="received_date"
                           type="date"
                           value={receivedDate}
                           onChange={(e) => setReceivedDate(e.target.value)}
-                          className="bg-slate-50 border-slate-200 font-medium focus:border-blue-500"
+                          className="bg-slate-50 border-slate-200 font-medium focus:border-orange-500"
                         />
                       </div>
                     </div>
@@ -603,28 +603,28 @@ export default function GoodsReceivedPage() {
 
                 {/* Receipt Overview Panel */}
                 <div className="xl:col-span-4 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3">
+                  <div className="flex items-center justify-between bg-gradient-to-r from-[#0b0c36] to-[#121656] border-b border-orange-500/40 px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
-                        <Hash className="w-4 h-4 text-white" />
+                      <div className="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center border border-orange-500/30">
+                        <Hash className="w-4 h-4 text-orange-400" />
                       </div>
-                      <p className="text-sm font-bold text-white tracking-wide">Receipt Overview</p>
+                      <p className="text-sm font-black text-white tracking-wide">Receipt Overview</p>
                     </div>
-                    <span className="text-[10px] font-bold bg-teal-400/20 text-teal-300 border border-teal-400/30 px-2.5 py-0.5 rounded-full">AUTO</span>
+                    <span className="text-[10px] font-extrabold bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2.5 py-0.5 rounded-full font-mono">AUTO</span>
                   </div>
                   <div className="p-4 space-y-3">
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-blue-50/50 px-3 py-2.5">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Ordered</p>
-                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{totalOrderedQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                        <p className="font-extrabold text-slate-800 text-base mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">kg</span></p>
                       </div>
-                      <div className="rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-emerald-50/50 px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Received</p>
-                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{totalReceivedQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                      <div className="rounded-xl border border-orange-200 bg-orange-50/50 px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600">Received</p>
+                        <p className="font-extrabold text-orange-900 text-base mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-xs font-medium text-orange-600">kg</span></p>
                       </div>
-                      <div className="col-span-2 rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-teal-50/50 px-3 py-2.5">
+                      <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Weigh Bridge Nett</p>
-                        <p className="font-extrabold text-slate-800 text-base mt-0.5">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-xs font-medium text-slate-400">kg</span></p>
+                        <p className="font-extrabold text-slate-800 text-base mt-0.5 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-xs font-medium text-slate-400">kg</span></p>
                       </div>
                     </div>
 
@@ -636,7 +636,7 @@ export default function GoodsReceivedPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="notes" className="text-xs font-bold text-slate-600 uppercase tracking-wide">Notes</Label>
+                      <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Notes</Label>
                       <Textarea
                         id="notes"
                         value={notes}
@@ -651,23 +651,23 @@ export default function GoodsReceivedPage() {
               </div>
 
               {/* Weigh Bridge Ticket Section */}
-              <div className="rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setWbExpanded(!wbExpanded)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-left"
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#0b0c36] to-[#121656] border-b border-orange-500/40 text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
-                      <Scale className="w-4 h-4 text-white" />
+                    <div className="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center border border-orange-500/30">
+                      <Scale className="w-4 h-4 text-orange-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">Weigh Bridge Ticket</p>
-                      <p className="text-[10px] text-teal-200">Optional — Link or capture inbound logistics data</p>
+                      <p className="text-sm font-black text-white">Weigh Bridge Ticket</p>
+                      <p className="text-[10px] text-slate-300 font-medium">Optional — Link or capture inbound logistics data</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold bg-white/15 text-white border border-white/20 px-2 py-0.5 rounded-full">INBOUND LOGISTICS</span>
+                    <span className="text-[10px] font-extrabold bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full font-mono">INBOUND LOGISTICS</span>
                     {wbExpanded ? <ChevronUp className="w-4 h-4 text-white" /> : <ChevronDown className="w-4 h-4 text-white" />}
                   </div>
                 </button>
@@ -826,20 +826,20 @@ export default function GoodsReceivedPage() {
 
               {/* Line Items Section */}
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-3">
+                <div className="flex items-center justify-between bg-gradient-to-r from-[#0b0c36] to-[#121656] border-b border-orange-500/40 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 bg-white/15 rounded-lg flex items-center justify-center">
-                      <Warehouse className="w-4 h-4 text-white" />
+                    <div className="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center border border-orange-500/30">
+                      <Warehouse className="w-4 h-4 text-orange-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">Line Items</p>
-                      <p className="text-[10px] text-indigo-200">{items.length} item{items.length !== 1 ? 's' : ''} · Raw material receipts</p>
+                      <p className="text-sm font-black text-white">Line Items</p>
+                      <p className="text-[10px] text-slate-300 font-medium">{items.length} item{items.length !== 1 ? 's' : ''} · Raw material receipts</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={addItem}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-bold rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300 text-xs font-black rounded-xl transition-all shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add Item
@@ -852,19 +852,19 @@ export default function GoodsReceivedPage() {
                       {/* Item header */}
                       <div className="flex items-center justify-between bg-white border-b border-slate-100 px-4 py-2.5">
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 bg-indigo-600 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">{index + 1}</span>
-                          <span className="text-xs font-bold text-slate-700">Raw Material Line {index + 1}</span>
+                          <span className="w-6 h-6 bg-[#0b0c36] text-orange-400 text-[10px] font-black rounded-full flex items-center justify-center border border-orange-500/30">{index + 1}</span>
+                          <span className="text-xs font-bold text-slate-800">Raw Material Line {index + 1}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
-                            <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
-                            <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</span>
+                            <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
+                            <span className="bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</span>
                           </div>
                           {items.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeItem(index)}
-                              className="text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-colors border border-red-200"
+                              className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors border border-rose-200"
                             >
                               Remove
                             </button>
@@ -874,12 +874,12 @@ export default function GoodsReceivedPage() {
 
                       {/* Material selector */}
                       <div className="px-4 pt-3 pb-2">
-                        <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Raw Material *</Label>
+                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Raw Material *</Label>
                         <Select
                           value={item.raw_material_id}
                           onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                         >
-                          <SelectTrigger className="mt-1.5 bg-white border-slate-200 font-medium focus:border-indigo-500">
+                          <SelectTrigger className="mt-1.5 bg-white border-slate-200 font-medium focus:border-orange-500">
                             <SelectValue placeholder="Select material" />
                           </SelectTrigger>
                           <SelectContent>
@@ -906,13 +906,13 @@ export default function GoodsReceivedPage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-indigo-600">Received Qty *</Label>
+                          <Label className="text-xs font-bold text-orange-600">Received Qty *</Label>
                           <Input
                             type="number"
                             value={item.received_qty}
                             onChange={(e) => updateItem(index, 'received_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white border-indigo-200 focus:border-indigo-500 font-bold"
+                            className="bg-white border-orange-300 focus:border-orange-500 font-extrabold text-slate-900"
                             placeholder="0.00"
                           />
                         </div>
@@ -923,7 +923,7 @@ export default function GoodsReceivedPage() {
                             value={item.unit_cost}
                             onChange={(e) => updateItem(index, 'unit_cost', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white border-slate-200"
+                            className="bg-white border-slate-200 font-medium"
                             placeholder="0.00"
                           />
                         </div>
@@ -950,19 +950,19 @@ export default function GoodsReceivedPage() {
                   ))}
 
                   {/* Summary Bar */}
-                  <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3">
+                  <div className="rounded-2xl border border-orange-500/30 bg-gradient-to-r from-[#06061c] via-[#0b0c36] to-[#080829] px-4 py-3.5 shadow-lg">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                       <div className="text-center">
-                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Total Ordered</p>
-                        <p className="font-extrabold text-white text-base font-mono">{totalOrderedQty.toLocaleString()} <span className="text-slate-400 text-xs">kg</span></p>
+                        <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Total Ordered</p>
+                        <p className="font-black text-white text-base font-mono mt-0.5">{totalOrderedQty.toLocaleString()} <span className="text-slate-400 text-xs font-medium">kg</span></p>
                       </div>
-                      <div className="text-center border-x border-slate-700">
-                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Total Received</p>
-                        <p className="font-extrabold text-emerald-400 text-base font-mono">{totalReceivedQty.toLocaleString()} <span className="text-slate-400 text-xs">kg</span></p>
+                      <div className="text-center border-x border-slate-800">
+                        <p className="text-orange-400 uppercase tracking-wider text-[10px] font-bold">Total Received</p>
+                        <p className="font-black text-orange-400 text-base font-mono mt-0.5">{totalReceivedQty.toLocaleString()} <span className="text-orange-300 text-xs font-medium">kg</span></p>
                       </div>
                       <div className="text-center">
-                        <p className="text-slate-400 uppercase tracking-wide text-[10px]">Estimated Value</p>
-                        <p className="font-extrabold text-teal-300 text-base font-mono">${totalReceivedValue.toFixed(2)}</p>
+                        <p className="text-amber-400 uppercase tracking-wider text-[10px] font-bold">Estimated Value</p>
+                        <p className="font-black text-amber-300 text-base font-mono mt-0.5">${totalReceivedValue.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
@@ -972,20 +972,20 @@ export default function GoodsReceivedPage() {
           </div>
 
           {/* Footer */}
-          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/80 px-6 py-3.5">
-            <p className="text-xs text-slate-400 hidden sm:block">GRN will be posted to Sage 200 Evolution automatically upon approval</p>
-            <div className="flex gap-2 ml-auto">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4 rounded-b-2xl">
+            <p className="text-xs text-slate-500 font-medium hidden sm:block">GRN will be posted to Sage 200 Evolution automatically upon approval</p>
+            <div className="flex gap-3 ml-auto">
               <button
                 onClick={() => setModalOpen(false)}
                 disabled={saving}
-                className="px-5 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveGRN}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-black text-white bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 hover:from-orange-600 hover:to-amber-700 rounded-xl shadow-lg shadow-orange-500/25 transition-all disabled:opacity-50 hover:scale-[1.01]"
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
