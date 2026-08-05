@@ -83,7 +83,7 @@ export default function GoodsReceivedPage() {
     setLoading(true);
     try {
       const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-        supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name), approver:profiles!approved_by(full_name)').order('created_at', { ascending: false }),
+        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
         supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
@@ -415,6 +415,7 @@ export default function GoodsReceivedPage() {
                   <TableHead className="font-bold text-slate-700">Supplier</TableHead>
                   <TableHead className="font-bold text-slate-700">Weigh Bridge</TableHead>
                   <TableHead className="font-bold text-slate-700">Received Date</TableHead>
+                  <TableHead className="font-bold text-slate-700">Initiated By</TableHead>
                   <TableHead className="font-bold text-slate-700">Status</TableHead>
                   <TableHead className="font-bold text-slate-700">Created Date</TableHead>
                   <TableHead className="text-right font-bold text-slate-700 pr-6">Action</TableHead>
@@ -441,6 +442,7 @@ export default function GoodsReceivedPage() {
                       <TableCell className="font-medium text-slate-900">{grn.suppliers?.name}</TableCell>
                       <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="text-xs text-slate-700 font-medium">{(grn as any).receiver?.full_name || (grn as any).receiver?.email || '—'}</TableCell>
                       <TableCell>{getStatusBadge(grn.status)}</TableCell>
                       <TableCell className="text-xs text-slate-500">
                         {format(new Date(grn.created_at), 'MMM d, yyyy • HH:mm')}
@@ -858,7 +860,7 @@ export default function GoodsReceivedPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
                             <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
-                            <span className="bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(2)}</span>
+                            <span className="bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(4)}</span>
                           </div>
                           {items.length > 1 && (
                             <button
@@ -922,9 +924,9 @@ export default function GoodsReceivedPage() {
                             type="number"
                             value={item.unit_cost}
                             onChange={(e) => updateItem(index, 'unit_cost', parseLineItemNumber(e.target.value))}
-                            step="0.01"
+                            step="0.0001"
                             className="bg-white border-slate-200 font-medium"
-                            placeholder="0.00"
+                            placeholder="0.0000"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -1076,6 +1078,10 @@ export default function GoodsReceivedPage() {
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Created</p>
                   <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
                 </div>
+                <div className="border-l-3 border-l-purple-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Initiated By</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-0.5">{(viewing as any)?.receiver?.full_name || (viewing as any)?.receiver?.email || 'System'}</p>
+                </div>
 
                 {/* Weigh Bridge Ticket */}
                 {viewing && (viewing as any).wb_transaction_no && (
@@ -1161,8 +1167,8 @@ export default function GoodsReceivedPage() {
                           </TableCell>
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
                           <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
-                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">${item.unit_cost.toFixed(2)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">${Number(item.unit_cost || 0).toFixed(4)}</TableCell>
+                          <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(4)}</TableCell>
                           <TableCell className="text-xs text-slate-600 py-2 px-3">
                             {item.batch_number ? (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-mono">{item.batch_number}</span>

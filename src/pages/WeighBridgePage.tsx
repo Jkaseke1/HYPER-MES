@@ -75,7 +75,7 @@ export default function WeighBridgePage() {
     try {
       const { data, error } = await supabase
         .from('weigh_bridge_tickets')
-        .select('*, suppliers(name, code)')
+        .select('*, created_by_user:profiles!created_by(full_name, email), suppliers(name, code)')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -346,6 +346,7 @@ export default function WeighBridgePage() {
                     <th className="px-5 py-3.5 text-left">Driver Name</th>
                     <th className="px-5 py-3.5 text-left">Product / Material</th>
                     <th className="px-5 py-3.5 text-left">Supplier</th>
+                    <th className="px-5 py-3.5 text-left">Initiated By</th>
                     <th className="px-5 py-3.5 text-right">Nett Mass (kg)</th>
                     <th className="px-5 py-3.5 text-left">Time In</th>
                     <th className="px-5 py-3.5 text-left">Status</th>
@@ -375,6 +376,7 @@ export default function WeighBridgePage() {
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-slate-600 font-medium">{(t as any).suppliers?.name || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-700 text-xs font-medium">{(t as any).created_by_user?.full_name || (t as any).created_by_user?.email || '—'}</td>
                         <td className="px-5 py-3.5 text-right font-extrabold text-slate-900 font-mono text-sm">
                           {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
                         </td>

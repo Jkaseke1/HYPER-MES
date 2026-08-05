@@ -618,7 +618,7 @@ export default function MacropackManufacturingPage() {
       }
 
       const actualUnits = selectedOrder.planned_units || 1;
-      const costPerUnit = actualUnits > 0 ? totalIngredientCostUSD / actualUnits : 0;
+      const costPerUnit = actualUnits > 0 ? Number((totalIngredientCostUSD / actualUnits).toFixed(4)) : 0;
 
       // Build Sage posting review for manufactured Macropack WIP receipt into Production Warehouse (WhseID 19)
       if (selectedOrder.macropack_boms?.macropack_code) {

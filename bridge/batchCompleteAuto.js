@@ -39,7 +39,7 @@ async function handleBatchComplete(syncEvent) {
     sum + (Number(m.unit_cost || 0) * Number(m.actual_qty || 0)), 0) || 0;
 
   const costPerUnit = netQty > 0
-    ? Math.round((totalMaterialCost / netQty) * 100) / 100
+    ? Number((totalMaterialCost / netQty).toFixed(4))
     : 0;
 
   console.log(`  Cost: $${totalMaterialCost.toFixed(2)} total / $${costPerUnit}/kg`);

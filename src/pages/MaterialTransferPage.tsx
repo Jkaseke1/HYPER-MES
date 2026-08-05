@@ -113,7 +113,7 @@ export default function MaterialTransferPage() {
     const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
       supabase
         .from('material_transfers')
-        .select('*, raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
+        .select('*, requester:profiles!requested_by(full_name, email), raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
         .order('created_at', { ascending: false }),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('warehouses').select('*').eq('is_active', true).order('name'),
@@ -459,7 +459,7 @@ export default function MaterialTransferPage() {
                     title="Select all in-buffer transfers"
                   />
                 </th>
-                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
+                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Initiated By', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
@@ -517,6 +517,9 @@ export default function MaterialTransferPage() {
                       </td>
                       <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
                         {quantity.toLocaleString()} {transfer.unit || 'kg'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-700 font-medium">
+                        {(transfer as any).requester?.full_name || (transfer as any).requester?.email || '—'}
                       </td>
                       <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
                         {rmBalance.toLocaleString()} {transfer.unit || 'kg'}

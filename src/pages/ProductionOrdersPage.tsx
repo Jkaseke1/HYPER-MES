@@ -216,7 +216,7 @@ export default function ProductionOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('production_orders').select('*, formulations(name, code, batch_size, nominal_speed), machines(name, code), profiles!operator_id(full_name, email)').order('created_at', { ascending: false });
+    let q = supabase.from('production_orders').select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     if (search) q = q.ilike('batch_number', `%${search}%`);
     const { data, error } = await q;
@@ -367,6 +367,7 @@ export default function ProductionOrdersPage() {
         planned_start: form.planned_start || null,
         planned_end: form.planned_end || null, 
         operator_id: form.operator_id || null,
+        created_by: profile?.id || null,
         shift: form.shift,
         operators: form.operators || null,
         labour_force: form.labour_force === '' ? null : Number(form.labour_force),
@@ -1091,7 +1092,7 @@ export default function ProductionOrdersPage() {
           actual_hours: output.actual_hours === '' ? null : Number(output.actual_hours),
           average_throughput: output.average_throughput === '' ? null : Number(output.average_throughput),
           total_cost: Math.round(total * 100) / 100,
-          cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 100) / 100 : 0,
+          cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 10000) / 10000 : 0,
           actual_end: new Date().toISOString()
         });
       }
@@ -1786,7 +1787,9 @@ export default function ProductionOrdersPage() {
                 </div>
                 <p className="text-slate-300 text-xs mt-1 truncate">
                   <span className="font-semibold text-white">{getOrderFormulationName(selected) || 'Production Order'}</span> • Line: <span className="font-semibold text-white">{selected?.machines?.name || 'Main Plant'}</span> • Bag size: {selected?.unit_size || '50'}kg
-                  {selected?.profiles?.full_name && <span className="text-slate-400"> • Created by {selected.profiles.full_name}</span>}
+                  {((selected as any)?.creator?.full_name || (selected as any)?.operator?.full_name) && (
+                    <span className="text-slate-400"> • Initiated by {(selected as any)?.creator?.full_name || (selected as any)?.operator?.full_name || (selected as any)?.creator?.email}</span>
+                  )}
                 </p>
               </div>
             </div>
