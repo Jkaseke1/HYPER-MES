@@ -1938,9 +1938,21 @@ export default function ProductionOrdersPage() {
                     <h3 className="text-base font-extrabold text-slate-900">Components (BOM Ingredients)</h3>
                     <p className="text-xs text-slate-400">List of raw materials required to execute this batch</p>
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">
-                    {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">
+                      {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
+                    </span>
+                    {detailMaterials.some(m => !m.issued) && selected.status === 'pending' && (
+                      <button
+                        onClick={bulkIssueMaterials}
+                        disabled={saving || !allMaterialsAvailable()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md shadow-emerald-200 transition-all disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" />
+                        Issue All at Once ({detailMaterials.filter(m => !m.issued).length} Items)
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {!allMaterialsAvailable() && (
