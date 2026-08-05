@@ -1807,7 +1807,7 @@ export default function ProductionOrdersPage() {
               {/* Quick Stats Row */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-white border-b border-slate-200 shadow-sm">
                 <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-center">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Planned</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expected</div>
                   <div className="text-lg font-extrabold text-slate-900 font-mono mt-0.5">{selected.planned_qty?.toLocaleString()} <span className="text-xs font-normal text-slate-500">{selected.unit}</span></div>
                 </div>
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 text-center">
@@ -2107,9 +2107,9 @@ export default function ProductionOrdersPage() {
                           <div className="text-xs text-amber-600 mt-1">Based on {output.actual_qty} kg output</div>
                         </div>
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                          <div className="text-xs font-medium text-slate-600 mb-1">Planned Cost per kg</div>
+                          <div className="text-xs font-medium text-slate-600 mb-1">Expected Cost per kg</div>
                           <div className="text-2xl font-bold text-slate-700">${plannedCostPerKg.toFixed(4)}</div>
-                          <div className="text-xs text-slate-600 mt-1">Based on {selected.planned_qty} kg planned</div>
+                          <div className="text-xs text-slate-600 mt-1">Based on {selected.planned_qty} kg expected</div>
                         </div>
                         <div className={`rounded-lg p-4 border ${varianceCostPerKg > 0 ? 'bg-red-50 border-red-200' : varianceCostPerKg < 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
                           <div className={`text-xs font-medium mb-1 ${varianceCostPerKg > 0 ? 'text-red-600' : varianceCostPerKg < 0 ? 'text-emerald-600' : 'text-slate-600'}`}>
