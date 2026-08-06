@@ -27,9 +27,24 @@ interface AggregatedMaterial {
   transfers: TransferRow[];
 }
 
+import { ArrowRightLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+interface PendingTransfer {
+  id: string;
+  transfer_number: string;
+  quantity: number;
+  unit: string;
+  status: string;
+  created_at: string;
+  raw_materials?: { name: string; code: string };
+}
+
 export default function ProductionWarehousePage() {
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
+  const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -37,7 +52,11 @@ export default function ProductionWarehousePage() {
 
   async function fetchTransfers(silent = false) {
     if (!silent) setLoading(true);
-    const [{ data: smData, error: smError }, { data: wbData, error: wbError }] = await Promise.all([
+    const [
+      { data: smData, error: smError },
+      { data: wbData, error: wbError },
+      { data: pendingData, error: pendingError }
+    ] = await Promise.all([
       supabase
         .from('stock_movements')
         .select('id, raw_material_id, quantity, unit, movement_date, batch_number, notes, created_at, raw_materials(name, code, unit)')
@@ -47,10 +66,18 @@ export default function ProductionWarehousePage() {
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
         .eq('warehouses.code', 'PRODUCTION'),
+      supabase
+        .from('material_transfers')
+        .select('id, transfer_number, quantity, unit, status, created_at, raw_materials(name, code)')
+        .in('status', ['in_buffer', 'pending'])
+        .order('created_at', { ascending: false }),
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
     if (wbError) console.error('Failed to load production balances:', wbError);
+    if (pendingError) console.error('Failed to load pending transfers:', pendingError);
+
     setTransfers((smData as any) || []);
+    setPendingAcceptanceTransfers((pendingData as any) || []);
     const balMap: Record<string, number> = {};
     (wbData as any || []).forEach((b: any) => {
       balMap[b.raw_material_id] = Number(b.quantity || 0);
@@ -58,6 +85,27 @@ export default function ProductionWarehousePage() {
     setBalances(balMap);
     setLastRefresh(new Date());
     if (!silent) setLoading(false);
+  }
+
+  async function handleAcceptToProduction(transferId: string) {
+    setAcceptingId(transferId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('User not authenticated');
+
+      const { error } = await supabase.rpc('approve_material_transfer_to_production', {
+        p_transfer_id: transferId,
+        p_approved_by: user.id,
+      });
+
+      if (error) throw error;
+
+      await fetchTransfers(true);
+    } catch (err: any) {
+      alert(`Failed to receive into Production Warehouse: ${err?.message || 'Please try again'}`);
+    } finally {
+      setAcceptingId(null);
+    }
   }
 
   useEffect(() => { fetchTransfers(); }, []);
@@ -140,6 +188,66 @@ export default function ProductionWarehousePage() {
           Refresh
         </button>
       </div>
+
+      {/* PENDING MATERIAL TRANSFERS TO ACCEPT INTO PRODUCTION WAREHOUSE */}
+      {pendingAcceptanceTransfers.length > 0 && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-5 text-white shadow-lg border border-emerald-500/30 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <ArrowRightLeft className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white uppercase tracking-wider">
+                  🚨 Pending Material Transfer Receipts ({pendingAcceptanceTransfers.length})
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Materials transferred from RM Warehouse sitting in Holding Bay — accept into Production WH 19
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/material-transfer"
+              className="text-xs font-bold text-emerald-300 hover:text-emerald-200 underline"
+            >
+              Open Full Transfer Hub ➔
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingAcceptanceTransfers.map(pt => (
+              <div key={pt.id} className="bg-slate-800/90 border border-slate-700 p-3.5 rounded-xl flex flex-col justify-between space-y-3">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{pt.transfer_number}</span>
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">In Holding Bay</span>
+                  </div>
+                  <h4 className="font-bold text-sm text-white mt-1.5">{pt.raw_materials?.name}</h4>
+                  <p className="text-xs text-slate-400 font-mono">Code: {pt.raw_materials?.code}</p>
+                  <p className="text-sm font-extrabold text-white mt-1">
+                    Qty: <span className="text-emerald-400 font-mono">{pt.quantity.toLocaleString()} {pt.unit}</span>
+                  </p>
+                </div>
+                <button
+                  disabled={acceptingId === pt.id}
+                  onClick={() => handleAcceptToProduction(pt.id)}
+                  className="w-full py-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-lg text-xs font-extrabold shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  {acceptingId === pt.id ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Accepting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Receive into WH 19
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Materials on Floor" value={totalMaterials} icon={Boxes} color="teal" />
