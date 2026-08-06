@@ -94,7 +94,7 @@ export default function DispatchPage() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    let q = supabase.from('dispatch_orders').select('*, branches(name, code, sage_code), warehouses(name, code)').order('created_at', { ascending: false });
+    let q = supabase.from('dispatch_orders').select('*, creator:profiles!created_by(full_name, email), branches(name, code, sage_code), warehouses(name, code)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     const { data } = await q;
     if (data) setOrders(data as DispatchOrder[]);
@@ -178,7 +178,8 @@ export default function DispatchPage() {
           dispatch_number: generatedNumber, 
           status: 'pending', 
           total_weight: totalWeight, 
-          total_value: 0 
+          total_value: 0,
+          created_by: profile?.id || null,
         }).select().single();
         if (!error && data) {
           const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
@@ -741,6 +742,17 @@ export default function DispatchPage() {
                               <User className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>{o.driver_name || 'No driver'}</span>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-px bg-slate-100 self-stretch shrink-0" />
+
+                        {/* Initiated By */}
+                        <div className="flex items-center px-4 py-3 w-[130px] shrink-0">
+                          <div className="space-y-0.5">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Initiated By</p>
+                            <p className="text-xs font-semibold text-slate-800 truncate">{(o as any).creator?.full_name || (o as any).creator?.email || '—'}</p>
                           </div>
                         </div>
 
