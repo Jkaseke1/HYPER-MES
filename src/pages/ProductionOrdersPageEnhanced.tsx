@@ -54,6 +54,35 @@ const emptyForm = {
   notes: '',
 };
 
+export function getIngredientTypeCode(name: string, code: string): { isPremix: boolean; typeCode: string; badgeLabel: string } {
+  const n = (name || '').toLowerCase();
+  const cd = (code || '').toLowerCase();
+
+  if (n.includes('premix') || cd.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss')) {
+    return { isPremix: true, typeCode: 'M1', badgeLabel: '⭐️ Premix (M1)' };
+  }
+  if (n.includes('mcp') || cd.includes('mcp')) {
+    return { isPremix: true, typeCode: 'M2', badgeLabel: '⭐️ Micro (M2 - MCP)' };
+  }
+  if (n.includes('methionine') || cd.includes('methionine')) {
+    return { isPremix: true, typeCode: 'M3', badgeLabel: '⭐️ Micro (M3 - Methionine)' };
+  }
+  if (n.includes('lysine') || cd.includes('lysine')) {
+    return { isPremix: true, typeCode: 'M4', badgeLabel: '⭐️ Micro (M4 - Lysine)' };
+  }
+  if (n.includes('salinomycin') || cd.includes('salinomycin')) {
+    return { isPremix: true, typeCode: 'M5', badgeLabel: '⭐️ Micro (M5 - Salinomycin)' };
+  }
+  if (n.includes('choline') || cd.includes('choline')) {
+    return { isPremix: true, typeCode: 'MC', badgeLabel: '⭐️ Micro (MC - Choline)' };
+  }
+  if (n.includes('micro') || cd.includes('micro')) {
+    return { isPremix: true, typeCode: 'M', badgeLabel: '⭐️ Micro-Ingredient' };
+  }
+
+  return { isPremix: false, typeCode: 'B', badgeLabel: 'Bulk (B)' };
+}
+
 export default function ProductionOrdersPage() {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
@@ -103,7 +132,7 @@ export default function ProductionOrdersPage() {
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
   useEffect(() => {
     Promise.all([
-      supabase.from('formulations').select('*').eq('status', 'active'),
+      supabase.from('formulations').select('*').order('name'),
       supabase.from('machines').select('*').eq('is_active', true),
       supabase.from('profiles').select('*'),
       supabase.from('production_plans').select('*').order('created_at', { ascending: false }),
@@ -128,6 +157,7 @@ export default function ProductionOrdersPage() {
   // Load BOM ingredients when formulation changes (Issue 1)
   const onFormulationChange = async (fid: string) => {
     setForm((f) => ({ ...f, formulation_id: fid }));
+    setWorkflowError(null);
     if (!fid) { 
       setMaterials([]); 
       return; 
@@ -135,21 +165,27 @@ export default function ProductionOrdersPage() {
     const sel = formulations.find((f) => f.id === fid);
     if (!sel) return;
 
+    // Enforce Rule 3: Formulation MUST be Finance-Approved or Daily-Active
+    if (!sel.is_approved && !sel.is_daily_active && sel.status !== 'active') {
+      setWorkflowError("🔒 Cannot Produce: The selected formulation requires Finance Approval (by Jonga) before production orders can be created.");
+    }
+
     // Auto-set unit size from unit_size_variants or formulation name
     const variants = sel.unit_size_variants;
     let inferredSize: string | null = null;
-    if (variants && variants.length > 0) {
-      const parsed = parseInt(variants[0].size);
-      if (!isNaN(parsed)) inferredSize = String(parsed);
+    if (Array.isArray(variants) && variants.length > 0 && variants[0]?.batch_size) {
+      inferredSize = String(variants[0].batch_size);
     }
     if (!inferredSize) {
-      const m = sel.name.match(/(\d+)\s*kg/i);
-      if (m) inferredSize = m[1];
+      const match = sel.name.match(/(\d+)\s*kg/i) || sel.code.match(/(\d+)/);
+      if (match) inferredSize = match[1];
     }
-    if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
+    if (inferredSize) {
+      setForm((f) => ({ ...f, planned_qty: parseFloat(inferredSize!) || f.planned_qty }));
+    }
 
-    // Check if BOM exists for this formulation
-    const { data: bomData, error: bomError } = await supabase
+    // Load BOM ingredients
+    const { data: bomIngredients } = await supabase
       .from('formulation_ingredients')
       .select('*, raw_materials(name, code, cost_per_unit)')
       .eq('formulation_id', fid)
@@ -621,17 +657,24 @@ export default function ProductionOrdersPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Formulation</label>
+              <label className={labelCls}>Formulation *</label>
               <select
                 value={form.formulation_id}
                 onChange={(e) => onFormulationChange(e.target.value)}
                 className={inputCls}
                 required
               >
-                <option value="">Select formulation</option>
-                {formulations.map((f) => (
-                  <option key={f.id} value={f.id}>{f.code} - {f.name}</option>
-                ))}
+                <option value="">Select Finance-Approved formulation</option>
+                <optgroup label="✨ Finance Approved Active BOMs">
+                  {formulations.filter(f => f.status === 'active' && (f.is_approved || f.is_daily_active)).map((f) => (
+                    <option key={f.id} value={f.id}>✨ {f.code} — {f.name} (v{f.version})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="⚠️ Pending Finance Approval">
+                  {formulations.filter(f => !f.is_approved && !f.is_daily_active).map((f) => (
+                    <option key={f.id} value={f.id}>⚠️ {f.code} — {f.name} (v{f.version}) [Unapproved]</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div>
@@ -811,10 +854,47 @@ export default function ProductionOrdersPage() {
 
             {/* Materials Tab */}
             {detailTab === 'materials' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">Components (BOM Ingredients)</h3>
-                  <div className="text-sm text-slate-600">
+              <div className="space-y-4">
+                {/* PREMIX & MICRO-DOSING SCHEDULE SUMMARY */}
+                {(() => {
+                  const premixItems = detailMaterials.filter(m => getIngredientTypeCode(m.raw_materials?.name || '', m.raw_materials?.code || '').isPremix);
+                  if (premixItems.length === 0) return null;
+
+                  return (
+                    <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-4 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">⭐️</span>
+                          <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider">
+                            Premix & Micro-Dosing Schedule ({premixItems.length} Items required for this batch)
+                          </h4>
+                        </div>
+                        <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                          Micro-Dosing Verification
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                        {premixItems.map(pm => {
+                          const tInfo = getIngredientTypeCode(pm.raw_materials?.name || '', pm.raw_materials?.code || '');
+                          return (
+                            <div key={pm.id} className="bg-white p-2.5 rounded-lg border border-amber-200 shadow-sm space-y-1">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-mono font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">{tInfo.typeCode}</span>
+                                <span className="text-slate-400 font-semibold">{pm.issued ? '✓ Issued' : 'Pending'}</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-800 truncate" title={pm.raw_materials?.name}>{pm.raw_materials?.name}</p>
+                              <p className="text-xs font-mono font-black text-amber-900">{pm.planned_qty.toLocaleString()} {pm.unit}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Components (BOM Ingredients & Micro-Dosing)</h3>
+                  <div className="text-xs text-slate-600 font-semibold">
                     {detailMaterials.filter(m => m.issued).length} of {detailMaterials.length} issued
                   </div>
                 </div>
@@ -826,25 +906,42 @@ export default function ProductionOrdersPage() {
                   </div>
                 ) : (
                   <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 font-bold uppercase tracking-wider text-slate-700">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Material</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Planned Qty</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Actual Qty</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Unit Cost</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Total Cost</th>
-                          <th className="text-center px-3 py-2 font-medium text-slate-600">Status</th>
-                          <th className="text-center px-3 py-2 font-medium text-slate-600">Action</th>
+                          <th className="text-left px-3 py-2">Material Name</th>
+                          <th className="text-center px-3 py-2">Type Code</th>
+                          <th className="text-right px-3 py-2">Planned Qty</th>
+                          <th className="text-right px-3 py-2">Actual Qty</th>
+                          <th className="text-right px-3 py-2">Unit Cost</th>
+                          <th className="text-right px-3 py-2">Total Cost</th>
+                          <th className="text-center px-3 py-2">Status</th>
+                          <th className="text-center px-3 py-2">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {detailMaterials.map((material) => (
-                          <tr key={material.id}>
-                            <td className="px-3 py-2">
-                              <div className="font-medium">{material.raw_materials?.name}</div>
-                              <div className="text-xs text-slate-500">{material.raw_materials?.code}</div>
-                            </td>
+                        {detailMaterials.map((material) => {
+                          const tInfo = getIngredientTypeCode(material.raw_materials?.name || '', material.raw_materials?.code || '');
+                          return (
+                            <tr key={material.id} className={tInfo.isPremix ? 'bg-amber-50/50 hover:bg-amber-100/50' : 'hover:bg-slate-50'}>
+                              <td className="px-3 py-2">
+                                <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                                  {material.raw_materials?.name}
+                                  {tInfo.isPremix && (
+                                    <span className="text-[10px] font-black text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded-full border border-amber-300">
+                                      ⭐️ {tInfo.badgeLabel}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-500 font-mono">{material.raw_materials?.code}</div>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${
+                                  tInfo.isPremix ? 'bg-amber-200 text-amber-900 font-black' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {tInfo.typeCode}
+                                </span>
+                              </td>
                             <td className="px-3 py-2 text-right">{material.planned_qty} {material.unit}</td>
                             <td className="px-3 py-2 text-right">
                               {material.issued ? (material.actual_qty || material.planned_qty) : '-'} {material.unit}

@@ -85,12 +85,44 @@ const DEFAULT_CATEGORIES = [
   { code: 'Other', name: 'Other' },
 ];
 
+import { useAuth } from '../context/AuthContext';
+import { Star, Lock, ShieldCheck } from 'lucide-react';
+
 export function isMacropackMaterial(item?: { name?: string; code?: string; category?: string | null }) {
   if (!item) return false;
   const c = (item.category || '').toLowerCase();
   const n = (item.name || '').toLowerCase();
   const cd = (item.code || '').toLowerCase();
   return c === 'macropack' || c === 'premix' || n.includes('macropack') || n.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss') || cd.startsWith('bss') || cd.includes('pack');
+}
+
+export function getIngredientTypeCode(name: string, code: string): { isPremix: boolean; typeCode: string; badgeLabel: string } {
+  const n = (name || '').toLowerCase();
+  const cd = (code || '').toLowerCase();
+
+  if (n.includes('premix') || cd.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss')) {
+    return { isPremix: true, typeCode: 'M1', badgeLabel: '⭐️ Premix (M1)' };
+  }
+  if (n.includes('mcp') || cd.includes('mcp')) {
+    return { isPremix: true, typeCode: 'M2', badgeLabel: '⭐️ Micro (M2 - MCP)' };
+  }
+  if (n.includes('methionine') || cd.includes('methionine')) {
+    return { isPremix: true, typeCode: 'M3', badgeLabel: '⭐️ Micro (M3 - Methionine)' };
+  }
+  if (n.includes('lysine') || cd.includes('lysine')) {
+    return { isPremix: true, typeCode: 'M4', badgeLabel: '⭐️ Micro (M4 - Lysine)' };
+  }
+  if (n.includes('salinomycin') || cd.includes('salinomycin')) {
+    return { isPremix: true, typeCode: 'M5', badgeLabel: '⭐️ Micro (M5 - Salinomycin)' };
+  }
+  if (n.includes('choline') || cd.includes('choline')) {
+    return { isPremix: true, typeCode: 'MC', badgeLabel: '⭐️ Micro (MC - Choline)' };
+  }
+  if (n.includes('micro') || cd.includes('micro')) {
+    return { isPremix: true, typeCode: 'M', badgeLabel: '⭐️ Micro-Ingredient' };
+  }
+
+  return { isPremix: false, typeCode: 'B', badgeLabel: 'Bulk (B)' };
 }
 
 export default function FormulationsPage() {
@@ -456,12 +488,38 @@ export default function FormulationsPage() {
   const draftCount = formulations.filter(f => f.status === 'draft').length;
   const archivedCount = formulations.filter(f => f.status === 'archived').length;
 
+  const { profile } = useAuth();
+  const userRole = (profile?.role || '').toLowerCase();
+  const userEmail = (profile?.email || '').toLowerCase();
+  const isFinanceUser = userRole.includes('admin') || userRole.includes('finance') || userRole === 'finance_manager' || userEmail.includes('jonga') || userRole === 'administrator';
+
   return (
     <div className="p-6 space-y-6">
+      {!isFinanceUser && (
+        <div className="bg-slate-900 border border-slate-700 text-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-xs uppercase tracking-wider text-amber-300">
+                🔒 Finance Controlled BOM Mode (View Only for Production)
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Formulations & BOMs are exclusively created, edited, and approved by Finance (Jonga). Production (Chamunorwa) uses Finance-approved active versions.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-extrabold bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700">
+            Role: {profile?.role || 'Production'}
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Formulations</h1>
-          <p className="text-sm text-slate-500 mt-1">Bill of Materials for feed manufacturing</p>
+          <h1 className="text-2xl font-bold text-slate-800">Formulations & BOM Master</h1>
+          <p className="text-sm text-slate-500 mt-1">Bill of Materials with Premix & Micro-Ingredient Highlighting (Finance Controlled)</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -478,9 +536,11 @@ export default function FormulationsPage() {
               <GitCompare className="w-4 h-4" /> View Comparison
             </button>
           )}
-          <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors">
-            <Plus className="w-4 h-4" /> New Formula
-          </button>
+          {isFinanceUser && (
+            <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors">
+              <Plus className="w-4 h-4" /> New Formula
+            </button>
+          )}
         </div>
       </div>
 
@@ -848,11 +908,13 @@ export default function FormulationsPage() {
       <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="xl">
         {selected && (
           <div className="space-y-5">
-            <div className="flex gap-2">
-              <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
-              <button onClick={() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> {bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM'}</button>
-              <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
-            </div>
+            {isFinanceUser && (
+              <div className="flex gap-2">
+                <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
+                <button onClick={() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> {bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM'}</button>
+                <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[['Code', selected.code], ['Category', selected.category], ['Version', `v${selected.version}`], ['Status', selected.status], ['Batch Size', `${selected.batch_size} ${selected.batch_unit}`], ['Cost/Unit', `$${selected.estimated_cost_per_unit.toFixed(2)}`], ['Protein', `${selected.target_protein}%`], ['Fat', `${selected.target_fat}%`]].map(([l, v]) => (
                 <div key={l as string} className="bg-slate-50 rounded-lg p-3"><p className="text-xs text-slate-400">{l}</p><p className="text-sm font-semibold text-slate-700">{v}</p></div>
@@ -881,7 +943,8 @@ export default function FormulationsPage() {
                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
                   <table className="w-full text-xs">
                     <thead><tr className="border-b border-slate-200 text-left bg-slate-50">
-                      <th className="px-3 py-2 font-medium text-slate-600">Material</th>
+                      <th className="px-3 py-2 font-medium text-slate-600">Material Name</th>
+                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Type Code</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-right">Qty</th>
                       <th className="px-3 py-2 font-medium text-slate-600">Unit</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-right">%</th>
@@ -896,8 +959,12 @@ export default function FormulationsPage() {
                       const totalCost = i.quantity * unitCost;
                       const currentStock = i.raw_materials?.current_stock || 0;
                       const stockStatus = currentStock >= i.quantity ? 'text-emerald-600' : currentStock > 0 ? 'text-amber-600' : 'text-red-600';
+                      const typeInfo = getIngredientTypeCode(i.raw_materials?.name || '', i.raw_materials?.code || '');
+                      
                       return (
-                        <tr key={i.id} className="border-b border-slate-50 hover:bg-slate-50">
+                        <tr key={i.id} className={`border-b border-slate-100 transition-colors ${
+                          typeInfo.isPremix ? 'bg-amber-50/60 hover:bg-amber-100/60' : 'hover:bg-slate-50'
+                        }`}>
                           <td className="px-3 py-2">
                             {bomEditMode ? (
                               <select
@@ -926,13 +993,20 @@ export default function FormulationsPage() {
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-slate-800 font-bold">{i.raw_materials?.name || 'Unknown'}</span>
                                 <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">({i.raw_materials?.code})</span>
-                                {isMacropackMaterial(i.raw_materials) && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                                    📦 Macropack / Premix
+                                {typeInfo.isPremix && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-2 py-0.5 rounded-full shadow-sm">
+                                    ⭐️ {typeInfo.badgeLabel}
                                   </span>
                                 )}
                               </div>
                             )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${
+                              typeInfo.isPremix ? 'bg-amber-200 text-amber-900 font-black' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {typeInfo.typeCode}
+                            </span>
                           </td>
                           <td className="px-3 py-2 text-right">
                             {bomEditMode ? (
