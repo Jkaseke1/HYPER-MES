@@ -135,7 +135,7 @@ export default function WarehousePage() {
   }
 
   async function fetchMovements() {
-    let q = supabase.from('stock_movements').select('*, raw_materials(*), formulations(*), warehouses(*)').order('movement_date', { ascending: false }).limit(200);
+    let q = supabase.from('stock_movements').select('*, raw_materials(*), formulations(*), warehouses(*), performer:profiles!performed_by(full_name, email)').order('movement_date', { ascending: false }).limit(300);
     if (dateFrom) q = q.gte('movement_date', dateFrom);
     if (dateTo) q = q.lte('movement_date', dateTo);
     if (moveType !== 'All') q = q.eq('movement_type', moveType.toLowerCase().replace(/ /g, '_'));
@@ -445,7 +445,8 @@ export default function WarehousePage() {
                     <th className={`text-left ${thCls}`}>Type</th>
                     <th className={`text-left ${thCls}`}>Material / Product</th>
                     <th className={`text-left ${thCls}`}>Warehouse</th>
-                    <th className={`text-right ${thCls}`}>Quantity</th>
+                    <th className={`text-right ${thCls}`}>Addition / Deduction</th>
+                    <th className={`text-left ${thCls}`}>Initiated By</th>
                     <th className={`text-left ${thCls}`}>Batch Number</th>
                     <th className={`text-left ${thCls}`}>Notes</th>
                   </tr>
@@ -454,15 +455,28 @@ export default function WarehousePage() {
                   {movements.map((mv) => {
                     const badge = mvBadge[mv.movement_type] || 'bg-slate-50 text-slate-600 border-slate-200';
                     const label = mv.movement_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                    const isAddition = ['receipt', 'production_output', 'transfer_in'].includes(mv.movement_type) || mv.quantity > 0;
+                    const isDeduction = ['issue', 'production_input', 'dispatch', 'transfer_out'].includes(mv.movement_type) || mv.quantity < 0;
+                    const qtyVal = Math.abs(mv.quantity);
+                    
                     return (
                       <tr key={mv.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{format(new Date(mv.movement_date), 'dd MMM yyyy')}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{format(new Date(mv.movement_date), 'dd MMM yyyy HH:mm')}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full border ${badge}`}>{label}</span>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-800">{mv.raw_materials?.name || mv.formulations?.name || '-'}</td>
-                        <td className="px-4 py-3 text-slate-600">{mv.warehouses?.name || '-'}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{mv.quantity.toLocaleString()} {mv.unit}</td>
+                        <td className="px-4 py-3 text-slate-600 font-semibold">{mv.warehouses?.name || '-'}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-sm">
+                          {isAddition ? (
+                            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">+{qtyVal.toLocaleString()} {mv.unit}</span>
+                          ) : isDeduction ? (
+                            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">-{qtyVal.toLocaleString()} {mv.unit}</span>
+                          ) : (
+                            <span className="text-slate-800">{qtyVal.toLocaleString()} {mv.unit}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-700 font-medium">{(mv as any).performer?.full_name || (mv as any).performer?.email || '—'}</td>
                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">{mv.batch_number || '-'}</td>
                         <td className="px-4 py-3 text-slate-500 max-w-xs truncate">{mv.notes || '-'}</td>
                       </tr>

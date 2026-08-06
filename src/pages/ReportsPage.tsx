@@ -269,6 +269,65 @@ export default function ReportsPage() {
 
           {tab === 'inventory' && (
             <div className="space-y-6">
+              {/* Quick Report Links Card */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <a
+                  href="/warehouse"
+                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-teal-500 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 bg-teal-50 text-teal-700 rounded-lg group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                      <Package className="w-5 h-5" />
+                    </span>
+                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wider">Live Log</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 text-sm">Stock Movements</h4>
+                  <p className="text-xs text-slate-500 mt-1">Real-time additions & deductions per warehouse</p>
+                </a>
+
+                <a
+                  href="/reports/rm-reconciliation"
+                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 bg-amber-50 text-amber-700 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                      <TrendingUp className="w-5 h-5" />
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Monthly Audit</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 text-sm">RM Reconciliation</h4>
+                  <p className="text-xs text-slate-500 mt-1">Opening balance + receipts - issues vs stock count</p>
+                </a>
+
+                <a
+                  href="/rm-receipts-matrix"
+                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 bg-indigo-50 text-indigo-700 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <BarChart3 className="w-5 h-5" />
+                    </span>
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Arrivals</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 text-sm">Receipts & Issues Matrix</h4>
+                  <p className="text-xs text-slate-500 mt-1">Daily matrix of additions (GRN) and deductions (floor)</p>
+                </a>
+
+                <a
+                  href="/sage-posting-review"
+                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 bg-purple-50 text-purple-700 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                      <DollarSign className="w-5 h-5" />
+                    </span>
+                    <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Sage Audit</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 text-sm">Sage Posting Review</h4>
+                  <p className="text-xs text-slate-500 mt-1">Audit log of all Sage postings across all warehouses</p>
+                </a>
+              </div>
+
               <div className="bg-white border border-slate-200 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-slate-700 mb-4">Top 10 Raw Materials by Stock Value</h3>
                 <ResponsiveContainer width="100%" height={300}>
