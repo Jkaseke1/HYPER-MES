@@ -1,15 +1,13 @@
-const CACHE_NAME = 'hyper-mes-v4';
+const CACHE_NAME = 'hyper-mes-v5';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[ServiceWorker] Installing & caching app shell...');
+      console.log('[ServiceWorker] Installing new version v5...');
       const scope = self.registration.scope;
       const indexUrl = new URL('index.html', scope).href;
-      
       try {
         await cache.addAll([scope, indexUrl]);
-        console.log('[ServiceWorker] Successfully cached app shell scope:', scope);
       } catch (err) {
         console.warn('[ServiceWorker] Install caching warning:', err);
       }
@@ -23,7 +21,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
-            console.log('[ServiceWorker] Deleting old cache:', cache);
+            console.log('[ServiceWorker] Deleting stale cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -51,39 +49,65 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 4. For HTML & JS Assets: Network-First to guarantee live auto-updates on deployment
+  const isCodeAsset = request.headers.get('accept')?.includes('text/html') || 
+                      url.pathname.endsWith('index.html') || 
+                      url.pathname.includes('/assets/');
+
+  if (isCodeAsset) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          // If offline, serve from cache
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) return cachedResponse;
+          
+          if (request.headers.get('accept')?.includes('text/html') || request.mode === 'navigate') {
+            const scope = self.registration.scope;
+            const indexUrl = new URL('index.html', scope).href;
+            const cachedIndex = (await caches.match(indexUrl)) || (await caches.match(scope));
+            if (cachedIndex) return cachedIndex;
+          }
+
+          return new Response('Offline resource unavailable', {
+            status: 503,
+            statusText: 'Offline',
+            headers: new Headers({ 'Content-Type': 'text/plain' })
+          });
+        })
+    );
+    return;
+  }
+
+  // 5. For static media assets: Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Return cached version immediately & update in background if online (Stale-While-Revalidate)
         fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && url.protocol.startsWith('http')) {
+          if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
           }
-        }).catch(() => {/* Offline - silent fallback */});
+        }).catch(() => {});
         return cachedResponse;
       }
 
-      // If not cached, fetch from network and cache
       return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || !url.protocol.startsWith('http')) {
+        if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
         }
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
         return networkResponse;
-      }).catch(async () => {
-        // Fallback for HTML navigation requests when offline
-        if (request.headers.get('accept')?.includes('text/html') || request.mode === 'navigate') {
-          const scope = self.registration.scope;
-          const indexUrl = new URL('index.html', scope).href;
-          const cachedIndex = (await caches.match(indexUrl)) || (await caches.match(scope));
-          if (cachedIndex) return cachedIndex;
-        }
-        
-        // Return a valid offline Response instead of undefined to prevent TypeError: Failed to convert value to 'Response'
+      }).catch(() => {
         return new Response('Offline resource unavailable', {
           status: 503,
-          statusText: 'Offline',
           headers: new Headers({ 'Content-Type': 'text/plain' })
         });
       });
