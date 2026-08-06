@@ -329,6 +329,31 @@ export default function MaterialTransferPage() {
   return (
     <div className="p-6 space-y-6">
       <StockTakeFrozenBanner />
+
+      {/* Holding Bay Pending Production Alert Banner */}
+      {statusCounts.in_buffer > 0 && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-xl p-4 shadow-lg border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+              <Package className="w-6 h-6 text-white animate-bounce" />
+            </div>
+            <div>
+              <h4 className="font-black text-sm uppercase tracking-wider">⚠️ Action Required: Stock Pending Production Approval</h4>
+              <p className="text-xs text-amber-100 mt-0.5 font-medium">
+                You have <span className="font-bold text-white underline">{statusCounts.in_buffer} material transfer(s)</span> sitting in the Buffer Holding Bay waiting for Production Approval to move into Production Warehouse!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => bulkApproveTransfers(transfers.filter(t => t.status === 'in_buffer'))}
+            disabled={bulkProcessing || loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-amber-900 hover:bg-amber-50 rounded-lg text-xs font-black shadow-md transition-all shrink-0 active:scale-95 disabled:opacity-50"
+          >
+            {bulkProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+            Receive & Approve All ({statusCounts.in_buffer})
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Material Transfer</h1>

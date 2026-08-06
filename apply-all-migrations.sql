@@ -160,10 +160,43 @@ BEGIN
   END IF;
 END $$;
 
--- After running this, manually create your profile entry since you already exist as a user
--- Run this separately after the above completes:
--- INSERT INTO profiles (id, email, full_name, role)
--- SELECT id, email, raw_user_meta_data->>'full_name', 'admin'
--- FROM auth.users
--- WHERE email = 'kasekejoseph19@gmail.com'
--- ON CONFLICT (id) DO UPDATE SET role = 'admin';
+-- Formulation Finance Approval & Daily Selection
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT false;
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES profiles(id);
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS approval_notes TEXT DEFAULT '';
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS is_daily_active BOOLEAN DEFAULT false;
+ALTER TABLE formulations ADD COLUMN IF NOT EXISTS variation_name TEXT DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_formulations_code_daily_active ON formulations(code, is_daily_active);
+CREATE INDEX IF NOT EXISTS idx_formulations_is_approved ON formulations(is_approved);
+
+CREATE OR REPLACE FUNCTION set_daily_active_formulation(
+  p_formulation_id UUID,
+  p_approved_by UUID,
+  p_notes TEXT DEFAULT ''
+) RETURNS void AS $$
+DECLARE
+  v_code text;
+BEGIN
+  SELECT code INTO v_code FROM formulations WHERE id = p_formulation_id;
+
+  IF v_code IS NOT NULL THEN
+    UPDATE formulations
+    SET is_daily_active = false
+    WHERE code = v_code;
+  END IF;
+
+  UPDATE formulations
+  SET is_daily_active = true,
+      is_approved = true,
+      approved_by = p_approved_by,
+      approved_at = NOW(),
+      approval_notes = COALESCE(p_notes, approval_notes),
+      status = 'active',
+      updated_at = NOW()
+  WHERE id = p_formulation_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+

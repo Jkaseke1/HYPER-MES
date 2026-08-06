@@ -560,6 +560,7 @@ export default function FormulationsPage() {
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Version</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Batch Size</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-700 uppercase tracking-wider">Cost/Unit</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Daily Active</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Status</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Action</th>
                       </tr>
@@ -618,16 +619,44 @@ export default function FormulationsPage() {
                             <span className="text-sm font-semibold text-teal-700">${f.estimated_cost_per_unit.toFixed(2)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
+                            {(f as any).is_daily_active ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold shadow-sm animate-pulse">
+                                ✨ Active Today
+                              </span>
+                            ) : (f as any).is_approved ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold">
+                                Approved
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-medium">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
                             <StatusBadge status={f.status} />
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => openDetail(f)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5" />
-                              View
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              {!(f as any).is_daily_active && (
+                                <button
+                                  onClick={async () => {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    await supabase.rpc('set_daily_active_formulation', { p_formulation_id: f.id, p_approved_by: user?.id });
+                                    fetchFormulations();
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded transition-colors"
+                                  title="Set as Finance-Approved Active Formulation for Today"
+                                >
+                                  ✨ Set Active
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openDetail(f)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                                View
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

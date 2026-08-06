@@ -283,8 +283,30 @@ export default function DashboardPage() {
 
         const throughput = Math.round((heroOrder.actual_qty || 0) / elapsedHours);
 
-        return (
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
+      {/* Low Stock Warning Banner for Finance & RM Teams */}
+      {lowStockItems.length > 0 && (
+        <div className="bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white rounded-2xl p-4 shadow-lg border border-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h4 className="font-black text-xs uppercase tracking-wider text-rose-100">🚨 Low Raw Material Stock Alert (Finance & RM Notice)</h4>
+              <p className="text-xs text-white mt-0.5 font-medium">
+                <span className="font-bold underline">{lowStockItems.length} raw material(s)</span> are below reorder level: {lowStockItems.slice(0, 3).map(m => m.name).join(', ')}...
+              </p>
+            </div>
+          </div>
+          <a
+            href="/raw-materials"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white text-rose-900 hover:bg-rose-50 rounded-lg text-xs font-black shadow-md transition-all shrink-0 active:scale-95"
+          >
+            View Low Stock List
+          </a>
+        </div>
+      )}
+
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-700/60">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">

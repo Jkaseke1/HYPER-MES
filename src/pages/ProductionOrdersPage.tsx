@@ -1457,10 +1457,17 @@ export default function ProductionOrdersPage() {
                   required
                 >
                   <option value="">Select formulation</option>
-                  {formulations.map((f) => (
-                    <option key={f.id} value={f.id}>{f.code} — {f.name}</option>
+                  {[...formulations].sort((a, b) => ((b as any).is_daily_active ? 1 : 0) - ((a as any).is_daily_active ? 1 : 0)).map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {(f as any).is_daily_active ? '✨ [ACTIVE TODAY] ' : (f as any).is_approved ? '✅ [APPROVED] ' : ''}{f.code} — {f.name}
+                    </option>
                   ))}
                 </select>
+                {form.formulation_id && (formulations.find(f => f.id === form.formulation_id) as any)?.is_daily_active && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-700 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                    <span>✨ Active Formulation for Today (Finance Approved)</span>
+                  </div>
+                )}
               </div>
 
               <div>
