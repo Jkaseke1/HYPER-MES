@@ -100,7 +100,23 @@ export default function MacropackReconReport() {
         }
       }
 
-      // 4. Build dynamic Macropack Recon Table
+      // 4. Fetch actual micro-ingredient dispensing variance from macropack_order_issues and production_order_issues
+      const { data: macroIssues } = await supabase
+        .from('macropack_order_issues')
+        .select('*, macropack_manufacture_orders(macropack_boms(macropack_code))');
+
+      const varianceMap: Record<string, { expectedKg: number; actualKg: number }> = {};
+      if (macroIssues && macroIssues.length > 0) {
+        for (const issue of macroIssues) {
+          const code = issue.macropack_manufacture_orders?.macropack_boms?.macropack_code?.toUpperCase() || '';
+          if (!code) continue;
+          if (!varianceMap[code]) varianceMap[code] = { expectedKg: 0, actualKg: 0 };
+          varianceMap[code].expectedKg += Number(issue.expected_grams || 0) / 1000;
+          varianceMap[code].actualKg += Number(issue.actual_grams_dispensed || issue.expected_grams || 0) / 1000;
+        }
+      }
+
+      // 5. Build dynamic Macropack Recon Table with working Material Variance & Variance %
       const newMacropackRows: MacropackReconRow[] = BASE_FORMULATIONS.map(item => {
         const liveData = liveMfdMap[item.code] || { totalKg: 0, units: 0 };
         const mfdUnits = liveData.units > 0 ? liveData.units : (item.code === 'BSG50' ? 181 : item.code === 'BSC50' ? 68 : item.code === 'BFM50' ? 40 : item.code === 'BFP50' ? 20 : 50);
@@ -110,6 +126,17 @@ export default function MacropackReconReport() {
         const closing = totalUnits - converted;
         const pmxKg = parseFloat((mfdUnits * 0.1).toFixed(1)); // 100g premix per 50kg bag
 
+        // Calculate material variance from actual micro-ingredient dispensing logs
+        const varData = varianceMap[item.code];
+        let materialVarianceUnits = 0;
+        let variancePct = 0.0;
+
+        if (varData && varData.expectedKg > 0) {
+          const diffKg = varData.actualKg - varData.expectedKg;
+          materialVarianceUnits = Math.round(diffKg / 50 * 10) / 10;
+          variancePct = parseFloat(((diffKg / varData.expectedKg) * 100).toFixed(1));
+        }
+
         return {
           productCode: item.code,
           productName: item.name,
@@ -118,13 +145,13 @@ export default function MacropackReconReport() {
           totalUnits,
           convertedUnits: converted,
           closingUnits: closing,
-          materialVarianceUnits: 0,
-          variancePct: 0.0,
+          materialVarianceUnits,
+          variancePct,
           starterPmxKg: pmxKg,
         };
       });
 
-      // 5. Build dynamic Monthly Product Margin & Tonnage Summary Table
+      // 6. Build dynamic Monthly Product Margin & Tonnage Summary Table
       const newSummaryRows: MonthlySummaryRow[] = BASE_FORMULATIONS.map(item => {
         const liveData = liveMfdMap[item.code];
         const liveTonnage = liveData && liveData.totalKg > 0 ? (liveData.totalKg / 1000) : item.defaultTonnage;
@@ -276,8 +303,32 @@ export default function MacropackReconReport() {
                   <td className="px-4 py-2.5 text-right font-mono text-slate-800">{row.totalUnits}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-emerald-700 font-bold">{row.convertedUnits}</td>
                   <td className="px-4 py-2.5 text-right font-mono bg-teal-50/30 text-teal-950 font-extrabold">{row.closingUnits}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-slate-500">{row.materialVarianceUnits}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-emerald-600">{row.variancePct.toFixed(1)}%</td>
+                  <td className="px-4 py-2.5 text-right font-mono font-bold">
+                    {row.materialVarianceUnits < 0 ? (
+                      <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">
+                        {row.materialVarianceUnits}
+                      </span>
+                    ) : row.materialVarianceUnits > 0 ? (
+                      <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
+                        +{row.materialVarianceUnits}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 font-medium">0</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-bold">
+                    {row.variancePct < 0 ? (
+                      <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">
+                        {row.variancePct.toFixed(1)}%
+                      </span>
+                    ) : row.variancePct > 0 ? (
+                      <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
+                        +{row.variancePct.toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 font-medium">0.0%</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-right font-mono bg-amber-50/30 text-amber-900 font-bold">{row.starterPmxKg.toFixed(1)}</td>
                 </tr>
               ))}
