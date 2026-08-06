@@ -265,24 +265,6 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
-
-      {/* Hero Live Production Banner */}
-      {(() => {
-        const inProgressOrders = liveOrders.filter((o) => o.status === 'in_progress');
-        const heroOrder = inProgressOrders[0] || liveOrders[0];
-
-        if (!heroOrder) return null;
-
-        const yieldPct = heroOrder.planned_qty > 0
-          ? Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)
-          : 0;
-
-        const elapsedHours = heroOrder.start_time
-          ? Math.max(0.1, (Date.now() - new Date(heroOrder.start_time).getTime()) / 3600000)
-          : 1;
-
-        const throughput = Math.round((heroOrder.actual_qty || 0) / elapsedHours);
-
       {/* Low Stock Warning Banner for Finance & RM Teams */}
       {lowStockItems.length > 0 && (
         <div className="bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white rounded-2xl p-4 shadow-lg border border-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -306,7 +288,23 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
+      {/* Hero Live Production Banner */}
+      {(() => {
+        const inProgressOrders = liveOrders.filter((o) => o.status === 'in_progress');
+        const heroOrder = inProgressOrders[0] || liveOrders[0];
+
+        if (!heroOrder) return null;
+
+        const yieldPct = heroOrder.planned_qty > 0
+          ? Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)
+          : 0;
+
+        const elapsedHours = heroOrder.start_time
+          ? Math.max(0.1, (Date.now() - new Date(heroOrder.start_time).getTime()) / 3600000)
+          : 1;
+
+        return (
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-700/60">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
