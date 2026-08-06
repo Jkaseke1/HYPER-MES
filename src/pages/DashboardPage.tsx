@@ -299,10 +299,12 @@ export default function DashboardPage() {
           ? Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)
           : 0;
 
-        const elapsedHours = heroOrder.actual_start
-          ? Math.max(0.1, (Date.now() - new Date(heroOrder.actual_start).getTime()) / 3600000)
+        const actualStart = (heroOrder as any).actual_start || (heroOrder as any).start_time;
+        const elapsedHours = actualStart
+          ? Math.max(0.1, (Date.now() - new Date(actualStart).getTime()) / 3600000)
           : 1;
-        const throughput = Math.round((((heroOrder.actual_qty || 0) / elapsedHours) * 100)) / 100;
+        const throughputVal = Math.round((((heroOrder.actual_qty || 0) / elapsedHours) * 100)) / 100;
+        const unitStr = (heroOrder as any).unit || 'kg';
 
         return (
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
@@ -339,7 +341,7 @@ export default function DashboardPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Throughput', value: `${throughput.toLocaleString()} ${heroOrder.unit}/hr`, pct: Math.min(100, throughput / 10), color: '#10b981', icon: Zap },
+                    { label: 'Throughput', value: `${throughputVal.toLocaleString()} ${unitStr}/hr`, pct: Math.min(100, throughputVal / 10), color: '#10b981', icon: Zap },
                     { label: 'Yield Rate', value: `${yieldPct}%`, pct: yieldPct, color: '#3b82f6', icon: Gauge },
                     { label: 'Batch Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()} kg`, pct: yieldPct, color: '#f59e0b', icon: Activity },
                     { label: 'Active Lines', value: `${liveOrders.filter(o => o.status === 'in_progress').length} Line Running`, pct: Math.min(100, liveOrders.filter(o => o.status === 'in_progress').length * 50), color: '#a855f7', icon: Users },
