@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Download, RefreshCw, Package, Layers, TrendingUp, FileText, Award, Database } from 'lucide-react';
+import { Download, RefreshCw, Package, Layers, TrendingUp, FileText, Database, Activity, CheckCircle2, ClipboardCheck, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import StatCard from '../ui/StatCard';
 
 interface MacropackReconRow {
   productCode: string;
@@ -68,6 +67,37 @@ function getPeriodBounds(period: string) {
     startDate: start.toISOString().slice(0, 10),
     endDate: end.toISOString().slice(0, 10),
   };
+}
+
+function MetricCard({ label, value, detail, icon: Icon, accent }: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: any;
+  accent: 'teal' | 'blue' | 'emerald' | 'amber';
+}) {
+  const styles = {
+    teal: 'bg-teal-50 text-teal-600 ring-teal-100',
+    blue: 'bg-blue-50 text-blue-600 ring-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+    amber: 'bg-amber-50 text-amber-600 ring-amber-100',
+  }[accent];
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="absolute right-0 top-0 h-20 w-20 rounded-bl-[3rem] bg-slate-50/80" />
+      <div className="relative flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">{value}</p>
+          <p className="mt-1 text-xs font-medium text-slate-400">{detail}</p>
+        </div>
+        <div className={`grid h-11 w-11 place-items-center rounded-xl ring-4 ${styles}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function MacropackReconReport() {
@@ -263,7 +293,7 @@ export default function MacropackReconReport() {
     macropackRows.forEach(r => {
       csv += `"${r.productCode}","${r.productName}",${r.openingUnits},${r.manufacturedUnits},${r.totalUnits},${r.convertedUnits},${r.closingUnits},${r.materialVarianceUnits},${r.variancePct}%,${r.starterPmxKg}\n`;
     });
-    csv += `TOTALS,,${totals.totalOpening},${totals.totalMfd},${totals.totalUnits},${totals.totalConverted},${totals.totalClosing},0,0.0%,${totals.totalPmx}\n\n`;
+    csv += `TOTALS,,${totals.totalOpening},${totals.totalMfd},${totals.totalUnits},${totals.totalConverted},${totals.totalClosing},${totals.totalMaterialVarianceUnits.toFixed(1)},${totals.totalVariancePct.toFixed(1)}%,${totals.totalPmx}\n\n`;
 
     csv += `MONTHLY MARGIN & TONNAGE SUMMARY - ${selectedPeriod}\n`;
     csv += `Product,Margin %,Tonnage (Tonnes)\n`;
@@ -281,23 +311,27 @@ export default function MacropackReconReport() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl border border-teal-900/50">
-        <div>
-          <div className="flex items-center gap-2 text-teal-400 font-semibold text-xs uppercase tracking-wider mb-1">
-            <Award className="w-4 h-4" /> Live System Telemetry & Premix Reconciliation
+    <div className="space-y-5 pb-4">
+      {/* Report control panel */}
+      <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 px-6 py-6 text-white shadow-xl sm:px-8">
+        <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-teal-400/10 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-px w-2/3 bg-gradient-to-r from-transparent via-teal-400/50 to-transparent" />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-teal-300">
+              <Sparkles className="h-4 w-4" /> Operations intelligence
+            </div>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Macropack & Premix Reconciliation</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-300">A consolidated view of production output, premix consumption, and material variance for the selected reporting period.</p>
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight">MACROPACK & PREMIX RECONCILIATION REPORT</h1>
-          <p className="text-sm text-slate-300 mt-1">
-            Dynamically aggregates production orders, macropack conversions, system closing balances, and premix usage from live MES & Sage SSMS databases.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300">
+              <Activity className="h-4 w-4 text-emerald-400" /> Live data
+            </div>
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-teal-500"
+            className="h-10 rounded-xl border border-white/15 bg-slate-900 px-3 text-sm font-bold text-white outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30"
           >
             <option value="JULY 2026">JULY 2026 SUMMARY</option>
             <option value="JUNE 2026">JUNE 2026 SUMMARY</option>
@@ -305,55 +339,54 @@ export default function MacropackReconReport() {
           </select>
           <button
             onClick={fetchLiveReconData}
-            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors text-slate-300 flex items-center gap-1.5 text-xs font-semibold px-3"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-bold text-slate-100 transition hover:bg-white/10"
             title="Refresh Live System Data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Live Data
           </button>
           <button
             onClick={exportCSV}
-            className="flex items-center gap-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm transition-all shadow-md"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-teal-950/30 transition hover:bg-teal-300"
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
+          </div>
         </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="System tonnage" value={`${totals.totalTonnage.toFixed(2)} t`} detail="Completed production volume" icon={Package} accent="teal" />
+        <MetricCard label="Manufactured packs" value={totals.totalMfd.toLocaleString()} detail="Units created this period" icon={Layers} accent="blue" />
+        <MetricCard label="Converted packs" value={totals.totalConverted.toLocaleString()} detail="Units issued to feed batches" icon={TrendingUp} accent="emerald" />
+        <MetricCard label="Premix consumed" value={`${totals.totalPmx.toFixed(1)} kg`} detail="Estimated PMX consumption" icon={FileText} accent="amber" />
       </div>
 
-      {/* Top Key Performance Indicators */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total System Tonnage" value={`${totals.totalTonnage.toFixed(2)} t`} icon={Package} color="teal" />
-        <StatCard title="Live Manufactured Units" value={`${totals.totalMfd.toLocaleString()} Units`} icon={Layers} color="blue" />
-        <StatCard title="Total Converted Units" value={`${totals.totalConverted.toLocaleString()} Units`} icon={TrendingUp} color="emerald" />
-        <StatCard title="Total Premix (PMX)" value={`${totals.totalPmx.toFixed(1)} kg`} icon={FileText} color="amber" />
-      </div>
-
-      {/* Live System Data Badge */}
-      <div className="flex items-center justify-between bg-teal-50 border border-teal-200 p-3 rounded-xl text-teal-900 text-xs font-medium">
-        <div className="flex items-center gap-2">
-          <Database className="w-4 h-4 text-teal-600 animate-pulse" />
-          <span><strong>Live MES & Sage DB Connection:</strong> Reading active production orders, formulation yields, and warehouse stock balances.</span>
+      <div className="flex flex-col gap-2 rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3 text-xs text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-white text-teal-600 shadow-sm"><Database className="h-4 w-4" /></div>
+          <span><strong className="text-slate-900">Live MES & Sage connection.</strong> Production, formulation, and stock balances are up to date.</span>
         </div>
-        {lastSyncTime && <span className="text-teal-700 font-mono">Last refreshed at {lastSyncTime}</span>}
+        {lastSyncTime && <span className="whitespace-nowrap font-mono font-medium text-teal-700">Updated {lastSyncTime}</span>}
       </div>
 
       {/* Table 1: MACROPACK PRODUCTION / PACKS RECONCILIATION */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Package className="w-5 h-5 text-teal-600" />
-              MACROPACK PRODUCTION / PACKS RECONCILIATION ({selectedPeriod})
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-teal-700"><ClipboardCheck className="h-4 w-4" /> Stock movement reconciliation</div>
+            <h2 className="text-lg font-black text-slate-900">
+              Macropack production & packs
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">Opening, Manufactured, Converted, Closing System Units & Material Variance</p>
           </div>
-          <span className="text-xs font-semibold px-3 py-1 bg-teal-100 text-teal-800 rounded-full">
-            {macropackRows.length} Product Formulations
+          <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-teal-100 px-3 py-1.5 text-xs font-bold text-teal-800 sm:self-auto">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {macropackRows.length} formulations
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 uppercase font-bold tracking-wider">
+          <table className="w-full min-w-[1050px] text-xs text-left">
+            <thead className="border-b border-slate-200 bg-slate-100/90 text-slate-600 uppercase font-bold tracking-wider">
               <tr>
                 <th className="px-4 py-3">Product Name</th>
                 <th className="px-4 py-3 text-right">Opening Units</th>
@@ -366,10 +399,10 @@ export default function MacropackReconReport() {
                 <th className="px-4 py-3 text-right bg-amber-50/50 text-amber-900">Starter PMX (kg)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
               {macropackRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-2.5 font-bold text-slate-900">{row.productName}</td>
+                <tr key={idx} className="transition-colors hover:bg-teal-50/40">
+                  <td className="px-4 py-3"><div className="font-bold text-slate-900">{row.productName}</div><div className="mt-0.5 font-mono text-[10px] font-bold tracking-wide text-slate-400">{row.productCode}</div></td>
                   <td className="px-4 py-2.5 text-right font-mono text-slate-600">{row.openingUnits}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-blue-700 font-bold">{row.manufacturedUnits}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-slate-800">{row.totalUnits}</td>
