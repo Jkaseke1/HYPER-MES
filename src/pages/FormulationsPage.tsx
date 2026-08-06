@@ -85,6 +85,14 @@ const DEFAULT_CATEGORIES = [
   { code: 'Other', name: 'Other' },
 ];
 
+export function isMacropackMaterial(item?: { name?: string; code?: string; category?: string | null }) {
+  if (!item) return false;
+  const c = (item.category || '').toLowerCase();
+  const n = (item.name || '').toLowerCase();
+  const cd = (item.code || '').toLowerCase();
+  return c === 'macropack' || c === 'premix' || n.includes('macropack') || n.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss') || cd.startsWith('bss') || cd.includes('pack');
+}
+
 export default function FormulationsPage() {
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
@@ -146,7 +154,7 @@ export default function FormulationsPage() {
   }, []);
 
   const fetchMaterials = useCallback(async () => {
-    const { data } = await supabase.from('raw_materials').select('id, name, code, unit').eq('is_active', true);
+    const { data } = await supabase.from('raw_materials').select('id, name, code, unit, category').eq('is_active', true);
     setMaterials(data || []);
   }, []);
 
@@ -900,12 +908,30 @@ export default function FormulationsPage() {
                                   u[idx] = { ...u[idx], raw_material_id: e.target.value, raw_materials: selected_mat as any };
                                   setBomEditIngs(u);
                                 }}
-                                className="w-full px-2 py-1 border border-blue-200 rounded text-xs focus:outline-none focus:border-blue-500 bg-blue-50"
+                                className="w-full px-2 py-1 border border-teal-200 rounded text-xs focus:outline-none focus:border-teal-500 bg-teal-50/50 font-medium"
                               >
-                                {materials.map(m => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+                                <option value="">Select component / material...</option>
+                                <optgroup label="📦 Manufactured Macropacks & Premixes">
+                                  {materials.filter(isMacropackMaterial).map(m => (
+                                    <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="🌾 Raw Materials">
+                                  {materials.filter(m => !isMacropackMaterial(m)).map(m => (
+                                    <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
+                                  ))}
+                                </optgroup>
                               </select>
                             ) : (
-                              <span className="text-slate-700 font-medium">{i.raw_materials?.name || 'Unknown'}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-slate-800 font-bold">{i.raw_materials?.name || 'Unknown'}</span>
+                                <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">({i.raw_materials?.code})</span>
+                                {isMacropackMaterial(i.raw_materials) && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                    📦 Macropack / Premix
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -1100,8 +1126,18 @@ export default function FormulationsPage() {
               <tbody>{ings.map((ing, idx) => (
                 <tr key={idx} className="border-b border-slate-50">
                   <td className="py-1.5 pr-2">
-                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500">
-                      <option value="">Select raw material...</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
+                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
+                      <option value="">Select component / material...</option>
+                      <optgroup label="📦 Manufactured Macropacks & Premixes">
+                        {materials.filter(isMacropackMaterial).map(m => (
+                          <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="🌾 Raw Materials">
+                        {materials.filter(m => !isMacropackMaterial(m)).map(m => (
+                          <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
+                        ))}
+                      </optgroup>
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
