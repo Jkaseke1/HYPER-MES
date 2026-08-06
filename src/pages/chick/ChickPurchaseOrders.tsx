@@ -855,7 +855,7 @@ export default function ChickPurchaseOrders() {
                             const val = parseInt(e.target.value) || 0;
                             setAdjustLines(prev => prev.map((l, i) => i === idx ? { ...l, booked_qty: val } : l));
                           }}
-                          className="w-24 px-2 py-1 text-right border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-24 px-2 py-1 text-right border rounded text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                         />
                       </TableCell>
                       <TableCell className="text-right text-slate-500">{line.wish_qty.toLocaleString()}</TableCell>

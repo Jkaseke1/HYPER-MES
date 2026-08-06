@@ -38,7 +38,7 @@ interface DispatchItem {
 }
 
 const DISPATCH_WORKFLOW: { status: DispatchOrder['status']; label: string; btnLabel: string; btnColor: string; next: DispatchOrder['status'] | null }[] = [
-  { status: 'pending',    label: 'Pending',    btnLabel: 'Plan Dispatch',      btnColor: 'bg-blue-600 hover:bg-blue-700',   next: 'planned' },
+  { status: 'pending',    label: 'Pending',    btnLabel: 'Plan Dispatch',      btnColor: 'bg-teal-600 hover:bg-teal-700',   next: 'planned' },
   { status: 'planned',   label: 'Planned',    btnLabel: 'Mark as Loaded',     btnColor: 'bg-amber-600 hover:bg-amber-700',  next: 'loaded' },
   { status: 'loaded',    label: 'Loaded',     btnLabel: 'Dispatch Now',       btnColor: 'bg-teal-600 hover:bg-teal-700',   next: 'dispatched' },
   { status: 'dispatched',label: 'Dispatched', btnLabel: 'Confirm Delivery',   btnColor: 'bg-emerald-600 hover:bg-emerald-700', next: 'delivered' },

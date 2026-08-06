@@ -1857,7 +1857,7 @@ export default function ProductionOrdersPage() {
                     <button
                       onClick={() => updateStatus('in_progress')}
                       disabled={saving}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all"
                     >
                       <Play className="w-4 h-4" />
                       Start Production
@@ -2345,7 +2345,7 @@ export default function ProductionOrdersPage() {
                     <button
                       onClick={saveProductionOutput}
                       disabled={saving || output.actual_qty <= 0}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                       <Check className="w-4 h-4" />
                       Save Output

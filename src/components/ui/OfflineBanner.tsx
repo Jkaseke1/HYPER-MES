@@ -55,9 +55,9 @@ export default function OfflineBanner() {
       )}
 
       {isOnline && outboxCount > 0 && (
-        <div className="bg-blue-600 text-white px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-md">
+        <div className="bg-teal-700 text-white px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-md">
           <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-blue-200" />
+            <Database className="w-4 h-4 text-teal-200" />
             <span>
               <strong>Connection Restored:</strong> {outboxCount} operation{outboxCount > 1 ? 's' : ''} queued offline ready to sync.
             </span>

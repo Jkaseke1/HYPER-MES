@@ -1135,7 +1135,7 @@ export default function MacropackManufacturingPage() {
                   <button
                     onClick={() => handleApprovalAction('submit')}
                     disabled={approvalSaving}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
+                    className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
                   >
                     <Send className="w-3.5 h-3.5" /> Submit for RM Allocation
                   </button>

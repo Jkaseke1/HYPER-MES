@@ -1357,12 +1357,12 @@ export default function DispatchPage() {
                     {/* STAGE 1: LOADED */}
                     <div className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</div>
+                        <div className="w-7 h-7 rounded-full bg-teal-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</div>
                         <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">Loaded & Dispatched</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span className="text-xs font-bold text-blue-700">Complete</span>
+                        <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                        <span className="text-xs font-bold text-teal-700">Complete</span>
                       </div>
                       <p className="text-[10px] text-slate-500">Dispatched on {format(new Date(viewOrder.dispatch_date), 'dd MMM yyyy')}</p>
                       {viewOrder.physical_dnote_number && (

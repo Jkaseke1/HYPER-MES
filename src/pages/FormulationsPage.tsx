@@ -934,7 +934,7 @@ export default function FormulationsPage() {
                           <td className={`px-3 py-2 text-right font-medium ${stockStatus}`}>{currentStock.toLocaleString()}</td>
                           <td className="px-3 py-2 text-center">
                             {bomEditMode ? (
-                              <input type="checkbox" checked={i.is_critical} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setBomEditIngs(u); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                              <input type="checkbox" checked={i.is_critical} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setBomEditIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                             ) : (
                               <span>{i.is_critical ? <span className="text-xs font-medium text-red-600">●</span> : <span className="text-xs text-slate-300">○</span>}</span>
                             )}
@@ -955,7 +955,7 @@ export default function FormulationsPage() {
               {detailTab === 'ingredients' && bomEditMode && (
                 <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-200">
                   <button onClick={() => setBomEditMode(false)} className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
-                  <button onClick={saveBomEdits} disabled={saving} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save BOM Changes'}</button>
+                  <button onClick={saveBomEdits} disabled={saving} className="px-3.5 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-all shadow-md disabled:opacity-50">{saving ? 'Saving...' : 'Save BOM Changes'}</button>
                 </div>
               )}
 
