@@ -21,6 +21,8 @@ interface DashboardStats {
   efficiency: number;
 }
 
+import { Link } from 'react-router-dom';
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalProduction: 0, activeOrders: 0, rawMaterialCount: 0,
@@ -265,26 +267,31 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
-      {/* Low Stock Warning Banner for Finance & RM Teams */}
+      {/* Sleek Low Stock Notice Banner */}
       {lowStockItems.length > 0 && (
-        <div className="bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white rounded-2xl p-4 shadow-lg border border-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="bg-slate-900 border border-amber-500/30 text-white rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h4 className="font-black text-xs uppercase tracking-wider text-rose-100">🚨 Low Raw Material Stock Alert (Finance & RM Notice)</h4>
-              <p className="text-xs text-white mt-0.5 font-medium">
-                <span className="font-bold underline">{lowStockItems.length} raw material(s)</span> are below reorder level: {lowStockItems.slice(0, 3).map(m => m.name).join(', ')}...
+              <div className="flex items-center gap-2">
+                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-amber-500/30 uppercase tracking-wider">
+                  Reorder Notice
+                </span>
+                <span className="text-xs text-slate-400">Finance & Warehouse Notice</span>
+              </div>
+              <p className="text-xs text-slate-200 mt-1 font-medium">
+                <strong className="text-amber-400">{lowStockItems.length} raw material(s)</strong> are below reorder threshold ({lowStockItems.slice(0, 3).map(m => m.name).join(', ')}...)
               </p>
             </div>
           </div>
-          <a
-            href="/raw-materials"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white text-rose-900 hover:bg-rose-50 rounded-lg text-xs font-black shadow-md transition-all shrink-0 active:scale-95"
+          <Link
+            to="/raw-materials"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl text-xs font-bold shadow-md transition-all shrink-0 active:scale-95 border border-teal-400/30"
           >
             View Low Stock List
-          </a>
+          </Link>
         </div>
       )}
 
