@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hyper-mes-v3';
+const CACHE_NAME = 'hyper-mes-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
