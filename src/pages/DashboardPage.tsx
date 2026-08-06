@@ -299,9 +299,10 @@ export default function DashboardPage() {
           ? Math.round(((heroOrder.actual_qty || 0) / heroOrder.planned_qty) * 100)
           : 0;
 
-        const elapsedHours = heroOrder.start_time
-          ? Math.max(0.1, (Date.now() - new Date(heroOrder.start_time).getTime()) / 3600000)
+        const elapsedHours = heroOrder.actual_start
+          ? Math.max(0.1, (Date.now() - new Date(heroOrder.actual_start).getTime()) / 3600000)
           : 1;
+        const throughput = Math.round((((heroOrder.actual_qty || 0) / elapsedHours) * 100)) / 100;
 
         return (
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
