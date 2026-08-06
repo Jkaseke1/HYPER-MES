@@ -796,25 +796,34 @@ export default function MacropackManufacturingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Dynamic Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-teal-900/40 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 text-teal-400 font-bold text-xs uppercase tracking-widest mb-1">
-              <Sparkles className="w-4 h-4" /> Macropack & Premix Control Hub
+    <div className="space-y-5 pb-6">
+      {/* Macropack workspace header */}
+      <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 px-6 py-7 text-white shadow-xl sm:px-8">
+        <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(45,212,191,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(45,212,191,0.12)_1px,transparent_1px)] [background-size:32px_32px]" />
+        <div className="pointer-events-none absolute -right-20 -top-28 h-80 w-80 rounded-full bg-teal-400/15 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-1 w-2/3 bg-gradient-to-r from-teal-400 via-cyan-300 to-transparent" />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-teal-300/25 bg-teal-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-teal-200">
+                <Sparkles className="h-3.5 w-3.5" /> Production workspace
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400"><span className="h-2 w-2 rounded-full bg-emerald-400" /> System connected</span>
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-white">MACROPACK MANUFACTURING</h1>
-            <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Precision micro-ingredient formulation, premix batching, multi-level approvals, and automated Sage SSMS stock synchronization.
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">Macropack manufacturing</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+              Manage micro-ingredient formulation, premix batching, approval controls, and stock synchronization from one production workspace.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs sm:block">
+              <span className="block font-bold text-teal-300">{orderStats.completed} completed</span>
+              <span className="text-slate-400">orders this workspace</span>
+            </div>
             {activeTab === 'Manufacturing Orders' && (
               <button
                 onClick={() => { setOrderForm(emptyOrderForm); setPreviewIngredients([]); setNewOrderModalOpen(true); }}
-                className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg hover:shadow-teal-500/25"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-teal-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-teal-950/30 transition hover:bg-teal-300"
               >
                 <Plus className="w-4 h-4 stroke-[3]" /> + New Order
               </button>
@@ -822,14 +831,14 @@ export default function MacropackManufacturingPage() {
             {activeTab === 'Macropack BOMs' && (
               <button
                 onClick={openNewBom}
-                className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg hover:shadow-teal-500/25"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-teal-400 px-4 text-sm font-black text-slate-950 shadow-lg shadow-teal-950/30 transition hover:bg-teal-300"
               >
                 <Plus className="w-4 h-4 stroke-[3]" /> + Add New BOM
               </button>
-            )}
-          </div>
+           )}
+         </div>
         </div>
-      </div>
+      </section>
 
       {/* KPI Stats Strip */}
       {activeTab === 'Manufacturing Orders' && (
@@ -842,16 +851,16 @@ export default function MacropackManufacturingPage() {
       )}
 
       {/* Tabs Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-2 rounded-xl shadow-sm">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-1">
           {TABS.map(tab => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setSearch(''); }}
-              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              className={`rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
                 activeTab === tab
-                  ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
               }`}
             >
               {tab}
@@ -861,14 +870,14 @@ export default function MacropackManufacturingPage() {
 
         {/* Search Bar (Orders & BOMs tabs) */}
         {activeTab !== 'Premix & Pack Recon Report' && (
-          <div className="relative w-72 my-1.5 mr-2">
+          <div className="relative w-full lg:mr-1 lg:w-72">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder={activeTab === 'Manufacturing Orders' ? 'Search macropack orders...' : 'Search BOM formulas...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none bg-slate-50/50"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pl-10 text-xs font-medium outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20"
             />
           </div>
         )}
