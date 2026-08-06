@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Download, RefreshCw, Package, Layers, TrendingUp, FileText, Award, Database } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import StatCard from '../ui/StatCard';
@@ -13,6 +13,8 @@ interface MacropackReconRow {
   closingUnits: number;
   materialVarianceUnits: number;
   variancePct: number;
+  expectedIngredientKg: number;
+  actualIngredientKg: number;
   starterPmxKg: number;
 }
 
@@ -46,6 +48,28 @@ const BASE_FORMULATIONS = [
   { code: 'WTB50', name: 'WINTER BLOCKS', opening: 0, margin: 44.31, defaultTonnage: 18.00 },
 ];
 
+function getPeriodBounds(period: string) {
+  const [monthName, yearText] = period.split(' ');
+  const month = [
+    'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+    'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+  ].indexOf(monthName);
+  const year = Number(yearText);
+
+  if (month < 0 || !Number.isInteger(year)) {
+    throw new Error(`Invalid reporting period: ${period}`);
+  }
+
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 1));
+  return {
+    startTimestamp: start.toISOString(),
+    endTimestamp: end.toISOString(),
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
+
 export default function MacropackReconReport() {
   const [selectedPeriod, setSelectedPeriod] = useState('JULY 2026');
   const [loading, setLoading] = useState(true);
@@ -60,25 +84,34 @@ export default function MacropackReconReport() {
   async function fetchLiveReconData() {
     setLoading(true);
     try {
+      const { startTimestamp, endTimestamp, startDate, endDate } = getPeriodBounds(selectedPeriod);
+
       // 1. Fetch real completed production orders from Supabase DB
       const { data: prodOrders, error: prodErr } = await supabase
         .from('production_orders')
         .select('id, batch_number, status, actual_qty, planned_qty, created_at, formulation_id, formulations(code, name)')
-        .eq('status', 'completed');
+        .eq('status', 'completed')
+        .gte('created_at', startTimestamp)
+        .lt('created_at', endTimestamp);
 
       if (prodErr) console.error('Error querying production orders:', prodErr);
 
       // 2. Fetch real macropack manufacture orders
       const { data: macroOrders } = await supabase
         .from('macropack_manufacture_orders')
-        .select('id, planned_units, actual_units, status, macropack_boms(macropack_code, macropack_name)');
+        .select('id, planned_units, actual_units, status, manufacture_date, macropack_boms(macropack_code, macropack_name)')
+        .eq('status', 'COMPLETED')
+        .gte('manufacture_date', startDate)
+        .lt('manufacture_date', endDate);
 
       // 3. Aggregate live system quantities by formulation/macropack code
       const liveMfdMap: Record<string, { totalKg: number; units: number }> = {};
 
       if (prodOrders && prodOrders.length > 0) {
         for (const p of prodOrders) {
-          const code = p.formulations?.code?.toUpperCase() || '';
+          const formulation: any = Array.isArray(p.formulations) ? p.formulations[0] : p.formulations;
+          const code = formulation?.code?.toUpperCase() || '';
+          if (!code) continue;
           const qtyKg = Number(p.actual_qty || p.planned_qty || 0);
           const units = Math.round(qtyKg / 50); // 50kg bag units
 
@@ -90,7 +123,9 @@ export default function MacropackReconReport() {
 
       if (macroOrders && macroOrders.length > 0) {
         for (const m of macroOrders) {
-          const code = m.macropack_boms?.macropack_code?.toUpperCase() || '';
+          const macropackBom: any = Array.isArray(m.macropack_boms) ? m.macropack_boms[0] : m.macropack_boms;
+          const code = macropackBom?.macropack_code?.toUpperCase() || '';
+          if (!code) continue;
           const units = Number(m.actual_units || m.planned_units || 0);
           const qtyKg = units * 50;
 
@@ -100,15 +135,24 @@ export default function MacropackReconReport() {
         }
       }
 
-      // 4. Fetch actual micro-ingredient dispensing variance from macropack_order_issues and production_order_issues
+      // 4. Fetch actual micro-ingredient dispensing variance saved by the macropack manufacturing screen.
       const { data: macroIssues } = await supabase
-        .from('macropack_order_issues')
-        .select('*, macropack_manufacture_orders(macropack_boms(macropack_code))');
+        .from('macropack_manufacture_issues')
+        .select('expected_grams, actual_grams_dispensed, macropack_manufacture_orders!inner(manufacture_date, status, macropack_boms!inner(macropack_code))')
+        .eq('macropack_manufacture_orders.status', 'COMPLETED')
+        .gte('macropack_manufacture_orders.manufacture_date', startDate)
+        .lt('macropack_manufacture_orders.manufacture_date', endDate);
 
       const varianceMap: Record<string, { expectedKg: number; actualKg: number }> = {};
       if (macroIssues && macroIssues.length > 0) {
         for (const issue of macroIssues) {
-          const code = issue.macropack_manufacture_orders?.macropack_boms?.macropack_code?.toUpperCase() || '';
+          const manufactureOrder: any = Array.isArray(issue.macropack_manufacture_orders)
+            ? issue.macropack_manufacture_orders[0]
+            : issue.macropack_manufacture_orders;
+          const macropackBom: any = Array.isArray(manufactureOrder?.macropack_boms)
+            ? manufactureOrder.macropack_boms[0]
+            : manufactureOrder?.macropack_boms;
+          const code = macropackBom?.macropack_code?.toUpperCase() || '';
           if (!code) continue;
           if (!varianceMap[code]) varianceMap[code] = { expectedKg: 0, actualKg: 0 };
           varianceMap[code].expectedKg += Number(issue.expected_grams || 0) / 1000;
@@ -116,10 +160,23 @@ export default function MacropackReconReport() {
         }
       }
 
-      // 5. Build dynamic Macropack Recon Table with working Material Variance & Variance %
-      const newMacropackRows: MacropackReconRow[] = BASE_FORMULATIONS.map(item => {
+      // 5. Build the report from all known products plus any codes returned by live data.
+      const baseByCode = new Map(BASE_FORMULATIONS.map(item => [item.code, item]));
+      const productCodes = new Set([
+        ...BASE_FORMULATIONS.map(item => item.code),
+        ...Object.keys(liveMfdMap),
+        ...Object.keys(varianceMap),
+      ]);
+      const newMacropackRows: MacropackReconRow[] = Array.from(productCodes).map(code => {
+        const item = baseByCode.get(code) || {
+          code,
+          name: code,
+          opening: 0,
+          margin: 0,
+          defaultTonnage: 0,
+        };
         const liveData = liveMfdMap[item.code] || { totalKg: 0, units: 0 };
-        const mfdUnits = liveData.units > 0 ? liveData.units : (item.code === 'BSG50' ? 181 : item.code === 'BSC50' ? 68 : item.code === 'BFM50' ? 40 : item.code === 'BFP50' ? 20 : 50);
+        const mfdUnits = liveData.units;
         const opening = item.opening;
         const totalUnits = opening + mfdUnits;
         const converted = Math.round(totalUnits * 0.85); // 85% converted to feed batches
@@ -147,14 +204,23 @@ export default function MacropackReconReport() {
           closingUnits: closing,
           materialVarianceUnits,
           variancePct,
+          expectedIngredientKg: varData?.expectedKg || 0,
+          actualIngredientKg: varData?.actualKg || 0,
           starterPmxKg: pmxKg,
         };
       });
 
       // 6. Build dynamic Monthly Product Margin & Tonnage Summary Table
-      const newSummaryRows: MonthlySummaryRow[] = BASE_FORMULATIONS.map(item => {
+      const newSummaryRows: MonthlySummaryRow[] = Array.from(productCodes).map(code => {
+        const item = baseByCode.get(code) || {
+          code,
+          name: code,
+          opening: 0,
+          margin: 0,
+          defaultTonnage: 0,
+        };
         const liveData = liveMfdMap[item.code];
-        const liveTonnage = liveData && liveData.totalKg > 0 ? (liveData.totalKg / 1000) : item.defaultTonnage;
+        const liveTonnage = liveData ? liveData.totalKg / 1000 : 0;
         return {
           product: item.name,
           marginPct: item.margin,
@@ -179,10 +245,16 @@ export default function MacropackReconReport() {
     const totalConverted = macropackRows.reduce((a, b) => a + b.convertedUnits, 0);
     const totalClosing = macropackRows.reduce((a, b) => a + b.closingUnits, 0);
     const totalPmx = macropackRows.reduce((a, b) => a + b.starterPmxKg, 0);
+    const totalExpectedIngredients = macropackRows.reduce((a, b) => a + b.expectedIngredientKg, 0);
+    const totalActualIngredients = macropackRows.reduce((a, b) => a + b.actualIngredientKg, 0);
+    const totalMaterialVarianceUnits = (totalActualIngredients - totalExpectedIngredients) / 50;
+    const totalVariancePct = totalExpectedIngredients > 0
+      ? ((totalActualIngredients - totalExpectedIngredients) / totalExpectedIngredients) * 100
+      : 0;
     const totalTonnage = summaryRows.reduce((a, b) => a + b.tonnage, 0);
     const avgMargin = (summaryRows.reduce((a, b) => a + b.marginPct, 0) / (summaryRows.length || 1)).toFixed(2);
 
-    return { totalOpening, totalMfd, totalUnits, totalConverted, totalClosing, totalPmx, totalTonnage, avgMargin };
+    return { totalOpening, totalMfd, totalUnits, totalConverted, totalClosing, totalPmx, totalMaterialVarianceUnits, totalVariancePct, totalTonnage, avgMargin };
   }, [macropackRows, summaryRows]);
 
   function exportCSV() {
@@ -341,8 +413,8 @@ export default function MacropackReconReport() {
                 <td className="px-4 py-3 text-right font-mono">{totals.totalUnits}</td>
                 <td className="px-4 py-3 text-right font-mono text-emerald-300">{totals.totalConverted}</td>
                 <td className="px-4 py-3 text-right font-mono text-amber-300 font-extrabold">{totals.totalClosing}</td>
-                <td className="px-4 py-3 text-right font-mono">0</td>
-                <td className="px-4 py-3 text-right font-mono">0.0%</td>
+                <td className="px-4 py-3 text-right font-mono">{totals.totalMaterialVarianceUnits.toFixed(1)}</td>
+                <td className="px-4 py-3 text-right font-mono">{totals.totalVariancePct.toFixed(1)}%</td>
                 <td className="px-4 py-3 text-right font-mono text-amber-400 font-extrabold">{totals.totalPmx.toFixed(1)} kg</td>
               </tr>
             </tfoot>
