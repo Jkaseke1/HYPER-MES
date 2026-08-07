@@ -4,25 +4,33 @@
     <meta charset="utf-8">
     <title>HYPER MES</title>
     <script type="text/javascript">
-      // GitHub Pages SPA Redirect Fix for Repository Subpath /HYPER-MES/
+      // GitHub Pages Single Page Application (SPA) Router Redirect Fix
+      // Handles page refreshes for all routes: /#/sage-posting-review, /#/formulations, etc.
       (function() {
         var l = window.location;
-        var pathSegments = l.pathname.split('/').filter(Boolean);
-        var repoName = pathSegments.length > 0 ? pathSegments[0] : '';
-        var repoBase = repoName ? '/' + repoName + '/' : '/';
+        var path = l.pathname; // e.g. "/HYPER-MES/sage-posting-review" or "/HYPER-MES/"
         
-        // Preserve hash and query parameters
-        var hash = l.hash || '#/';
+        // Find repository root segment
+        var parts = path.split('/').filter(Boolean);
+        var repoName = parts.length > 0 ? parts[0] : 'HYPER-MES';
+        
+        // Extract subpath route after repository name
+        var routePath = parts.slice(1).join('/');
+        
+        var hashRoute = l.hash ? l.hash : (routePath ? '#/' + routePath : '#/');
         var search = l.search || '';
         
-        var targetUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + repoBase + search + hash;
-        window.location.replace(targetUrl);
+        var targetUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + repoName + '/' + search + hashRoute;
+        
+        if (l.href !== targetUrl) {
+          window.location.replace(targetUrl);
+        }
       })();
     </script>
   </head>
-  <body style="background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; items-center: center; justify-content: center; height: 100vh; margin: 0;">
+  <body style="background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
     <div style="text-align: center; padding: 2rem;">
-      <h2 style="margin-bottom: 0.5rem; color: #38bdf8;">HYPER MES</h2>
+      <h2 style="margin-bottom: 0.5rem; color: #38bdf8; font-weight: 800;">HYPER MES</h2>
       <p style="color: #94a3b8; font-size: 0.875rem;">Loading application page...</p>
     </div>
   </body>
