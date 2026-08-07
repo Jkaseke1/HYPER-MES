@@ -136,7 +136,9 @@ export default function DispatchPage() {
     }
   };
 
-  const totalWeight = items.reduce((s, i) => s + (i.quantity || 0), 0);
+  const totalWeight = items
+    .filter((item) => item.formulation_id && Number(item.quantity) > 0)
+    .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   const filtered = orders.filter((o) => {
     if (!search) return true;
@@ -160,6 +162,24 @@ export default function DispatchPage() {
   };
 
   const handleCreate = async () => {
+    const dispatchItems = items.filter((item) => item.formulation_id && Number(item.quantity) > 0);
+    if (!form.warehouse_id) {
+      toast.error('Select the source warehouse before saving the dispatch.');
+      return;
+    }
+    if (form.dispatch_type === 'branch_transfer' && !form.branch_id) {
+      toast.error('Select the destination branch before saving the dispatch.');
+      return;
+    }
+    if (form.dispatch_type === 'customer_direct' && !form.customer_name.trim()) {
+      toast.error('Enter the customer name before saving the dispatch.');
+      return;
+    }
+    if (dispatchItems.length === 0) {
+      toast.error('Add at least one product with a quantity greater than zero.');
+      return;
+    }
+
     setSaving(true);
     try {
       if (editingOrderId) {
@@ -170,7 +190,7 @@ export default function DispatchPage() {
         }).eq('id', editingOrderId);
         if (updateError) throw updateError;
         await supabase.from('dispatch_items').delete().eq('dispatch_order_id', editingOrderId);
-        const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+        const rows = dispatchItems.map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
         toast.success('Dispatch order updated!');
       } else {
@@ -182,10 +202,10 @@ export default function DispatchPage() {
           status: 'pending', 
           total_weight: totalWeight, 
           total_value: 0,
-          created_by: profile?.id || null,
+          prepared_by: profile?.id || null,
         }).select().single();
         if (!error && data) {
-          const rows = items.filter((i) => i.formulation_id).map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+          const rows = dispatchItems.map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
           if (rows.length) await supabase.from('dispatch_items').insert(rows);
           toast.success('Dispatch order created & D-Note generated!');
         }
