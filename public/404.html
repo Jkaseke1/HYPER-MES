@@ -4,23 +4,18 @@
     <meta charset="utf-8">
     <title>HYPER MES</title>
     <script type="text/javascript">
-      // GitHub Pages Single Page Application (SPA) Router Redirect Fix
-      // Handles page refreshes for all routes: /#/sage-posting-review, /#/formulations, etc.
+      // GitHub Pages SPA 404 Router Handler for /HYPER-MES/
       (function() {
         var l = window.location;
-        var path = l.pathname; // e.g. "/HYPER-MES/sage-posting-review" or "/HYPER-MES/"
+        var path = l.pathname;
         
-        // Find repository root segment
         var parts = path.split('/').filter(Boolean);
         var repoName = parts.length > 0 ? parts[0] : 'HYPER-MES';
-        
-        // Extract subpath route after repository name
         var routePath = parts.slice(1).join('/');
         
         var hashRoute = l.hash ? l.hash : (routePath ? '#/' + routePath : '#/');
-        var search = l.search || '';
         
-        var targetUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + repoName + '/' + search + hashRoute;
+        var targetUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + repoName + '/' + hashRoute;
         
         if (l.href !== targetUrl) {
           window.location.replace(targetUrl);
