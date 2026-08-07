@@ -1186,7 +1186,7 @@ export default function FormulationsPage() {
               {detailTab === 'ingredients' && bomEditMode && (
                 <div className="space-y-3 mt-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-amber-50/80 border border-amber-200 rounded-xl">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
                           const newIng: FormulationIngredient = {
@@ -1201,9 +1201,9 @@ export default function FormulationsPage() {
                           };
                           setBomEditIngs([...bomEditIngs, newIng]);
                         }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
                       >
-                        <Plus className="w-4 h-4" /> ⭐️ Add Premix / Micro-Ingredient
+                        <Plus className="w-3.5 h-3.5" /> ⭐️ Add Premix / Micro-Ingredient
                       </button>
                       <button
                         onClick={() => {
@@ -1219,9 +1219,113 @@ export default function FormulationsPage() {
                           };
                           setBomEditIngs([...bomEditIngs, newIng]);
                         }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
                       >
-                        <Plus className="w-4 h-4" /> + Add Ingredient Line
+                        <Plus className="w-3.5 h-3.5" /> ⭐️ Add Premix / Micro-Ingredient
+                      </button>
+                      <button
+                        onClick={() => {
+                          const newIng: FormulationIngredient = {
+                            id: crypto.randomUUID(),
+                            formulation_id: selected.id,
+                            raw_material_id: '',
+                            quantity: 0,
+                            unit: 'kg',
+                            percentage: 0,
+                            is_critical: false,
+                            sort_order: bomEditIngs.length + 1,
+                          };
+                          setBomEditIngs([...bomEditIngs, newIng]);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> + Add Ingredient Line
+                      </button>
+                      
+                      {/* Separate 100% Matrix Buttons */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 100% Bulk Raw Material Matrix Distribution
+                          const copy = [...bomEditIngs];
+                          const bulkItems = copy.filter(i => {
+                            const typeInfo = getIngredientTypeCode(i.raw_materials?.name || '', i.raw_materials?.code || '');
+                            return !typeInfo.isPremix && i.raw_material_id;
+                          });
+                          const totalBulkQty = bulkItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+
+                          if (totalBulkQty > 0) {
+                            let sumBulkPct = 0;
+                            copy.forEach(i => {
+                              const typeInfo = getIngredientTypeCode(i.raw_materials?.name || '', i.raw_materials?.code || '');
+                              if (!typeInfo.isPremix && i.raw_material_id) {
+                                const p = Math.round(((Number(i.quantity) / totalBulkQty) * 100) * 1000) / 1000;
+                                i.percentage = p;
+                                sumBulkPct += p;
+                              }
+                            });
+                            // Rounding adjust on largest bulk item
+                            const diff = Math.round((100 - sumBulkPct) * 1000) / 1000;
+                            if (Math.abs(diff) > 0 && bulkItems.length > 0) {
+                              let maxIdx = 0;
+                              let maxQty = -1;
+                              copy.forEach((ing, idx) => {
+                                const typeInfo = getIngredientTypeCode(ing.raw_materials?.name || '', ing.raw_materials?.code || '');
+                                if (!typeInfo.isPremix && Number(ing.quantity) > maxQty) {
+                                  maxQty = Number(ing.quantity);
+                                  maxIdx = idx;
+                                }
+                              });
+                              copy[maxIdx].percentage = Math.round((copy[maxIdx].percentage + diff) * 1000) / 1000;
+                            }
+                            setBomEditIngs(copy);
+                            setToastMessage("📦 Bulk Raw Materials normalized to 100% Bulk Matrix!");
+                            setTimeout(() => setToastMessage(null), 3000);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition-all active:scale-95"
+                        title="Calculate Bulk Ingredients Matrix to sum to 100%"
+                      >
+                        📦 100% Bulk Matrix
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 100% Total Batch Matrix Distribution (Bulk + Premix)
+                          const copy = [...bomEditIngs];
+                          const totalQty = copy.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+
+                          if (totalQty > 0) {
+                            let sumPct = 0;
+                            copy.forEach(i => {
+                              if (i.raw_material_id) {
+                                const p = Math.round(((Number(i.quantity) / totalQty) * 100) * 1000) / 1000;
+                                i.percentage = p;
+                                sumPct += p;
+                              }
+                            });
+                            const diff = Math.round((100 - sumPct) * 1000) / 1000;
+                            if (Math.abs(diff) > 0 && copy.length > 0) {
+                              let maxIdx = 0;
+                              let maxQty = -1;
+                              copy.forEach((ing, idx) => {
+                                if (Number(ing.quantity) > maxQty) {
+                                  maxQty = Number(ing.quantity);
+                                  maxIdx = idx;
+                                }
+                              });
+                              copy[maxIdx].percentage = Math.round((copy[maxIdx].percentage + diff) * 1000) / 1000;
+                            }
+                            setBomEditIngs(copy);
+                            setToastMessage("⚡ All ingredients (Bulk + Premix) normalized to 100% Total Matrix!");
+                            setTimeout(() => setToastMessage(null), 3000);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-800 border border-sky-300 rounded-lg text-xs font-bold transition-all active:scale-95"
+                        title="Calculate All Ingredients (Bulk + Premix) to sum to 100%"
+                      >
+                        ⚡ 100% Total Matrix
                       </button>
                     </div>
                     <div className="text-xs text-amber-900 font-bold">
