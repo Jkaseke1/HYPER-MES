@@ -109,6 +109,36 @@ async function handleBatchComplete(syncEvent) {
             .input('QtyIn',   sql.Float, netQty)
             .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
         }
+
+        // Also record in Sage BOM Module Manufacture Processes table (_btblMFProcessHeader) if table exists
+        try {
+          const mfHeaderCheck = await pool.request().query(`SELECT OBJECT_ID('_btblMFProcessHeader', 'U') AS tblExists`);
+          if (mfHeaderCheck.recordset[0]?.tblExists) {
+            const nextSeqRes = await pool.request().query(`SELECT ISNULL(MAX(idMFProcessHeader), 0) + 1 AS NextID FROM _btblMFProcessHeader`);
+            const nextId = nextSeqRes.recordset[0]?.NextID || 10240;
+            const processRef = `MFP${String(nextId).padStart(6, '0')}`;
+            
+            await pool.request()
+              .input('cProcessRef',     sql.VarChar,  processRef)
+              .input('cExternalRef',    sql.VarChar,  String(order.batch_number).substring(0, 50))
+              .input('iMasterItemID',   sql.Int,      stockLink)
+              .input('cDescription',    sql.VarChar,  description)
+              .input('dStartDate',      sql.DateTime, new Date())
+              .input('dActualCompDate', sql.DateTime, new Date())
+              .input('fQuantity',       sql.Float,    netQty)
+              .input('fManufactured',   sql.Float,    netQty)
+              .query(`
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '_btblMFProcessHeader' AND COLUMN_NAME = 'cProcessRef')
+                BEGIN
+                  INSERT INTO _btblMFProcessHeader (cProcessRef, cExternalRef, iMasterItemID, cDescription, dStartDate, dActualCompDate, fQuantity, fManufactured)
+                  VALUES (@cProcessRef, @cExternalRef, @iMasterItemID, @cDescription, @dStartDate, @dActualCompDate, @fQuantity, @fManufactured)
+                END
+              `);
+            console.log(`  ✅ Sage BOM Process Header recorded: ${processRef} (${order.batch_number})`);
+          }
+        } catch (bErr) {
+          console.warn(`  ℹ️  Sage BOM Header note: ${bErr.message}`);
+        }
       }
     );
   } finally {
