@@ -1,9 +1,9 @@
-const CACHE_NAME = 'hyper-mes-v5';
+const CACHE_NAME = 'hyper-mes-v10';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[ServiceWorker] Installing new version v5...');
+      console.log('[ServiceWorker] Installing new version v10...');
       const scope = self.registration.scope;
       const indexUrl = new URL('index.html', scope).href;
       try {

@@ -58,7 +58,7 @@ export function getIngredientTypeCode(name: string, code: string): { isPremix: b
   const n = (name || '').toLowerCase();
   const cd = (code || '').toLowerCase();
 
-  if (n.includes('premix') || cd.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss')) {
+  if (n.includes('premix') || n.includes('pre-mix') || cd.includes('premix') || cd.startsWith('bsg') || cd.startsWith('bsf') || cd.startsWith('lss')) {
     return { isPremix: true, typeCode: 'M1', badgeLabel: '⭐️ Premix (M1)' };
   }
   if (n.includes('mcp') || cd.includes('mcp')) {
@@ -76,8 +76,8 @@ export function getIngredientTypeCode(name: string, code: string): { isPremix: b
   if (n.includes('choline') || cd.includes('choline')) {
     return { isPremix: true, typeCode: 'MC', badgeLabel: '⭐️ Micro (MC - Choline)' };
   }
-  if (n.includes('micro') || cd.includes('micro')) {
-    return { isPremix: true, typeCode: 'M', badgeLabel: '⭐️ Micro-Ingredient' };
+  if (n.includes('micro') || cd.includes('micro') || n.includes('macro') || n.includes('pack') || n.includes('concentrate') || n.includes('vitamin') || n.includes('mineral') || n.includes('additive')) {
+    return { isPremix: true, typeCode: 'M', badgeLabel: '⭐️ Micro / Premix' };
   }
 
   return { isPremix: false, typeCode: 'B', badgeLabel: 'Bulk (B)' };
@@ -980,7 +980,7 @@ export default function ProductionOrdersPage() {
                         {detailMaterials.map((material) => {
                           const tInfo = getIngredientTypeCode(material.raw_materials?.name || '', material.raw_materials?.code || '');
                           return (
-                            <tr key={material.id} className={tInfo.isPremix ? 'bg-amber-50/50 hover:bg-amber-100/50' : 'hover:bg-slate-50'}>
+                            <tr key={material.id} className={tInfo.isPremix ? 'bg-gradient-to-r from-amber-100/90 via-amber-50 to-amber-100/90 border-l-4 border-amber-500 hover:from-amber-200/90 hover:to-amber-200/90 transition-colors font-bold' : 'hover:bg-slate-50'}>
                               <td className="px-3 py-2">
                                 <div className="font-bold text-slate-800 flex items-center gap-1.5">
                                   {material.raw_materials?.name}
