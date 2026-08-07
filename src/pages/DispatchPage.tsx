@@ -94,7 +94,10 @@ export default function DispatchPage() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    let q = supabase.from('dispatch_orders').select('*, creator:profiles!created_by(full_name, email), branches(name, code, sage_code), warehouses(name, code)').order('created_at', { ascending: false });
+    // Some live databases retain dispatch_orders.created_by without a foreign
+    // key to profiles. Do not embed that optional relationship: PostgREST
+    // rejects the entire dispatch query when the FK is absent.
+    let q = supabase.from('dispatch_orders').select('*, branches(name, code, sage_code), warehouses(name, code)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     const { data } = await q;
     if (data) setOrders(data as DispatchOrder[]);
