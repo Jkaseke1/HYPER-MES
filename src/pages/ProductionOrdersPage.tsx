@@ -1853,7 +1853,7 @@ export default function ProductionOrdersPage() {
               </div>
 
               {/* Workflow Actions Bar */}
-              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200">
+              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200 flex-wrap">
                 <div className="flex items-center gap-3">
                   {selected.status === 'pending' && (
                     <button
@@ -1909,6 +1909,60 @@ export default function ProductionOrdersPage() {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Production Batch Summary Card Bar (Product, Bag Count & Warehouse) */}
+              <div className="mx-4 my-2.5 p-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl shadow-md border border-slate-700/60 flex flex-wrap items-center justify-between gap-4">
+                {/* Product Summary */}
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-300 font-bold text-base shrink-0">
+                    📦
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-black text-slate-400">Product Summary</div>
+                    <div className="text-xs font-black text-white flex items-center gap-1.5 mt-0.5">
+                      <span className="text-teal-400 bg-teal-950/80 border border-teal-800 px-2 py-0.5 rounded font-mono">
+                        {selected.formulations?.sage_code || selected.formulations?.code || 'FG'}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span>{getOrderFormulationName(selected) || 'Formulation Product'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bags Quantity Produced / Expected */}
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold text-base shrink-0">
+                    🎒
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-black text-slate-400">
+                      {selected.status === 'completed' ? 'Quantity Produced (Bags)' : 'Expected Quantity (Bags)'}
+                    </div>
+                    <div className="text-xs font-black text-amber-300 flex items-center gap-1.5 mt-0.5 font-mono">
+                      <span className="text-sm font-extrabold text-amber-400">
+                        {Math.round((selected.actual_qty || output.actual_qty || selected.planned_qty || 0) / (parseFloat(selected.unit_size) || 50)).toLocaleString()} Bags
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-normal">
+                        ({selected.unit_size || '50'}kg/bag — Total {(selected.actual_qty || output.actual_qty || selected.planned_qty || 0).toLocaleString()} kg)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Target Warehouse */}
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-300 font-bold text-base shrink-0">
+                    🏭
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-black text-slate-400">Target Warehouse</div>
+                    <div className="text-xs font-black text-blue-300 flex items-center gap-1.5 mt-0.5">
+                      <span>Despatch Warehouse</span>
+                      <span className="text-[10px] bg-blue-950 border border-blue-800 text-blue-300 px-2 py-0.5 rounded font-mono font-bold">Sage Whse 20 (DS)</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Navigation Tabs */}
