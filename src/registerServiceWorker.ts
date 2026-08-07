@@ -2,7 +2,7 @@ export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       const baseUrl = import.meta.env.BASE_URL || './';
-      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js`;
+      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js?v=25`;
       
       navigator.serviceWorker
         .register(swUrl, { scope: baseUrl })
