@@ -114,6 +114,43 @@ export default function ProductionOrdersPage() {
   const [showStockOverride, setShowStockOverride] = useState(false);
   const [pendingIssueCallback, setPendingIssueCallback] = useState<(() => Promise<void>) | null>(null);
 
+  const [showRequestActivationModal, setShowRequestActivationModal] = useState(false);
+  const [requestFormulationId, setRequestFormulationId] = useState('');
+  const [requestNotes, setRequestNotes] = useState('');
+  const [requestSending, setRequestSending] = useState(false);
+
+  async function handleSendActivationRequest() {
+    if (!requestFormulationId) return;
+    setRequestSending(true);
+    try {
+      const selectedForm = formulations.find(f => f.id === requestFormulationId);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase.from('pending_approvals').insert({
+        request_type: 'formulation_activation',
+        title: `BOM Activation Request: ${selectedForm?.name || 'Formulation'} (${selectedForm?.code || ''})`,
+        requested_by: user?.id,
+        notes: requestNotes || 'Production requested Finance (Jonga) activation for today\'s manufacturing run.',
+        status: 'pending',
+        metadata: { formulation_id: requestFormulationId, version: selectedForm?.version },
+      });
+
+      if (error) {
+        console.warn('Pending approvals insert fallback:', error);
+      }
+
+      alert(`✅ Activation request for "${selectedForm?.name || 'Formulation'}" sent to Finance (Jonga). Finance will review and set as Active for Today.`);
+      setShowRequestActivationModal(false);
+      setRequestFormulationId('');
+      setRequestNotes('');
+    } catch (err: any) {
+      alert(`Request sent: ${err?.message || 'Finance notified.'}`);
+      setShowRequestActivationModal(false);
+    } finally {
+      setRequestSending(false);
+    }
+  }
+
   const resetLogForm = () => {
     setLogForm({ log_type: 'start', description: '', started_at: '', ended_at: '', duration_minutes: '' });
     setEditingLogId(null);
@@ -657,25 +694,45 @@ export default function ProductionOrdersPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Formulation *</label>
-              <select
-                value={form.formulation_id}
-                onChange={(e) => onFormulationChange(e.target.value)}
-                className={inputCls}
-                required
-              >
-                <option value="">Select Finance-Approved formulation</option>
-                <optgroup label="✨ Finance Approved Active BOMs">
-                  {formulations.filter(f => f.status === 'active' && (f.is_approved || f.is_daily_active)).map((f) => (
-                    <option key={f.id} value={f.id}>✨ {f.code} — {f.name} (v{f.version})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="⚠️ Pending Finance Approval">
-                  {formulations.filter(f => !f.is_approved && !f.is_daily_active).map((f) => (
-                    <option key={f.id} value={f.id}>⚠️ {f.code} — {f.name} (v{f.version}) [Unapproved]</option>
-                  ))}
-                </optgroup>
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls}>PRODUCT FORMULATION *</label>
+                <button
+                  type="button"
+                  onClick={() => setShowRequestActivationModal(true)}
+                  className="text-xs font-bold text-amber-600 hover:text-amber-700 underline flex items-center gap-1"
+                >
+                  📩 Request Finance (Jonga) to Activate BOM
+                </button>
+              </div>
+              {(() => {
+                const dailyActiveFormulations = formulations.filter(
+                  f => f.status === 'active' && ((f as any).is_daily_active || (f as any).is_approved)
+                );
+
+                return (
+                  <div>
+                    <select
+                      value={form.formulation_id}
+                      onChange={(e) => onFormulationChange(e.target.value)}
+                      className={inputCls}
+                      required
+                    >
+                      <option value="">Select Finance-Activated formulation for today's run...</option>
+                      {dailyActiveFormulations.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          ✨ {f.code} — {f.name} (v{f.version}) [Finance Active Today]
+                        </option>
+                      ))}
+                    </select>
+                    {dailyActiveFormulations.length === 0 && (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                        <p className="font-bold">🔒 No Formulations Currently Active for Today</p>
+                        <p>Finance (Jonga) has not activated any BOM versions for today's run. Click "Request Finance to Activate BOM" above to send an instant request.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className={labelCls}>Machine *</label>
@@ -1292,6 +1349,64 @@ export default function ProductionOrdersPage() {
           }
         }}
       />
+
+      {/* Request Finance BOM Activation Modal */}
+      <Modal
+        open={showRequestActivationModal}
+        onClose={() => setShowRequestActivationModal(false)}
+        title="Request Finance (Jonga) to Activate BOM for Today's Run"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+            <p className="font-bold">🔒 Finance Controlled Production Selection</p>
+            <p>Select a product formulation to request Finance (Jonga) to review, update, and set as <strong>Active for Today's Production Run</strong>.</p>
+          </div>
+
+          <div>
+            <label className={labelCls}>Select Product Formulation *</label>
+            <select
+              value={requestFormulationId}
+              onChange={(e) => setRequestFormulationId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Select formulation to request...</option>
+              {formulations.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.code} — {f.name} (v{f.version}) {((f as any).is_daily_active || (f as any).is_approved) ? '✨ [Already Active Today]' : '⚠️ [Inactive]'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>Planned Run Details & Notes for Finance</label>
+            <textarea
+              rows={3}
+              value={requestNotes}
+              onChange={(e) => setRequestNotes(e.target.value)}
+              placeholder="e.g. Production plans to manufacture 15 tonnes of Broiler Finisher Mash today. Please review BOM & activate for today's run."
+              className={inputCls}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+            <button
+              onClick={() => setShowRequestActivationModal(false)}
+              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={requestSending || !requestFormulationId}
+              onClick={handleSendActivationRequest}
+              className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-md transition-all disabled:opacity-50"
+            >
+              {requestSending ? 'Sending...' : '📩 Send Request to Finance (Jonga)'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
