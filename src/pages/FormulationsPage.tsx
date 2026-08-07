@@ -430,10 +430,37 @@ export default function FormulationsPage() {
     if (!selected) return;
     setSaving(true);
     try {
+      // Filter valid ingredients and auto-normalize percentages to exact 100%
+      const validIngs = bomEditIngs.filter(i => i.raw_material_id);
+      const totalWeight = validIngs.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      if (validIngs.length > 0 && totalWeight > 0) {
+        let sumPct = 0;
+        validIngs.forEach(i => {
+          const rawPct = (Number(i.quantity) / totalWeight) * 100;
+          i.percentage = Math.round(rawPct * 1000) / 1000;
+          sumPct += i.percentage;
+        });
+
+        // Adjust rounding on largest ingredient to ensure exact 100% total
+        const diff = Math.round((100 - sumPct) * 1000) / 1000;
+        if (Math.abs(diff) > 0 && validIngs.length > 0) {
+          let maxIdx = 0;
+          let maxQty = -1;
+          validIngs.forEach((ing, idx) => {
+            if (Number(ing.quantity) > maxQty) {
+              maxQty = Number(ing.quantity);
+              maxIdx = idx;
+            }
+          });
+          validIngs[maxIdx].percentage = Math.round((validIngs[maxIdx].percentage + diff) * 1000) / 1000;
+        }
+      }
+
       // Delete all existing ingredients then re-insert (handles replace + delete cleanly)
       const { error: delErr } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', selected.id);
       if (delErr) throw delErr;
-      const rows = bomEditIngs.filter(i => i.raw_material_id).map((i, idx) => ({
+      const rows = validIngs.map((i, idx) => ({
         formulation_id: selected.id,
         raw_material_id: i.raw_material_id,
         quantity: i.quantity,
@@ -462,6 +489,8 @@ export default function FormulationsPage() {
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
+      setToastMessage(`✨ BOM updated to v${nextVersion}! Total formulation percentage normalized to 100%.`);
+      setTimeout(() => setToastMessage(null), 4000);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving BOM:', error);
@@ -1094,7 +1123,25 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-3 py-2 text-right">
                             {bomEditMode ? (
-                              <input type="number" step="0.01" value={i.quantity} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={i.quantity}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const u = [...bomEditIngs];
+                                  u[idx] = { ...u[idx], quantity: val };
+                                  
+                                  const totalWeight = u.reduce((s, row) => s + (Number(row.quantity) || 0), 0);
+                                  if (totalWeight > 0) {
+                                    u.forEach(row => {
+                                      row.percentage = Math.round(((Number(row.quantity) / totalWeight) * 100) * 1000) / 1000;
+                                    });
+                                  }
+                                  setBomEditIngs(u);
+                                }}
+                                className="w-20 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500 font-bold"
+                              />
                             ) : (
                               <span>{i.quantity.toFixed(2)}</span>
                             )}
