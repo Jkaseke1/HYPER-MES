@@ -705,8 +705,9 @@ export default function ProductionOrdersPage() {
                 </button>
               </div>
               {(() => {
+                const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
                 const dailyActiveFormulations = formulations.filter(
-                  f => (f as any).is_daily_active === true
+                  f => activeIds.includes(f.id) || (f as any).is_daily_active === true
                 );
 
                 return (

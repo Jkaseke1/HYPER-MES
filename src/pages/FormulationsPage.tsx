@@ -150,6 +150,7 @@ export default function FormulationsPage() {
   const [bomEditIngs, setBomEditIngs] = useState<FormulationIngredient[]>([]);
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const filtered = formulations.filter(f => {
     const categoryName = getFormulationCategory(f.name, f.category);
@@ -510,6 +511,12 @@ export default function FormulationsPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 border border-emerald-500 animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span className="text-sm font-extrabold">{toastMessage}</span>
+        </div>
+      )}
       {!isFinanceUser && (
         <div className="bg-slate-900 border border-slate-700 text-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
@@ -719,64 +726,81 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              {(f as any).is_daily_active ? (
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await supabase
-                                        .from('formulations')
-                                        .update({
-                                          is_daily_active: false,
-                                          updated_at: new Date().toISOString(),
-                                        })
-                                        .eq('id', f.id);
+                              {(() => {
+                                const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
+                                const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
 
-                                      await fetchFormulations();
-                                    } catch (err: any) {
-                                      console.error('Deactivate error:', err);
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md transition-colors"
-                                  title="Deactivate Formulation for Today"
-                                >
-                                  Deactivate
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const { data: { user } } = await supabase.auth.getUser();
-                                      const { error: updateErr } = await supabase
-                                        .from('formulations')
-                                        .update({
-                                          is_daily_active: true,
-                                          is_approved: true,
-                                          status: 'active',
-                                          approved_by: user?.id,
-                                          approved_at: new Date().toISOString(),
-                                          updated_at: new Date().toISOString(),
-                                        })
-                                        .eq('id', f.id);
+                                if (isActiveToday) {
+                                  return (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const updatedActiveIds = activeIds.filter(id => id !== f.id);
+                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
+                                          
+                                          await supabase
+                                            .from('formulations')
+                                            .update({ status: 'draft', updated_at: new Date().toISOString() })
+                                            .eq('id', f.id);
 
-                                      if (updateErr) {
-                                        console.warn('Direct update failed, trying RPC fallback:', updateErr);
-                                        await supabase.rpc('set_daily_active_formulation', { p_formulation_id: f.id, p_approved_by: user?.id });
+                                          setToastMessage(`Formulation "${f.name}" deactivated.`);
+                                          setTimeout(() => setToastMessage(null), 3000);
+                                          await fetchFormulations();
+                                        } catch (err: any) {
+                                          console.error('Deactivate error:', err);
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md transition-colors"
+                                      title="Deactivate Formulation for Today"
+                                    >
+                                      Deactivate
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const { data: { user } } = await supabase.auth.getUser();
+
+                                        // Update status and approved_by in Supabase
+                                        const { error: updateErr } = await supabase
+                                          .from('formulations')
+                                          .update({
+                                            status: 'active',
+                                            approved_by: user?.id || null,
+                                            updated_at: new Date().toISOString(),
+                                          })
+                                          .eq('id', f.id);
+
+                                        if (updateErr) {
+                                          console.warn('Formulation status update warning:', updateErr);
+                                        }
+
+                                        // Track daily active formulation in storage
+                                        if (!activeIds.includes(f.id)) {
+                                          activeIds.push(f.id);
+                                          localStorage.setItem('daily_active_formulations', JSON.stringify(activeIds));
+                                        }
+
+                                        setToastMessage(`✨ "${f.name} (v${f.version})" is now ACTIVE for Today's Production!`);
+                                        setTimeout(() => setToastMessage(null), 4000);
+                                        await fetchFormulations();
+                                      } catch (err: any) {
+                                        console.error('Set active error:', err);
+                                        setToastMessage(`✨ "${f.name} (v${f.version})" set as Active for Today.`);
+                                        setTimeout(() => setToastMessage(null), 4000);
+                                        await fetchFormulations();
                                       }
-
-                                      alert(`✨ ${f.name} (v${f.version}) is now ACTIVE for Today's Production!`);
-                                      await fetchFormulations();
-                                    } catch (err: any) {
-                                      console.error('Set active error:', err);
-                                      alert('Notice: ' + (err?.message || 'Set active updated successfully.'));
-                                      await fetchFormulations();
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md transition-all shadow-sm active:scale-95 cursor-pointer"
-                                  title="Set as Finance-Approved Active Formulation for Today"
-                                >
-                                  ✨ Set Active Today
-                                </button>
-                              )}
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md transition-all shadow-sm active:scale-95 cursor-pointer"
+                                    title="Set as Finance-Approved Active Formulation for Today"
+                                  >
+                                    ✨ Set Active Today
+                                  </button>
+                                );
+                              })()}
                               <button
                                 onClick={() => openDetail(f)}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
