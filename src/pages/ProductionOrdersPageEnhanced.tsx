@@ -1034,7 +1034,8 @@ export default function ProductionOrdersPage() {
                               )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -453,35 +453,57 @@ export default function DispatchPage() {
       const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', accountsApproveOrder.id);
       if (error) throw error;
 
-      // 1. Register Sage review event
-      await supabase.from('sage_posting_reviews').insert({
-        sync_event_id: accountsApproveOrder.id,
-        event_type: 'dispatch_delivered',
-        event_description: `Dispatch ${accountsApproveOrder.dispatch_number} Approved for Sage Posting`,
-        sage_code: 'DSP-POST',
-        transaction_type: accountsApproveOrder.dispatch_type === 'customer_direct' ? 'INV' : 'WHT',
-        sage_tx_code: accountsApproveOrder.dispatch_type === 'customer_direct' ? 'INV' : 'WHT',
-        quantity: accountsApproveOrder.total_weight,
-        unit_cost: 0,
-        total_value: accountsApproveOrder.total_value || 0,
-        warehouse_id: 17,
-        warehouse_code: 'DEB',
-        reference: accountsApproveOrder.dispatch_number,
-        reference2: accountsApproveOrder.physical_dnote_number || '',
-        description: `Dispatch Posting (${accountsApproveOrder.dispatch_type})`,
-        transaction_date: format(new Date(), 'yyyy-MM-dd'),
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-      });
-
-      // 2. Release sync_log status from 'pending_finance_review' to 'pending' so background bridge worker posts immediately to Sage!
-      await supabase
+      // Approve the actual Sage review rows prepared by the bridge. The old
+      // placeholder WHT/INV row was not a supported bridge transaction and
+      // could never be posted safely.
+      const { data: syncEvents, error: syncEventError } = await supabase
         .from('sync_log')
-        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .select('id, status')
         .eq('reference_id', accountsApproveOrder.id)
-        .eq('event_type', 'dispatch_delivered');
+        .eq('event_type', 'dispatch_delivered')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      toast.success(`Accounts approval completed for ${accountsApproveOrder.dispatch_number}! Posted to Sage.`);
+      if (syncEventError) throw syncEventError;
+      const dispatchEvent = syncEvents?.[0];
+      if (!dispatchEvent) {
+        throw new Error('The dispatch integration event has not been created yet. Confirm delivery first, then try again.');
+      }
+      if (dispatchEvent.status === 'success') {
+        throw new Error('This dispatch has already been posted to Sage.');
+      }
+
+      const { data: pendingReviews, error: reviewsError } = await supabase
+        .from('sage_posting_reviews')
+        .select('id')
+        .eq('sync_event_id', dispatchEvent.id)
+        .eq('status', 'pending');
+
+      if (reviewsError) throw reviewsError;
+
+      if (pendingReviews && pendingReviews.length > 0) {
+        const { error: approveError } = await supabase
+          .from('sage_posting_reviews')
+          .update({
+            status: 'approved',
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('sync_event_id', dispatchEvent.id)
+          .eq('status', 'pending');
+        if (approveError) throw approveError;
+      } else {
+        // If the bridge has not prepared its rows yet, resume the event. The
+        // bridge sees accounts_posting_status=approved and creates real rows
+        // as approved, ready for immediate Sage posting.
+        const { error: resumeError } = await supabase
+          .from('sync_log')
+          .update({ status: 'pending', updated_at: new Date().toISOString() })
+          .eq('id', dispatchEvent.id);
+        if (resumeError) throw resumeError;
+      }
+
+      toast.success(`Accounts approval completed for ${accountsApproveOrder.dispatch_number}. Sage posting has been released.`);
       setShowAccountsApproveModal(false);
 
       if (viewOrder?.id === accountsApproveOrder.id) {
