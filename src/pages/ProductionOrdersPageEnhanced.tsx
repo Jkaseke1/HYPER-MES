@@ -706,7 +706,7 @@ export default function ProductionOrdersPage() {
               </div>
               {(() => {
                 const dailyActiveFormulations = formulations.filter(
-                  f => f.status === 'active' && ((f as any).is_daily_active || (f as any).is_approved)
+                  f => (f as any).is_daily_active === true
                 );
 
                 return (

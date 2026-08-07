@@ -719,18 +719,61 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              {!(f as any).is_daily_active && (
-                                <button
-                                  onClick={async () => {
-                                    const { data: { user } } = await supabase.auth.getUser();
-                                    await supabase.rpc('set_daily_active_formulation', { p_formulation_id: f.id, p_approved_by: user?.id });
-                                    fetchFormulations();
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded transition-colors"
-                                  title="Set as Finance-Approved Active Formulation for Today"
-                                >
-                                  ✨ Set Active
-                                </button>
+                              {isFinanceUser && (
+                                (f as any).is_daily_active ? (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await supabase
+                                          .from('formulations')
+                                          .update({
+                                            is_daily_active: false,
+                                            updated_at: new Date().toISOString(),
+                                          })
+                                          .eq('id', f.id);
+
+                                        await fetchFormulations();
+                                      } catch (err: any) {
+                                        console.error('Deactivate error:', err);
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 rounded transition-colors"
+                                    title="Deactivate Formulation for Today"
+                                  >
+                                    Deactivate
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const { data: { user } } = await supabase.auth.getUser();
+                                        const { error: updateErr } = await supabase
+                                          .from('formulations')
+                                          .update({
+                                            is_daily_active: true,
+                                            is_approved: true,
+                                            status: 'active',
+                                            approved_by: user?.id,
+                                            approved_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString(),
+                                          })
+                                          .eq('id', f.id);
+
+                                        if (updateErr) {
+                                          await supabase.rpc('set_daily_active_formulation', { p_formulation_id: f.id, p_approved_by: user?.id });
+                                        }
+
+                                        await fetchFormulations();
+                                      } catch (err: any) {
+                                        console.error('Set active error:', err);
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded transition-colors shadow-sm"
+                                    title="Set as Finance-Approved Active Formulation for Today"
+                                  >
+                                    ✨ Set Active Today
+                                  </button>
+                                )
                               )}
                               <button
                                 onClick={() => openDetail(f)}
