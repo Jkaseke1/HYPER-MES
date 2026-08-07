@@ -368,7 +368,10 @@ export default function FormulationsPage() {
 
       let fId = editId;
       if (editId) {
-        const { error } = await supabase.from('formulations').update(payload).eq('id', editId);
+        // Increment version number on formula edit
+        const nextVersion = (form.version || 1) + 1;
+        const payloadWithVersion = { ...payload, version: nextVersion };
+        const { error } = await supabase.from('formulations').update(payloadWithVersion).eq('id', editId);
         if (error) throw error;
       } else {
         const { data, error } = await supabase.from('formulations').insert(payload).select('id').single();
@@ -443,6 +446,18 @@ export default function FormulationsPage() {
         const { error: insErr } = await supabase.from('formulation_ingredients').insert(rows);
         if (insErr) throw insErr;
       }
+
+      // Increment formulation version number on BOM edit
+      const nextVersion = (selected.version || 1) + 1;
+      const { error: verErr } = await supabase
+        .from('formulations')
+        .update({ version: nextVersion, updated_at: new Date().toISOString() })
+        .eq('id', selected.id);
+      
+      if (!verErr) {
+        setSelected(prev => prev ? { ...prev, version: nextVersion } : null);
+      }
+
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
