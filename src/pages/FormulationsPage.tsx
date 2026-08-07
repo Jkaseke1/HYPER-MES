@@ -738,17 +738,23 @@ export default function FormulationsPage() {
                             <span className="text-sm font-semibold text-teal-700">${f.estimated_cost_per_unit.toFixed(2)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {(f as any).is_daily_active ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold shadow-sm animate-pulse">
-                                ✨ Active Today
-                              </span>
-                            ) : (f as any).is_approved ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold">
-                                Approved
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-medium">—</span>
-                            )}
+                            {(() => {
+                              const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
+                              const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
+
+                              if (isActiveToday) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold shadow-sm">
+                                    ✨ Active Today
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold">
+                                  Deactivated
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge status={f.status} />

@@ -1449,25 +1449,37 @@ export default function ProductionOrdersPage() {
               </div>
 
               <div>
-                <label className={labelCls}>Product Formulation *</label>
-                <select
-                  value={form.formulation_id}
-                  onChange={(e) => onFormulationChange(e.target.value)}
-                  className={`${inputCls} font-bold text-slate-900 focus:ring-2 focus:ring-teal-500`}
-                  required
-                >
-                  <option value="">Select formulation</option>
-                  {[...formulations].sort((a, b) => ((b as any).is_daily_active ? 1 : 0) - ((a as any).is_daily_active ? 1 : 0)).map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {(f as any).is_daily_active ? '✨ [ACTIVE TODAY] ' : (f as any).is_approved ? '✅ [APPROVED] ' : ''}{f.code} — {f.name}
-                    </option>
-                  ))}
-                </select>
-                {form.formulation_id && (formulations.find(f => f.id === form.formulation_id) as any)?.is_daily_active && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-700 font-extrabold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                    <span>✨ Active Formulation for Today (Finance Approved)</span>
-                  </div>
-                )}
+                <label className={labelCls}>Product Formulation * (Finance Activated Only)</label>
+                {(() => {
+                  const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
+                  const dailyActiveFormulations = formulations.filter(
+                    f => activeIds.includes(f.id) || (f as any).is_daily_active === true
+                  );
+
+                  return (
+                    <div>
+                      <select
+                        value={form.formulation_id}
+                        onChange={(e) => onFormulationChange(e.target.value)}
+                        className={`${inputCls} font-bold text-slate-900 focus:ring-2 focus:ring-teal-500`}
+                        required
+                      >
+                        <option value="">Select Finance-Activated formulation for today's run...</option>
+                        {dailyActiveFormulations.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            ✨ {f.code} — {f.name} (v{f.version}) [Finance Active Today]
+                          </option>
+                        ))}
+                      </select>
+                      {dailyActiveFormulations.length === 0 && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                          <p className="font-bold">🔒 No Formulations Currently Active for Today</p>
+                          <p>Finance (Jonga) has not activated any BOM versions on the Formulations page for today's run. Please ask Finance to set active BOMs.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

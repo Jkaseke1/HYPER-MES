@@ -274,8 +274,14 @@ export default function ProductionPlanningPage() {
                   <div className="col-span-4">
                     <label className="block text-[10px] text-slate-400 uppercase tracking-wide mb-1">Formulation</label>
                     <select value={item.formulation_id} onChange={e => { const n = [...items]; n[idx].formulation_id = e.target.value; setItems(n); }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
-                      <option value="">Select formulation...</option>
-                      {formulations.map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
+                      <option value="">Select Finance-Activated formulation for today's run...</option>
+                      {(() => {
+                        const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
+                        const activeList = formulations.filter(f => activeIds.includes(f.id) || (f as any).is_daily_active === true);
+                        return (activeList.length > 0 ? activeList : formulations).map(f => (
+                          <option key={f.id} value={f.id}>✨ {f.code} — {f.name} (v{f.version})</option>
+                        ));
+                      })()}
                     </select>
                   </div>
                   <div className="col-span-2">
