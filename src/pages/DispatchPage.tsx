@@ -19,6 +19,7 @@ import ApprovalHistory from '../components/approval/ApprovalHistory';
 import { validateFGStockAvailability, StockError } from '../lib/stockValidation';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
 import DeliveryNoteModal from '../components/dispatch/DeliveryNoteModal';
+import { bagSizeKg, bagsFromKg, kgFromBags } from '../lib/bagUnits';
 
 type Tab = 'all' | 'pending' | 'loading' | 'dispatched' | 'in_transit' | 'delivered';
 const TABS: { key: Tab; label: string }[] = [
@@ -30,7 +31,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-const EMPTY_ITEM = { formulation_id: '', batch_number: '', quantity: 0, unit: 'kg' };
+type DispatchDraftItem = { formulation_id: string; batch_number: string; quantity: number; quantity_bags: number; bag_size_kg: number; unit: string };
+const EMPTY_ITEM: DispatchDraftItem = { formulation_id: '', batch_number: '', quantity: 0, quantity_bags: 0, bag_size_kg: 50, unit: 'kg' };
 
 // Preset drivers and fleet for fast entry
 const FLEET_TRUCKS = ['ABG 1234', 'AES 5678', 'AFG 9012', 'AHL 3456', 'AGE 7890'];
@@ -93,6 +95,13 @@ export default function DispatchPage() {
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
+  const getFormulationBagSize = (formulationId: string) => {
+    const formulation = formulations.find((f) => f.id === formulationId);
+    const variantSize = formulation?.unit_size_variants?.[0]?.size;
+    const namedSize = formulation?.name?.match(/(\d+)\s*kg/i)?.[1];
+    return bagSizeKg(variantSize || namedSize || 50);
+  };
+
   const fetchOrders = useCallback(async () => {
     // Some live databases retain dispatch_orders.created_by without a foreign
     // key to profiles. Do not embed that optional relationship: PostgREST
@@ -128,7 +137,19 @@ export default function DispatchPage() {
   const updateItem = (idx: number, key: string, value: any) => {
     const newItems = [...items];
     newItems[idx] = { ...newItems[idx], [key]: value };
-    if (key === 'formulation_id') newItems[idx].batch_number = '';
+    if (key === 'formulation_id') {
+      const size = getFormulationBagSize(value);
+      newItems[idx].batch_number = '';
+      newItems[idx].bag_size_kg = size;
+      newItems[idx].quantity = kgFromBags(newItems[idx].quantity_bags, size);
+    }
+    if (key === 'quantity_bags') {
+      newItems[idx].quantity = kgFromBags(value, newItems[idx].bag_size_kg);
+      newItems[idx].unit = 'kg';
+    }
+    if (key === 'bag_size_kg') {
+      newItems[idx].quantity = kgFromBags(newItems[idx].quantity_bags, value);
+    }
     setItems(newItems);
     if (key === 'formulation_id' && value) {
       fetchBatchNumbers(value);
@@ -162,7 +183,7 @@ export default function DispatchPage() {
   };
 
   const handleCreate = async () => {
-    const dispatchItems = items.filter((item) => item.formulation_id && Number(item.quantity) > 0);
+    const dispatchItems = items.filter((item) => item.formulation_id && Number(item.quantity_bags) > 0);
     if (!form.warehouse_id) {
       toast.error('Select the source warehouse before saving the dispatch.');
       return;
@@ -190,7 +211,7 @@ export default function DispatchPage() {
         }).eq('id', editingOrderId);
         if (updateError) throw updateError;
         await supabase.from('dispatch_items').delete().eq('dispatch_order_id', editingOrderId);
-        const rows = dispatchItems.map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+        const rows = dispatchItems.map((i) => ({ dispatch_order_id: editingOrderId, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, quantity_bags: i.quantity_bags, bag_size_kg: i.bag_size_kg, unit: 'kg', unit_price: 0, line_total: 0 }));
         if (rows.length) await supabase.from('dispatch_items').insert(rows);
         toast.success('Dispatch order updated!');
       } else {
@@ -205,7 +226,7 @@ export default function DispatchPage() {
           prepared_by: profile?.id || null,
         }).select().single();
         if (!error && data) {
-          const rows = dispatchItems.map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, unit: i.unit, unit_price: 0, line_total: 0 }));
+          const rows = dispatchItems.map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, quantity_bags: i.quantity_bags, bag_size_kg: i.bag_size_kg, unit: 'kg', unit_price: 0, line_total: 0 }));
           if (rows.length) await supabase.from('dispatch_items').insert(rows);
           toast.success('Dispatch order created & D-Note generated!');
         }
@@ -1237,27 +1258,24 @@ export default function DispatchPage() {
                     </div>
 
                     <div className="md:col-span-2 space-y-1">
-                      <label className="block text-[10px] font-bold text-emerald-700 uppercase">Qty</label>
+                      <label className="block text-[10px] font-bold text-emerald-700 uppercase">Bags</label>
                       <input
                         type="number"
-                        value={item.quantity || ''}
-                        onChange={(e) => updateItem(idx, 'quantity', +e.target.value)}
+                        min="1"
+                        step="1"
+                        value={item.quantity_bags || ''}
+                        onChange={(e) => updateItem(idx, 'quantity_bags', +e.target.value)}
                         className="w-full border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-extrabold bg-emerald-50/50 text-emerald-900"
                         placeholder="0"
                       />
+                      <p className="text-[10px] text-slate-500">{Number(item.quantity || 0).toLocaleString()} kg</p>
                     </div>
 
                     <div className="md:col-span-2 space-y-1">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Unit</label>
-                      <select
-                        value={item.unit}
-                        onChange={(e) => updateItem(idx, 'unit', e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white"
-                      >
-                        <option value="bags">bags</option>
-                        <option value="kg">kg</option>
-                        <option value="tons">tons</option>
-                      </select>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Bag Size</label>
+                      <div className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold text-slate-700">
+                        {bagSizeKg(item.bag_size_kg)} kg / bag
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1266,7 +1284,7 @@ export default function DispatchPage() {
           </div>
 
           <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700">Total Weight: <strong className="text-emerald-700 font-mono text-sm">{totalWeight.toLocaleString()} kg</strong></span>
+            <span className="text-xs font-bold text-slate-700">Total: <strong className="text-emerald-700 font-mono text-sm">{items.reduce((sum, item) => sum + Number(item.quantity_bags || 0), 0).toLocaleString()} bags</strong> <span className="text-slate-400">({totalWeight.toLocaleString()} kg)</span></span>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -1520,8 +1538,8 @@ export default function DispatchPage() {
                           <th className="text-left px-4 py-2.5">Product Formulation</th>
                           <th className="text-left px-4 py-2.5">Sage Code</th>
                           <th className="text-left px-4 py-2.5">Batch #</th>
-                          <th className="text-right px-4 py-2.5">Quantity</th>
-                          <th className="text-left px-4 py-2.5">Unit</th>
+                          <th className="text-right px-4 py-2.5">Bags</th>
+                          <th className="text-left px-4 py-2.5">Weight</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1530,8 +1548,8 @@ export default function DispatchPage() {
                             <td className="px-4 py-3 font-bold text-slate-900">{item.formulations?.name || '-'}</td>
                             <td className="px-4 py-3 font-mono font-bold text-blue-700">{item.formulations?.sage_code || '-'}</td>
                             <td className="px-4 py-3 font-mono text-slate-600">{item.batch_number || 'Unassigned'}</td>
-                            <td className="px-4 py-3 text-right font-extrabold text-slate-900 font-mono">{item.quantity.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-slate-600">{item.unit || 'kg'}</td>
+                            <td className="px-4 py-3 text-right font-extrabold text-slate-900 font-mono">{Number(item.quantity_bags ?? bagsFromKg(item.quantity, item.bag_size_kg)).toLocaleString(undefined, { maximumFractionDigits: 3 })}</td>
+                            <td className="px-4 py-3 text-slate-600">{item.quantity.toLocaleString()} kg <span className="text-[10px] text-slate-400">({bagSizeKg(item.bag_size_kg)} kg/bag)</span></td>
                           </tr>
                         ))}
                       </tbody>

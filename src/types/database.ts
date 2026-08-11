@@ -231,10 +231,15 @@ export interface ProductionOrder {
   formulation_id: string | null;
   machine_id: string | null;
   planned_qty: number;
+  planned_bags?: number | null;
   actual_qty: number;
+  actual_bags?: number | null;
   rejected_qty: number;
+  rejected_bags?: number | null;
   wastage_qty: number;
+  wastage_bags?: number | null;
   unit: string;
+  unit_size?: string | null;
   status: 'pending' | 'materials_issued' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   planned_start: string | null;
@@ -358,6 +363,8 @@ export interface DispatchItem {
   formulation_id: string | null;
   batch_number: string;
   quantity: number;
+  quantity_bags?: number | null;
+  bag_size_kg?: number | null;
   unit: string;
   unit_price: number;
   line_total: number;

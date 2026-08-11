@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Printer, Truck, CheckCircle2, ShieldCheck, AlertCircle, Building, User, Calendar, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import type { DispatchOrder, DispatchItem } from '../../types/database';
+import { bagSizeKg, bagsFromKg } from '../../lib/bagUnits';
 
 interface DeliveryNoteModalProps {
   order: DispatchOrder | null;
@@ -21,7 +22,7 @@ export default function DeliveryNoteModal({ order, items, isOpen, onClose }: Del
     ? format(new Date(order.dispatch_date), 'dd / MM / yyyy')
     : format(new Date(), 'dd / MM / yyyy');
 
-  const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const totalBags = items.reduce((sum, item) => sum + Number(item.quantity_bags ?? bagsFromKg(item.quantity, item.bag_size_kg)), 0);
 
   // Fill up to 10 lines for the paper-styled D-note grid
   const MAX_ROWS = 10;
@@ -189,7 +190,7 @@ export default function DeliveryNoteModal({ order, items, isOpen, onClose }: Del
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-blue-900 text-white font-bold border-b-2 border-blue-900 text-xs uppercase">
-                    <th className="py-2 px-3 border-r border-blue-800 w-24 text-center">QTY</th>
+                    <th className="py-2 px-3 border-r border-blue-800 w-24 text-center">BAGS</th>
                     <th className="py-2 px-3 border-r border-blue-800 w-24 text-center">UNIT</th>
                     <th className="py-2 px-3 border-r border-blue-800">DESCRIPTION / PRODUCT</th>
                     <th className="py-2 px-3 w-32 text-center">BATCH #</th>
@@ -199,10 +200,10 @@ export default function DeliveryNoteModal({ order, items, isOpen, onClose }: Del
                   {items.map((item, idx) => (
                     <tr key={item.id || idx} className="h-9 hover:bg-slate-50">
                       <td className="py-1.5 px-3 border-r border-blue-900/30 text-center font-extrabold text-sm text-blue-950">
-                        {item.quantity}
+                        {Number(item.quantity_bags ?? bagsFromKg(item.quantity, item.bag_size_kg)).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       </td>
                       <td className="py-1.5 px-3 border-r border-blue-900/30 text-center text-xs font-semibold text-slate-700">
-                        {item.unit || 'bags'}
+                        bags ({bagSizeKg(item.bag_size_kg)} kg)
                       </td>
                       <td className="py-1.5 px-3 border-r border-blue-900/30 font-bold text-slate-900">
                         {(item.formulations as any)?.name || (item.formulations as any)?.code || 'Finished Feed'}
@@ -226,10 +227,10 @@ export default function DeliveryNoteModal({ order, items, isOpen, onClose }: Del
                 <tfoot>
                   <tr className="bg-blue-50 font-extrabold border-t-2 border-blue-900 text-xs">
                     <td className="py-2 px-3 border-r border-blue-900/30 text-center text-blue-950 text-sm">
-                      {totalQuantity}
+                      {totalBags.toLocaleString(undefined, { maximumFractionDigits: 3 })}
                     </td>
                     <td className="py-2 px-3 border-r border-blue-900/30 text-center text-slate-600">
-                      TOTAL UNITS
+                      TOTAL BAGS
                     </td>
                     <td className="py-2 px-3 border-r border-blue-900/30 text-blue-950" colSpan={2}>
                       Total Load Weight: {order.total_weight || 0} kg

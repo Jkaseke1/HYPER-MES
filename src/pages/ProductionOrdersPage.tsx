@@ -11,6 +11,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
 import { generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
+import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 
 interface OrderMaterial {
   id: string; 
@@ -80,6 +81,7 @@ const emptyForm = {
   formulation_id: '', 
   machine_id: '', 
   planned_qty: 0, 
+  planned_bags: 0,
   unit: 'kg',
   unit_size: '25',
   priority: 'normal' as const, 
@@ -123,7 +125,7 @@ export default function ProductionOrdersPage() {
   const [usdZigRate, setUsdZigRate] = useState<number | null>(null);
   const [bomVariances, setBomVariances] = useState<any[]>([]);
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
-  const [output, setOutput] = useState({ actual_qty: 0, rejected_qty: 0, wastage_qty: 0, actual_hours: '' as string, average_throughput: '' as string });
+  const [output, setOutput] = useState({ actual_qty: 0, actual_bags: 0, rejected_qty: 0, rejected_bags: 0, wastage_qty: 0, wastage_bags: 0, actual_hours: '' as string, average_throughput: '' as string });
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -361,7 +363,8 @@ export default function ProductionOrdersPage() {
         formulation_id: form.formulation_id || null,
         machine_id: form.machine_id, // Required field - NOT NULL in database
         planned_qty: plannedQty, 
-        unit: form.unit,
+        planned_bags: Number(form.planned_bags || bagsFromKg(plannedQty, form.unit_size)),
+        unit: 'kg',
         unit_size: form.unit_size,
         priority: form.priority, 
         planned_start: form.planned_start || null,
@@ -559,8 +562,11 @@ export default function ProductionOrdersPage() {
     setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
     setOutput({
       actual_qty: order.actual_qty,
+      actual_bags: Number(order.actual_bags ?? bagsFromKg(order.actual_qty, order.unit_size)),
       rejected_qty: order.rejected_qty,
+      rejected_bags: Number(order.rejected_bags ?? bagsFromKg(order.rejected_qty, order.unit_size)),
       wastage_qty: order.wastage_qty,
+      wastage_bags: Number(order.wastage_bags ?? bagsFromKg(order.wastage_qty, order.unit_size)),
       actual_hours: order.actual_hours != null ? String(order.actual_hours) : '',
       average_throughput: order.average_throughput != null ? String(order.average_throughput) : '',
     });
@@ -661,8 +667,11 @@ export default function ProductionOrdersPage() {
         .from('production_orders')
         .update({
           actual_qty: output.actual_qty,
+          actual_bags: output.actual_bags,
           rejected_qty: output.rejected_qty,
+          rejected_bags: output.rejected_bags,
           wastage_qty: output.wastage_qty,
+          wastage_bags: output.wastage_bags,
           actual_hours: hoursNum,
           average_throughput: throughputNum,
         })
@@ -676,8 +685,12 @@ export default function ProductionOrdersPage() {
         .insert({
           production_order_id: selected.id,
           quantity_produced: output.actual_qty,
+          quantity_bags: output.actual_bags,
           rejected_quantity: output.rejected_qty,
+          rejected_bags: output.rejected_bags,
           wastage_quantity: output.wastage_qty,
+          wastage_bags: output.wastage_bags,
+          bag_size_kg: bagSizeKg(selected.unit_size),
           unit: selected.unit,
           recorded_at: new Date().toISOString(),
           recorded_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
@@ -1087,8 +1100,11 @@ export default function ProductionOrdersPage() {
           production_line_cost: 0,
           machine_cost: 0,
           actual_qty: output.actual_qty,
+          actual_bags: output.actual_bags,
           rejected_qty: output.rejected_qty,
+          rejected_bags: output.rejected_bags,
           wastage_qty: output.wastage_qty,
+          wastage_bags: output.wastage_bags,
           actual_hours: output.actual_hours === '' ? null : Number(output.actual_hours),
           average_throughput: output.average_throughput === '' ? null : Number(output.average_throughput),
           total_cost: Math.round(total * 100) / 100,
@@ -1269,10 +1285,10 @@ export default function ProductionOrdersPage() {
                         <div className="text-slate-700 font-medium">{order.machines?.name || '-'}</div>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {order.planned_qty} {order.unit}
+                        {formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty.toLocaleString()} kg)</span>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {order.actual_qty ? `${order.actual_qty} ${order.unit}` : '-'}
+                        {order.actual_qty ? <>{formatBags(order.actual_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty.toLocaleString()} kg)</span></> : '-'}
                       </td>
                       <td className="px-4 py-3.5">
                         <StatusBadge status={order.status} />
@@ -1314,11 +1330,11 @@ export default function ProductionOrdersPage() {
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
                     <div>
                       <span className="text-slate-400 block text-[10px] uppercase">Planned</span>
-                      <span className="font-bold text-slate-800">{order.planned_qty} {order.unit}</span>
+                      <span className="font-bold text-slate-800">{formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty} kg)</span></span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px] uppercase">Actual</span>
-                      <span className="font-bold text-slate-800">{order.actual_qty || 0} {order.unit}</span>
+                      <span className="font-bold text-slate-800">{formatBags(order.actual_qty || 0, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty || 0} kg)</span></span>
                     </div>
                   </div>
 
@@ -1498,40 +1514,40 @@ export default function ProductionOrdersPage() {
               </div>
 
               <div>
-                <label className={labelCls}>Planned Batch Quantity *</label>
+                <label className={labelCls}>Planned Output (Bags) *</label>
                 <div className="relative">
                   <input
                     type="number"
-                    step="0.01"
-                    value={form.planned_qty}
-                    onChange={(e) => setForm({ ...form, planned_qty: parseFloat(e.target.value) || 0 })}
+                    step="1"
+                    min="1"
+                    value={form.planned_bags || ''}
+                    onChange={(e) => {
+                      const plannedBags = parseFloat(e.target.value) || 0;
+                      setForm({ ...form, planned_bags: plannedBags, planned_qty: kgFromBags(plannedBags, form.unit_size), unit: 'kg' });
+                    }}
                     className={`${inputCls} font-mono font-bold text-base pr-16`}
                     required
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
-                    {form.unit || 'kg'}
+                    bags
                   </div>
                 </div>
+                <p className="mt-1 text-[11px] text-slate-500">Sage stock quantity: {Number(form.planned_qty || 0).toLocaleString()} kg</p>
               </div>
 
               <div>
-                <label className={labelCls}>Measurement Unit</label>
-                <select
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="kg">Kilograms (kg)</option>
-                  <option value="ton">Tonnes (ton)</option>
-                  <option value="bags">Bags</option>
-                </select>
+                <label className={labelCls}>Sage / Stock Unit</label>
+                <div className={`${inputCls} bg-slate-50 text-slate-600`}>Kilograms (stored automatically)</div>
               </div>
 
               <div>
                 <label className={labelCls}>Bag Unit Size (kg)</label>
                 <select
                   value={form.unit_size}
-                  onChange={(e) => setForm({ ...form, unit_size: e.target.value })}
+                  onChange={(e) => {
+                    const unitSize = e.target.value;
+                    setForm({ ...form, unit_size: unitSize, planned_qty: kgFromBags(form.planned_bags, unitSize), unit: 'kg' });
+                  }}
                   className={`${inputCls} font-bold`}
                 >
                   <option value="50">50 kg Bag</option>
@@ -2302,37 +2318,49 @@ export default function ProductionOrdersPage() {
                 <h3 className="text-lg font-semibold text-slate-800">Production Output</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className={labelCls}>Actual Quantity (kg)</label>
+                    <label className={labelCls}>Actual Output (Bags)</label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={output.actual_qty}
-                      onChange={(e) => setOutput({ ...output, actual_qty: parseFloat(e.target.value) || 0 })}
+                      step="1"
+                      value={output.actual_bags || ''}
+                      onChange={(e) => {
+                        const actualBags = parseFloat(e.target.value) || 0;
+                        setOutput({ ...output, actual_bags: actualBags, actual_qty: kgFromBags(actualBags, selected.unit_size) });
+                      }}
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
+                    <p className="mt-1 text-[11px] text-slate-500">{output.actual_qty.toLocaleString()} kg at {bagSizeKg(selected.unit_size)} kg/bag</p>
                   </div>
                   <div>
-                    <label className={labelCls}>Rejected Quantity (kg)</label>
+                    <label className={labelCls}>Rejected (Bags)</label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={output.rejected_qty}
-                      onChange={(e) => setOutput({ ...output, rejected_qty: parseFloat(e.target.value) || 0 })}
+                      step="1"
+                      value={output.rejected_bags || ''}
+                      onChange={(e) => {
+                        const rejectedBags = parseFloat(e.target.value) || 0;
+                        setOutput({ ...output, rejected_bags: rejectedBags, rejected_qty: kgFromBags(rejectedBags, selected.unit_size) });
+                      }}
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
+                    <p className="mt-1 text-[11px] text-slate-500">{output.rejected_qty.toLocaleString()} kg</p>
                   </div>
                   <div>
-                    <label className={labelCls}>Wastage Quantity (kg)</label>
+                    <label className={labelCls}>Wastage (Bags)</label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={output.wastage_qty}
-                      onChange={(e) => setOutput({ ...output, wastage_qty: parseFloat(e.target.value) || 0 })}
+                      step="1"
+                      value={output.wastage_bags || ''}
+                      onChange={(e) => {
+                        const wastageBags = parseFloat(e.target.value) || 0;
+                        setOutput({ ...output, wastage_bags: wastageBags, wastage_qty: kgFromBags(wastageBags, selected.unit_size) });
+                      }}
                       className={inputCls}
                       disabled={selected.status !== 'in_progress'}
                     />
+                    <p className="mt-1 text-[11px] text-slate-500">{output.wastage_qty.toLocaleString()} kg</p>
                   </div>
                   <div>
                     <label className={labelCls}>Actual Production Hours</label>
