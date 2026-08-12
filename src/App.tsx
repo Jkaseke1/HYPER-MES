@@ -62,6 +62,7 @@ import WorkerAttendancePage from './pages/payroll/WorkerAttendancePage';
 import PayrollProcessingPage from './pages/payroll/PayrollProcessingPage';
 import PaymentHistoryPage from './pages/payroll/PaymentHistoryPage';
 import SagePostingReviewPage from './pages/SagePostingReviewPage';
+import PlantIntegrationHubPage from './pages/PlantIntegrationHubPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -171,6 +172,7 @@ export default function App() {
               <Route path="payroll/processing" element={<PayrollProcessingPage />} />
               <Route path="payroll/history" element={<PaymentHistoryPage />} />
               <Route path="sage-posting-review" element={<SagePostingReviewPage />} />
+              <Route path="plant-integrations" element={<PlantIntegrationHubPage />} />
               <Route path="test" element={<SimpleTestPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

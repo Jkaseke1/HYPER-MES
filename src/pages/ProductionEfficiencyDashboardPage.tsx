@@ -14,6 +14,8 @@ interface DashboardRow {
   plant: string;
   monthly_plan_kg: number;
   actual_kg: number;
+  accepted_kg: number;
+  rejected_kg: number;
   actual_hours: number;
   downtime_hours: number;
   unplanned_downtime_hours: number;
@@ -23,6 +25,9 @@ interface DashboardRow {
   efficiency_pct: number; // actual throughput / nominal speed
   good_production_pct: number; // actual / planned runtime utilization
   asset_intensity_pct: number; // actual / (nominal speed * actual_hours) when running
+  availability_pct: number;
+  quality_pct: number;
+  oee_pct: number;
 }
 
 interface DowntimeCategory {
@@ -57,7 +62,7 @@ export default function ProductionEfficiencyDashboardPage() {
       // Load completed production orders in the month
       const { data: orders, error: ordersError } = await supabase
         .from('production_orders')
-        .select('id, planned_qty, actual_qty, actual_hours, formulation_id, formulations!inner(id, name, sage_code, nominal_speed), machines!inner(name)')
+        .select('id, planned_qty, actual_qty, rejected_qty, wastage_qty, actual_hours, formulation_id, formulations!inner(id, name, sage_code, nominal_speed), machines!inner(name)')
         .eq('status', 'completed')
         .gte('actual_end', startIso)
         .lte('actual_end', endIso)
@@ -107,6 +112,8 @@ export default function ProductionEfficiencyDashboardPage() {
           plant: m?.name || 'Unknown Plant',
           monthly_plan_kg: 0,
           actual_kg: 0,
+          accepted_kg: 0,
+          rejected_kg: 0,
           actual_hours: 0,
           downtime_hours: 0,
           unplanned_downtime_hours: 0,
@@ -116,10 +123,15 @@ export default function ProductionEfficiencyDashboardPage() {
           efficiency_pct: 0,
           good_production_pct: 0,
           asset_intensity_pct: 0,
+          availability_pct: 0,
+          quality_pct: 0,
+          oee_pct: 0,
         };
 
         existing.monthly_plan_kg += Number(o.planned_qty || 0);
         existing.actual_kg += Number(o.actual_qty || 0);
+        existing.rejected_kg += Number(o.rejected_qty || 0) + Number(o.wastage_qty || 0);
+        existing.accepted_kg += Math.max(0, Number(o.actual_qty || 0) - Number(o.rejected_qty || 0) - Number(o.wastage_qty || 0));
         existing.actual_hours += Number(o.actual_hours || 0);
         existing.downtime_hours += dt.total;
         existing.unplanned_downtime_hours += dt.unplanned;
@@ -139,6 +151,13 @@ export default function ProductionEfficiencyDashboardPage() {
           : 0;
         r.asset_intensity_pct = r.nominal_speed > 0 && r.actual_hours > 0
           ? (actualT / (r.nominal_speed * r.actual_hours)) * 100
+          : 0;
+        r.availability_pct = r.actual_hours + r.downtime_hours > 0
+          ? (r.actual_hours / (r.actual_hours + r.downtime_hours)) * 100
+          : 0;
+        r.quality_pct = r.actual_kg > 0 ? (r.accepted_kg / r.actual_kg) * 100 : 0;
+        r.oee_pct = r.actual_hours > 0 && r.nominal_speed > 0
+          ? (r.availability_pct / 100) * (r.asset_intensity_pct / 100) * (r.quality_pct / 100) * 100
           : 0;
         return r;
       }).sort((a, b) => b.actual_kg - a.actual_kg);
@@ -168,7 +187,12 @@ export default function ProductionEfficiencyDashboardPage() {
     const avgEff = rows.length > 0
       ? rows.reduce((s, r) => s + r.efficiency_pct, 0) / rows.length
       : 0;
-    return { planT, actualT, hours, downtime, avgEff };
+    const availability = hours + downtime > 0 ? (hours / (hours + downtime)) * 100 : 0;
+    const acceptedKg = rows.reduce((s, r) => s + r.accepted_kg, 0);
+    const quality = actualT > 0 ? (acceptedKg / 1000 / actualT) * 100 : 0;
+    const performance = hours > 0 ? rows.reduce((s, r) => s + r.asset_intensity_pct * r.actual_hours, 0) / hours : 0;
+    const oee = availability && performance && quality ? (availability / 100) * (performance / 100) * (quality / 100) * 100 : 0;
+    return { planT, actualT, hours, downtime, avgEff, availability, quality, oee };
   }, [rows]);
 
   const months = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: format(new Date(2024, i, 1), 'MMMM') }));
@@ -178,9 +202,9 @@ export default function ProductionEfficiencyDashboardPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Production Efficiency Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Production OEE Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Compare actual throughput against nominal speed to measure line efficiency.
+            Availability, performance and quality from completed production orders and logged downtime.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -210,7 +234,13 @@ export default function ProductionEfficiencyDashboardPage() {
         <StatCard icon={TrendingUp} title="Actual Tonnage" value={`${totals.actualT.toFixed(2)} t`} color="teal" />
         <StatCard icon={Clock} title="Production Hours" value={`${totals.hours.toFixed(1)} hrs`} color="emerald" />
         <StatCard icon={AlertTriangle} title="Downtime" value={`${totals.downtime.toFixed(1)} hrs`} color="amber" />
-        <StatCard icon={Gauge} title="Avg Efficiency" value={`${totals.avgEff.toFixed(1)}%`} color="emerald" />
+        <StatCard icon={Gauge} title="OEE" value={`${totals.oee.toFixed(1)}%`} color="emerald" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Availability</p><p className="mt-1 text-2xl font-bold text-slate-800">{totals.availability.toFixed(1)}%</p><p className="mt-1 text-xs text-slate-500">Operating hours ÷ operating + logged downtime</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Performance</p><p className="mt-1 text-2xl font-bold text-slate-800">{totals.avgEff.toFixed(1)}%</p><p className="mt-1 text-xs text-slate-500">Actual speed compared with nominal speed</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quality</p><p className="mt-1 text-2xl font-bold text-slate-800">{totals.quality.toFixed(1)}%</p><p className="mt-1 text-xs text-slate-500">Accepted output ÷ recorded output</p></div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -240,12 +270,12 @@ export default function ProductionEfficiencyDashboardPage() {
           )}
         </div>
 
-        {/* Efficiency table */}
+        {/* OEE table */}
         <div className="xl:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Gauge className="w-5 h-5 text-purple-500" />
-              <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Production Efficiency by Product</h3>
+              <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">OEE by Product</h3>
             </div>
             <span className="text-xs text-slate-400">{rows.length} products</span>
           </div>
@@ -253,37 +283,28 @@ export default function ProductionEfficiencyDashboardPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  {['Product', 'Plant', 'Plan (t)', 'Actual (t)', 'Nominal Speed (t/hr)', 'Runtime (hrs)', 'Downtime (hrs)', 'Actual (t/hr)', 'Efficiency %'].map((h) => (
+                  {['Product', 'Plant', 'Actual (t)', 'Availability', 'Performance', 'Quality', 'OEE', 'Downtime (hrs)'].map((h) => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-xs whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">Loading…</td></tr>
                 ) : rows.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-slate-400 text-sm">No completed production orders for the selected month.</td></tr>
+                  <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">No completed production orders for the selected month.</td></tr>
                 ) : rows.map((r) => (
                   <tr key={r.formulation_id} className="hover:bg-slate-50/50">
                     <td className="px-3 py-2 text-slate-800 font-medium">
                       {r.sage_code ? `${r.sage_code} — ` : ''}{r.formulation_name}
                     </td>
                     <td className="px-3 py-2 text-slate-600">{PLANT_LABELS[r.plant] || r.plant}</td>
-                    <td className="px-3 py-2 text-slate-600 tabular-nums">{(r.monthly_plan_kg / 1000).toFixed(2)}</td>
                     <td className="px-3 py-2 text-slate-800 font-medium tabular-nums">{(r.actual_kg / 1000).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.nominal_speed.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.planned_runtime.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.availability_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.asset_intensity_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.quality_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${r.oee_pct >= 75 ? 'bg-emerald-100 text-emerald-700' : r.oee_pct >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{r.oee_pct.toFixed(1)}%</span></td>
                     <td className="px-3 py-2 text-slate-600 tabular-nums">{r.downtime_hours.toFixed(1)}</td>
-                    <td className="px-3 py-2 text-slate-600 tabular-nums">{r.actual_throughput.toFixed(2)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                        r.efficiency_pct >= 85 ? 'bg-emerald-100 text-emerald-700' :
-                        r.efficiency_pct >= 60 ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {r.efficiency_pct.toFixed(1)}%
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>

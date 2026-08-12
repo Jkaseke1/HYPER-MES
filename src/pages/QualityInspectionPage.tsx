@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, CheckCircle2, XCircle, TrendingUp, BarChart2, FlaskConical } from 'lucide-react';
+import { Plus, Search, Eye, CheckCircle2, XCircle, TrendingUp, BarChart2, FlaskConical, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -44,6 +44,29 @@ interface GRNItem {
   raw_materials?: any;
 }
 
+interface QualityLotControl {
+  id: string;
+  source_id: string | null;
+  raw_material_id: string | null;
+  batch_number: string;
+  received_qty: number;
+  disposition: 'hold' | 'released' | 'conditional' | 'rejected';
+  quantity: number;
+  unit: string;
+  hold_reason?: string | null;
+  released_at?: string | null;
+}
+
+const lotKey = (grnId: string | null | undefined, materialId: string | null | undefined, batchNumber: string) =>
+  `${grnId || ''}:${materialId || ''}:${batchNumber || ''}`;
+
+const dispositionStyle: Record<QualityLotControl['disposition'], string> = {
+  hold: 'bg-amber-50 text-amber-700 border-amber-200',
+  released: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  conditional: 'bg-blue-50 text-blue-700 border-blue-200',
+  rejected: 'bg-red-50 text-red-700 border-red-200',
+};
+
 const emptyForm = {
   grn_id: '',
   raw_material_id: '',
@@ -61,6 +84,7 @@ export default function QualityInspectionPage() {
   const [inspections, setInspections] = useState<QualityInspection[]>([]);
   const [grns, setGrns] = useState<GRN[]>([]);
   const [grnItems, setGrnItems] = useState<GRNItem[]>([]);
+  const [lotControls, setLotControls] = useState<Record<string, QualityLotControl>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -71,7 +95,7 @@ export default function QualityInspectionPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [inspectionsRes, grnsRes] = await Promise.all([
+    const [inspectionsRes, grnsRes, controlsRes] = await Promise.all([
       supabase
         .from('quality_inspections')
         .select('*, goods_received_notes(grn_number), raw_materials(name)')
@@ -80,9 +104,14 @@ export default function QualityInspectionPage() {
         .from('goods_received_notes')
         .select('id, grn_number')
         .order('grn_number'),
+      supabase
+        .from('quality_lot_controls')
+        .select('id, source_id, raw_material_id, batch_number, disposition, quantity, unit, hold_reason, released_at')
+        .eq('source_type', 'grn'),
     ]);
     setInspections(inspectionsRes.data || []);
     setGrns(grnsRes.data || []);
+    setLotControls(Object.fromEntries(((controlsRes.data || []) as QualityLotControl[]).map((control) => [lotKey(control.source_id, control.raw_material_id, control.batch_number), control])));
     setLoading(false);
   }
 
@@ -96,7 +125,7 @@ export default function QualityInspectionPage() {
     if (grnId) {
       const { data } = await supabase
         .from('grn_items')
-        .select('id, grn_id, raw_material_id, batch_number, raw_materials(id, name)')
+        .select('id, grn_id, raw_material_id, batch_number, received_qty, raw_materials(id, name)')
         .eq('grn_id', grnId);
       setGrnItems(data || []);
     } else {
@@ -118,6 +147,57 @@ export default function QualityInspectionPage() {
   function openView(inspection: QualityInspection) {
     setViewing(inspection);
     setViewModalOpen(true);
+  }
+
+  async function upsertLotControl(input: {
+    grnId: string; materialId: string; batchNumber: string; quantity: number;
+    disposition: QualityLotControl['disposition']; reason?: string | null;
+  }) {
+    const current = lotControls[lotKey(input.grnId, input.materialId, input.batchNumber)];
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData.user?.id || null;
+    const isReleased = input.disposition === 'released' || input.disposition === 'conditional';
+    const { data, error } = await supabase
+      .from('quality_lot_controls')
+      .upsert({
+        source_type: 'grn', source_id: input.grnId, raw_material_id: input.materialId,
+        batch_number: input.batchNumber, quantity: input.quantity, unit: 'kg',
+        disposition: input.disposition,
+        hold_reason: input.disposition === 'hold' ? (input.reason || 'Awaiting quality approval') : input.disposition === 'rejected' ? input.reason : null,
+        released_by: isReleased ? userId : null,
+        released_at: isReleased ? new Date().toISOString() : null,
+        release_notes: isReleased || input.disposition === 'rejected' ? input.reason || null : null,
+      }, { onConflict: 'source_type,source_id,raw_material_id,batch_number' })
+      .select('id')
+      .single();
+    if (error) throw error;
+    if (!current || current.disposition !== input.disposition) {
+      const action = input.disposition === 'released' ? 'released' : input.disposition === 'conditional' ? 'conditional_release' : input.disposition === 'rejected' ? 'rejected' : 'held';
+      const { error: actionError } = await supabase.from('quality_lot_actions').insert({
+        quality_lot_control_id: data.id, action, previous_disposition: current?.disposition || null,
+        new_disposition: input.disposition, reason: input.reason || null, performed_by: userId,
+      });
+      if (actionError) console.warn('Lot action could not be logged:', actionError.message);
+    }
+  }
+
+  async function syncViewingLot() {
+    if (!viewing) return;
+    const { data: inspection, error } = await supabase
+      .from('quality_inspections').select('status, rejection_reason, remarks')
+      .eq('id', viewing.id).single();
+    if (error || !inspection) return;
+    const disposition: QualityLotControl['disposition'] = inspection.status === 'passed' ? 'released' : inspection.status === 'conditional' ? 'conditional' : inspection.status === 'failed' ? 'rejected' : 'hold';
+    const existing = lotControls[lotKey(viewing.grn_id, viewing.raw_material_id, viewing.batch_number)];
+    try {
+      await upsertLotControl({
+        grnId: viewing.grn_id, materialId: viewing.raw_material_id, batchNumber: viewing.batch_number,
+        quantity: Number(existing?.quantity || grnItems.find((item) => item.raw_material_id === viewing.raw_material_id && item.batch_number === viewing.batch_number)?.received_qty || 0),
+        disposition, reason: inspection.rejection_reason || inspection.remarks,
+      });
+    } catch (syncError) {
+      console.error('Unable to update lot disposition:', syncError);
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -147,6 +227,17 @@ export default function QualityInspectionPage() {
         return;
       }
 
+      const sourceItem = grnItems.find((item) => item.raw_material_id === form.raw_material_id && item.batch_number === form.batch_number);
+      try {
+        await upsertLotControl({
+          grnId: form.grn_id, materialId: form.raw_material_id, batchNumber: form.batch_number,
+          quantity: Number(sourceItem?.received_qty || 0), disposition: 'hold', reason: 'Awaiting quality approval',
+        });
+      } catch (lotError: any) {
+        console.error('Quality inspection saved, but lot hold failed:', lotError);
+        alert(`Inspection saved, but the lot hold could not be created: ${lotError.message}`);
+      }
+
       setSaving(false);
       setModalOpen(false);
       fetchData();
@@ -173,6 +264,7 @@ export default function QualityInspectionPage() {
   const failed = inspections.filter(i => i.status === 'failed' || i.result === 'failed').length;
   const pending = inspections.filter(i => i.status === 'pending' || i.result === 'pending').length;
   const passRate = inspections.length > 0 ? Math.round((passed / inspections.length) * 100) : 0;
+  const heldLots = Object.values(lotControls).filter((control) => control.disposition === 'hold').length;
 
   const resultChartData = [
     { name: 'Passed', value: passed, color: '#0d9488' },
@@ -202,7 +294,7 @@ export default function QualityInspectionPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Inspections</span>
@@ -210,6 +302,14 @@ export default function QualityInspectionPage() {
           </div>
           <p className="text-3xl font-bold text-slate-800">{inspections.length}</p>
           <p className="text-xs text-slate-500 mt-1">All time</p>
+        </div>
+        <div className="bg-white rounded-xl border border-amber-200 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lots on Hold</span>
+            <LockKeyhole className="w-4 h-4 text-amber-500" />
+          </div>
+          <p className="text-3xl font-bold text-amber-600">{heldLots}</p>
+          <p className="text-xs text-slate-500 mt-1">Awaiting quality release</p>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="flex items-center justify-between mb-2">
@@ -305,6 +405,7 @@ export default function QualityInspectionPage() {
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Batch</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Inspection Date</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600">Result</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Lot Control</th>
                   <th className="text-left px-4 py-3 font-semibold text-slate-600"></th>
                 </tr>
               </thead>
@@ -316,6 +417,7 @@ export default function QualityInspectionPage() {
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{inspection.batch_number}</td>
                     <td className="px-4 py-3 text-slate-600">{format(new Date(inspection.inspection_date), 'dd MMM yyyy')}</td>
                     <td className="px-4 py-3"><StatusBadge status={inspection.status || inspection.result} /></td>
+                    <td className="px-4 py-3">{(() => { const control = lotControls[lotKey(inspection.grn_id, inspection.raw_material_id, inspection.batch_number)]; return control ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${dispositionStyle[control.disposition]}`}>{control.disposition === 'hold' ? 'On hold' : control.disposition}</span> : <span className="text-xs text-slate-400">Pending setup</span>; })()}</td>
                     <td className="px-4 py-3">
                       <button onClick={() => openView(inspection)} className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="View Details">
                         <Eye className="w-4 h-4" />
@@ -415,6 +517,7 @@ export default function QualityInspectionPage() {
                 <p className="text-xs text-slate-500 mb-1">GRN Number</p>
                 <p className="text-sm font-semibold text-slate-800">{viewing.goods_received_notes?.grn_number || '-'}</p>
               </div>
+              {(() => { const control = lotControls[lotKey(viewing.grn_id, viewing.raw_material_id, viewing.batch_number)]; return control ? <div className="col-span-2 rounded-lg border border-slate-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-teal-600" /><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lot disposition</span></div><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${dispositionStyle[control.disposition]}`}>{control.disposition === 'hold' ? 'On hold' : control.disposition}</span></div><p className="mt-2 text-xs text-slate-600">{Number(control.quantity || 0).toLocaleString()} {control.unit} · {control.hold_reason || (control.disposition === 'released' ? 'Released for use' : 'Controlled by quality workflow')}</p></div> : null; })()}
               <div>
                 <p className="text-xs text-slate-500 mb-1">Material</p>
                 <p className="text-sm text-slate-700">{viewing.raw_materials?.name || '-'}</p>
@@ -486,10 +589,12 @@ export default function QualityInspectionPage() {
                   approveStatus="passed"
                   rejectStatus="failed"
                   onApproved={() => {
+                    void syncViewingLot();
                     setViewModalOpen(false);
                     fetchData();
                   }}
                   onRejected={() => {
+                    void syncViewingLot();
                     setViewModalOpen(false);
                     fetchData();
                   }}

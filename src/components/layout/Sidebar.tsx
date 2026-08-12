@@ -37,6 +37,7 @@ import {
   Search,
   Calendar,
   Gauge,
+  Waypoints,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -130,6 +131,7 @@ const navGroups: NavGroup[] = [
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },
       { to: '/admin/sync-log', icon: Activity, label: 'Sage Sync Log' },
+      { to: '/plant-integrations', icon: Waypoints, label: 'Automation & Integrations' },
       { to: '/reports', icon: FileText, label: 'All Reports' },
     ],
   },
