@@ -479,10 +479,18 @@ export default function ProductionOrdersPage() {
     const materialIds = Array.from(new Set(pendingMaterials.map((m) => m.raw_material_id).filter(Boolean)));
     
     // Query Sage stock balances
-    const { data: sageData } = await supabase
+    const { data: sageData, error: sageStockError } = await supabase
       .from('sage_stock_balances')
-      .select('raw_material_id, quantity, quantity_on_hand, last_synced_at')
+      // `quantity` is the canonical bridge balance column. Querying the
+      // retired `quantity_on_hand` field caused Supabase to reject the whole
+      // request, then the UI silently fell back to MES zero balances.
+      .select('raw_material_id, quantity, last_synced_at')
+      .eq('warehouse_id', 18)
       .in('raw_material_id', materialIds);
+
+    if (sageStockError) {
+      throw new Error(`Unable to read Sage Raw Materials balances: ${sageStockError.message}`);
+    }
 
     // Query raw_materials current stock as fallback
     const { data: rmData } = await supabase
@@ -497,7 +505,7 @@ export default function ProductionOrdersPage() {
     for (const row of sageData || []) {
       const materialId = (row as any).raw_material_id;
       if (materialId) {
-        stockMap[materialId] = Number((row as any).quantity ?? (row as any).quantity_on_hand ?? 0);
+        stockMap[materialId] = Number((row as any).quantity ?? 0);
         syncedMap[materialId] = (row as any).last_synced_at || null;
       }
     }
