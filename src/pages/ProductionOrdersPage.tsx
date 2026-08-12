@@ -1655,13 +1655,30 @@ export default function ProductionOrdersPage() {
 
           {bomPreview.length > 0 && selectedFormulation && (
             <div className="space-y-3 rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4">
+              {(() => {
+                const premixLines = bomPreview.filter((ingredient: any) =>
+                  /premix/i.test(`${ingredient.code || ''} ${ingredient.name || ''}`)
+                );
+                const premixKg = premixLines.reduce((sum: number, ingredient: any) =>
+                  sum + ((Number(ingredient.quantity) || 0) / 50) * Number(form.planned_qty || 0), 0
+                );
+                return (
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-teal-600" />
                   <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
                 </div>
-                <Badge variant="outline" className="text-[11px] border-teal-300 text-teal-700">{selectedFormulation.code} · {selectedFormulation.name}</Badge>
+                <div className="flex items-center gap-2">
+                  {premixLines.length > 0 && (
+                    <Badge className="bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200 text-[11px]">
+                      Premix: {premixKg.toFixed(2)} kg
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-[11px] border-teal-300 text-teal-700">{selectedFormulation.code} · {selectedFormulation.name}</Badge>
+                </div>
               </div>
+                );
+              })()}
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                 <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <table className="w-full text-xs">
@@ -1681,11 +1698,17 @@ export default function ProductionOrdersPage() {
                         // Calculate quantity required: (quantity per 50kg / 50.0) * planned_qty
                         const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
                         const lineTotal = qtyRequired * ing.unitCost;
+                        const isPremix = /premix/i.test(`${ing.code || ''} ${ing.name || ''}`);
                         return (
-                          <tr key={ing.index} className="hover:bg-slate-50">
+                          <tr key={ing.index} className={`hover:bg-slate-50 ${isPremix ? 'bg-fuchsia-50/60' : ''}`}>
                             <td className="px-3 py-2 text-slate-600">{ing.index}</td>
                             <td className="px-3 py-2 font-medium text-slate-800">{ing.code}</td>
-                            <td className="px-3 py-2 text-slate-700">{ing.name}</td>
+                            <td className="px-3 py-2 text-slate-700">
+                              <span className="inline-flex items-center gap-2">
+                                {ing.name}
+                                {isPremix && <Badge className="bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200 text-[10px] px-1.5 py-0">Premix</Badge>}
+                              </span>
+                            </td>
                             <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
                             <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(2)}</td>
                             <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(2)}</td>
