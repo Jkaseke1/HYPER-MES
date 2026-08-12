@@ -232,6 +232,25 @@ export default function ProductionOrdersPage() {
   }, [tab, search]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  // Keep the production queue current when another MES user, the bridge, or a
+  // database workflow changes an order. This removes the need to refresh the
+  // browser repeatedly while a batch is being processed.
+  useEffect(() => {
+    const channel = supabase
+      .channel('production-orders-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
+        fetchOrders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => {
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrders]);
   useEffect(() => {
     Promise.all([
       supabase.from('formulations').select('*').eq('status', 'active'),
