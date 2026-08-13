@@ -36,7 +36,24 @@ CREATE POLICY "Authenticated users can read Sage product integration settings"
 DROP POLICY IF EXISTS "Admins can manage Sage product integration settings" ON public.sage_product_integration_settings;
 CREATE POLICY "Admins can manage Sage product integration settings"
   ON public.sage_product_integration_settings FOR ALL TO authenticated
-  USING (public.is_admin()) WITH CHECK (public.is_admin());
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      JOIN public.roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND r.code = 'admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      JOIN public.roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND r.code = 'admin'
+    )
+  );
 
 -- BSG50 is a 50 kg bagged Sage stock item. The UAT Sage BOM consumes one
 -- PASG0050 bag per BSG50 unit; historical BSG50 MFPs use project GRA (10).
