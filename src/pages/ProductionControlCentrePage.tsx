@@ -3,6 +3,7 @@ import { CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileWarning, Plus, 
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import ProductionNoticeAttachments from '../components/production/ProductionNoticeAttachments';
 
 type Order = { id: string; batch_number: string; status: string; planned_qty: number; planned_end?: string; created_at: string; formulations?: { name?: string; sage_code?: string } | null };
 type Notice = { id: string; production_order_id: string; output_qty_kg: number; output_bags: number; rejected_qty_kg: number; recycle_qty_kg: number; variance_reason: string; declaration_notes: string; status: string; submitted_at?: string; verified_at?: string };
@@ -16,6 +17,7 @@ export default function ProductionControlCentrePage() {
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [form, setForm] = useState({ outputQty: '', outputBags: '', rejectedQty: '0', recycleQty: '0', varianceReason: '', notes: '' });
   const [saving, setSaving] = useState(false);
+  const canVerify = ['admin', 'production_manager', 'supervisor', 'finance', 'accountant'].includes(profile?.role || '');
 
   const load = useCallback(async () => {
     const [orderResult, noticeResult] = await Promise.all([
@@ -104,7 +106,7 @@ export default function ProductionControlCentrePage() {
         <button disabled={saving} onClick={submitNotice} className="mt-4 rounded-lg bg-teal-600 px-4 py-2 font-semibold text-white hover:bg-teal-700 disabled:opacity-50">{saving ? 'Submitting...' : 'Submit for Verification'}</button>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Notice Register</h2><div className="mt-4 space-y-3">{notices.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">No digital production notices yet.</p> : notices.map(notice => { const order = orders.find(o => o.id === notice.production_order_id); return <div key={notice.id} className="rounded-lg border border-slate-200 p-3"><div className="flex justify-between gap-3"><div><p className="font-bold text-slate-800">{order?.batch_number || 'Archived production order'}</p><p className="text-xs text-slate-500">{notice.output_qty_kg} kg / {notice.output_bags} bags · recycle {notice.recycle_qty_kg} kg</p></div><span className={`h-fit rounded-full px-2 py-1 text-xs font-bold ${notice.status === 'verified' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{notice.status}</span></div>{notice.status === 'submitted' && <button onClick={() => verify(notice)} className="mt-3 flex items-center gap-1 text-sm font-semibold text-teal-700 hover:text-teal-900"><CheckCircle2 className="h-4 w-4" /> Verify notice</button>}</div> })}</div></section>
+      <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-900">Notice Register</h2><div className="mt-4 space-y-3">{notices.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">No digital production notices yet.</p> : notices.map(notice => { const order = orders.find(o => o.id === notice.production_order_id); return <div key={notice.id} className="rounded-lg border border-slate-200 p-3"><div className="flex justify-between gap-3"><div><p className="font-bold text-slate-800">{order?.batch_number || 'Archived production order'}</p><p className="text-xs text-slate-500">{notice.output_qty_kg} kg / {notice.output_bags} bags · recycle {notice.recycle_qty_kg} kg</p></div><span className={`h-fit rounded-full px-2 py-1 text-xs font-bold ${notice.status === 'verified' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{notice.status}</span></div>{notice.status === 'submitted' && canVerify && <button onClick={() => verify(notice)} className="mt-3 flex items-center gap-1 text-sm font-semibold text-teal-700 hover:text-teal-900"><CheckCircle2 className="h-4 w-4" /> Verify notice</button>}{notice.status === 'submitted' && !canVerify && <p className="mt-3 text-xs text-slate-500">Awaiting supervisor or Finance verification.</p>}<ProductionNoticeAttachments noticeId={notice.id} /></div> })}</div></section>
     </div>
   </div>;
 }
