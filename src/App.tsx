@@ -64,6 +64,7 @@ import PaymentHistoryPage from './pages/payroll/PaymentHistoryPage';
 import SagePostingReviewPage from './pages/SagePostingReviewPage';
 import PlantIntegrationHubPage from './pages/PlantIntegrationHubPage';
 import ManagementReportingPage from './pages/ManagementReportingPage';
+import ProductionControlCentrePage from './pages/ProductionControlCentrePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -128,6 +129,7 @@ export default function App() {
               <Route path="material-transfer" element={<MaterialTransferPage />} />
               <Route path="rm-prices" element={<RMCostRegisterPage />} />
               <Route path="production-orders" element={<ProductionOrdersPage />} />
+              <Route path="production-control" element={<ProductionControlCentrePage />} />
               <Route path="production-efficiency" element={<ProductionEfficiencyDashboardPage />} />
               <Route path="daily-production-report" element={<DailyProductionReportPage />} />
               <Route path="macropack" element={<MacropackManufacturingPage />} />
