@@ -86,7 +86,7 @@ export default function GoodsReceivedPage() {
         supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
-        supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
+        supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code)').eq('status', 'open').order('created_at', { ascending: false }),
       ]);
 
       if (grnsRes.data) {
@@ -424,7 +424,7 @@ export default function GoodsReceivedPage() {
               <TableBody>
                 {filteredGRNs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-slate-400 py-12">
+                    <TableCell colSpan={8} className="text-center text-slate-400 py-12">
                       No Goods Received Notes found matching criteria
                     </TableCell>
                   </TableRow>
@@ -685,6 +685,22 @@ export default function GoodsReceivedPage() {
                             setWeighBridgeTicketId(val);
                             const ticket = wbTickets.find((t: any) => t.id === val);
                             if (ticket) {
+                              const matchedMaterial = materials.find((m) => m.code === ticket.product_code || (m as any).sage_code === ticket.product_code);
+                              if (ticket.supplier_id) {
+                                setSupplierId(ticket.supplier_id);
+                              }
+                              if (matchedMaterial) {
+                                setItems((prev) => {
+                                  const next = prev.length > 0 ? [...prev] : [{ ...emptyItem }];
+                                  next[0] = {
+                                    ...next[0],
+                                    raw_material_id: matchedMaterial.id,
+                                    received_qty: ticket.nett_mass != null && !next[0].received_qty ? Number(ticket.nett_mass) : next[0].received_qty,
+                                    ordered_qty: ticket.nett_mass != null && !next[0].ordered_qty ? Number(ticket.nett_mass) : next[0].ordered_qty,
+                                  };
+                                  return next;
+                                });
+                              }
                               setWbForm({
                                 transaction_no: ticket.ticket_no || '',
                                 vehicle_reg: ticket.vehicle_reg || '',
@@ -710,7 +726,7 @@ export default function GoodsReceivedPage() {
                           <SelectContent>
                             {wbTickets.map((t: any) => (
                               <SelectItem key={t.id} value={t.id}>
-                                {t.ticket_no} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${t.nett_mass} kg` : 'No mass'}
+                                {t.ticket_no} | {t.product_name || t.product_code || 'No product'} | {t.suppliers?.name || 'No supplier'} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${Number(t.nett_mass).toLocaleString()} kg` : 'No mass'}
                               </SelectItem>
                             ))}
                           </SelectContent>

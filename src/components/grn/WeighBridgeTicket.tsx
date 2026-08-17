@@ -188,7 +188,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       <option value="External">External</option>
                     </select>
                   </Field>
-                  <Field title="Product (Sage)">
+                  <Field title="Product (Sage) *">
                     <select
                       value={data.wb_product_code}
                       onChange={(e) => {
@@ -206,7 +206,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       ))}
                     </select>
                   </Field>
-                  <Field title="Supplier">
+                  <Field title="Supplier *">
                     <select
                       value={data.wb_supplier_id}
                       onChange={(e) => onChange('wb_supplier_id', e.target.value)}

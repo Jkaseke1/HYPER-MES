@@ -133,6 +133,14 @@ export default function WeighBridgePage() {
       alert('Transaction No is required.');
       return;
     }
+    if (!form.wb_product_code || !form.wb_product_name) {
+      alert('Product is required before saving a weighbridge ticket.');
+      return;
+    }
+    if (!form.wb_supplier_id) {
+      alert('Supplier is required before saving a weighbridge ticket.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {

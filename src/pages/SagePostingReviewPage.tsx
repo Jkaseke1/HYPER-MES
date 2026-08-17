@@ -51,6 +51,33 @@ interface ReviewGroup {
   created_at: string;
 }
 
+interface ReviewDocumentSummary {
+  kind: 'grn' | 'generic';
+  title: string;
+  subtitle?: string;
+  supplier?: string;
+  warehouse?: string;
+  date?: string;
+  notes?: string | null;
+  totalQty?: number;
+  totalValue?: number;
+  weighbridge?: {
+    ticket?: string | null;
+    productCode?: string | null;
+    vehicle?: string | null;
+    driver?: string | null;
+    nettMass?: number | null;
+  };
+  lines?: Array<{
+    code?: string | null;
+    name?: string | null;
+    qty?: number;
+    unitCost?: number;
+    total?: number;
+    batch?: string | null;
+  }>;
+}
+
 const EVENT_LABELS: Record<string, string> = {
   grn_confirmed: 'GRN Receipt',
   materials_issued: 'RM Issue',
@@ -182,6 +209,97 @@ function KPICard({ label, value, sub, icon: Icon, accent }: { label: string; val
   );
 }
 
+function DocumentSummaryPanel({ summary }: { summary?: ReviewDocumentSummary }) {
+  if (!summary) return null;
+
+  return (
+    <div className="bg-white border-b border-slate-100">
+      <div className="px-4 py-3 bg-blue-50/60 border-b border-blue-100">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Source Document Summary</p>
+            <h3 className="text-sm font-extrabold text-slate-900 mt-0.5">{summary.title}</h3>
+            {summary.subtitle && <p className="text-xs text-slate-500 mt-0.5">{summary.subtitle}</p>}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs min-w-0 lg:min-w-[520px]">
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Supplier</p>
+              <p className="font-bold text-slate-800 truncate">{summary.supplier || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Warehouse</p>
+              <p className="font-bold text-slate-800 truncate">{summary.warehouse || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Total Qty</p>
+              <p className="font-mono font-bold text-slate-800">{Number(summary.totalQty || 0).toLocaleString()} kg</p>
+            </div>
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">GRN Value</p>
+              <p className="font-mono font-bold text-emerald-700">${Number(summary.totalValue || 0).toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        {summary.weighbridge?.ticket && (
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+            <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">WB Ticket</p>
+              <p className="font-mono font-bold text-slate-800">{summary.weighbridge.ticket}</p>
+            </div>
+            <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">WB Product</p>
+              <p className="font-mono font-bold text-slate-800">{summary.weighbridge.productCode || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Vehicle</p>
+              <p className="font-bold text-slate-800">{summary.weighbridge.vehicle || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Driver</p>
+              <p className="font-bold text-slate-800 truncate">{summary.weighbridge.driver || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Nett Mass</p>
+              <p className="font-mono font-bold text-teal-700">{summary.weighbridge.nettMass != null ? `${Number(summary.weighbridge.nettMass).toLocaleString()} kg` : '-'}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {summary.lines && summary.lines.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-4 py-2 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Product</th>
+                <th className="text-right px-3 py-2 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Qty</th>
+                <th className="text-right px-3 py-2 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Price</th>
+                <th className="text-right px-3 py-2 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Line Total</th>
+                <th className="text-left px-4 py-2 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Batch</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {summary.lines.map((line, index) => (
+                <tr key={`${line.code || 'line'}-${index}`} className="hover:bg-slate-50/60">
+                  <td className="px-4 py-2.5">
+                    <p className="font-bold text-slate-800">{line.name || '-'}</p>
+                    <p className="font-mono text-[10px] text-blue-700">{line.code || '-'}</p>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-800">{Number(line.qty || 0).toLocaleString()} kg</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-slate-600">${Number(line.unitCost || 0).toFixed(4)}</td>
+                  <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700">${Number(line.total || 0).toFixed(2)}</td>
+                  <td className="px-4 py-2.5 font-mono text-slate-500">{line.batch || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SagePostingReviewPage() {
   const { profile, loading: authLoading } = useAuth();
   const [reviews, setReviews] = useState<SagePostingReview[]>([]);
@@ -193,8 +311,83 @@ export default function SagePostingReviewPage() {
   const [batchApproving, setBatchApproving] = useState(false);
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [documentSummaries, setDocumentSummaries] = useState<Record<string, ReviewDocumentSummary>>({});
 
   const isFinance = profile?.role === 'finance' || profile?.role === 'accountant' || profile?.role === 'admin';
+
+  const loadDocumentSummaries = useCallback(async (nextReviews: SagePostingReview[]) => {
+    const syncIds = [...new Set(nextReviews.filter((r) => r.event_type === 'grn_confirmed').map((r) => r.sync_event_id).filter(Boolean))];
+    if (syncIds.length === 0) {
+      setDocumentSummaries({});
+      return;
+    }
+
+    const { data: syncRows, error: syncError } = await supabase
+      .from('sync_log')
+      .select('id, reference_id, reference_type')
+      .in('id', syncIds);
+
+    if (syncError || !syncRows) {
+      console.warn('Failed to load source sync rows for Sage review summaries:', syncError);
+      return;
+    }
+
+    const grnIds = syncRows.map((row: any) => row.reference_id).filter(Boolean);
+    if (grnIds.length === 0) return;
+
+    const { data: grns, error: grnError } = await supabase
+      .from('goods_received_notes')
+      .select('*, suppliers(name, code), warehouses(name, code), grn_items(*, raw_materials(code, name))')
+      .in('id', grnIds);
+
+    if (grnError || !grns) {
+      console.warn('Failed to load GRN source details for Sage review summaries:', grnError);
+      return;
+    }
+
+    const grnMap = new Map((grns as any[]).map((grn) => [grn.id, grn]));
+    const nextSummaries: Record<string, ReviewDocumentSummary> = {};
+
+    for (const row of syncRows as any[]) {
+      const grn = grnMap.get(row.reference_id);
+      if (!grn) continue;
+
+      const lines = (grn.grn_items || []).map((item: any) => {
+        const qty = Number(item.received_qty || 0);
+        const unitCost = Number(item.unit_cost || 0);
+        return {
+          code: item.raw_materials?.code,
+          name: item.raw_materials?.name,
+          qty,
+          unitCost,
+          total: qty * unitCost,
+          batch: item.batch_number,
+        };
+      });
+
+      nextSummaries[row.id] = {
+        kind: 'grn',
+        title: grn.grn_number || 'GRN Receipt',
+        subtitle: grn.received_date ? `Received ${new Date(grn.received_date).toLocaleDateString('en-ZW')}` : undefined,
+        supplier: grn.suppliers?.name,
+        warehouse: grn.warehouses?.name || grn.warehouses?.code,
+        date: grn.received_date,
+        notes: grn.notes,
+        totalQty: lines.reduce((sum: number, line: any) => sum + Number(line.qty || 0), 0),
+        totalValue: lines.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0),
+        weighbridge: {
+          ticket: grn.wb_transaction_no || grn.weigh_bridge_ticket_no,
+          productCode: grn.wb_product_code,
+          vehicle: grn.wb_vehicle_reg || grn.weigh_bridge_ticket_vehicle_number,
+          driver: grn.wb_driver_name || grn.weigh_bridge_ticket_driver_name,
+          nettMass: grn.wb_nett_mass || grn.weigh_bridge_ticket_net_weight || grn.weigh_bridge_ticket_weight,
+        },
+        lines,
+      };
+    }
+
+    setDocumentSummaries(nextSummaries);
+  }, []);
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -212,10 +405,12 @@ export default function SagePostingReviewPage() {
     if (error) {
       toast.error(`Failed to load: ${error.message}`);
     } else {
-      setReviews(data || []);
+      const nextReviews = data || [];
+      setReviews(nextReviews);
+      loadDocumentSummaries(nextReviews);
     }
     if (!isSilent) setLoading(false);
-  }, [filter]);
+  }, [filter, loadDocumentSummaries]);
 
   useEffect(() => {
     fetchData(false);
@@ -572,6 +767,7 @@ export default function SagePostingReviewPage() {
                 {/* Expanded Item Details */}
                 {isOpen && (
                   <div className="border-t border-slate-100">
+                    <DocumentSummaryPanel summary={documentSummaries[group.sync_event_id]} />
                     <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100">
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transaction Lines — {group.lineCount} entries</p>
                     </div>
