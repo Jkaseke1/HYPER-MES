@@ -362,8 +362,11 @@ export default function DispatchPage() {
     product_code: string;
     batch_number: string;
     dispatched_qty: number;
+    dispatched_bags: number;
+    bag_size_kg: number;
     unit: string;
     received_qty: number;
+    received_bags: number;
     damaged_qty: number;
     variance_reason: string;
     line_notes: string;
@@ -394,8 +397,11 @@ export default function DispatchPage() {
       product_code: it.formulations?.code || it.formulations?.sage_code || 'FG-PROD',
       batch_number: it.batch_number || 'N/A',
       dispatched_qty: Number(it.quantity || 0),
+      dispatched_bags: Number(it.quantity_bags ?? bagsFromKg(Number(it.quantity || 0), it.bag_size_kg)),
+      bag_size_kg: bagSizeKg(it.bag_size_kg),
       unit: it.unit || 'kg',
       received_qty: Number(it.quantity || 0),
+      received_bags: Number(it.quantity_bags ?? bagsFromKg(Number(it.quantity || 0), it.bag_size_kg)),
       damaged_qty: 0,
       variance_reason: 'Full Delivery - Intact',
       line_notes: '',
@@ -408,7 +414,11 @@ export default function DispatchPage() {
   const updateBranchItem = (idx: number, field: string, value: any) => {
     setBranchConfirmItems(prev => {
       const updated = [...prev];
-      updated[idx] = { ...updated[idx], [field]: value };
+      const current = { ...updated[idx], [field]: value };
+      if (field === 'received_bags') {
+        current.received_qty = kgFromBags(Number(value || 0), current.bag_size_kg);
+      }
+      updated[idx] = current;
       return updated;
     });
   };
@@ -422,14 +432,18 @@ export default function DispatchPage() {
       const totalReceived = branchConfirmItems.reduce((s, i) => s + i.received_qty, 0);
       const totalDamaged = branchConfirmItems.reduce((s, i) => s + i.damaged_qty, 0);
       const totalVariance = totalReceived - totalDispatched;
+      const totalDispatchedBags = branchConfirmItems.reduce((s, i) => s + i.dispatched_bags, 0);
+      const totalReceivedBags = branchConfirmItems.reduce((s, i) => s + i.received_bags, 0);
+      const totalVarianceBags = totalReceivedBags - totalDispatchedBags;
 
       const lineBreakdown = branchConfirmItems.map(i => {
         const lineVar = i.received_qty - i.dispatched_qty;
-        return `${i.product_name} (${i.product_code}): Sent ${i.dispatched_qty} ${i.unit}, Recv ${i.received_qty} ${i.unit}${lineVar !== 0 ? ` [Var: ${lineVar > 0 ? '+' : ''}${lineVar} ${i.unit}]` : ''}${i.damaged_qty > 0 ? ` [Damaged: ${i.damaged_qty}]` : ''}${i.variance_reason !== 'Full Delivery - Intact' ? ` Reason: ${i.variance_reason}` : ''}`;
+        const lineBagVar = i.received_bags - i.dispatched_bags;
+        return `${i.product_name} (${i.product_code}): Sent ${i.dispatched_bags} bags (${i.dispatched_qty} ${i.unit}), Recv ${i.received_bags} bags (${i.received_qty} ${i.unit})${lineVar !== 0 ? ` [Var: ${lineBagVar > 0 ? '+' : ''}${lineBagVar} bags / ${lineVar > 0 ? '+' : ''}${lineVar} ${i.unit}]` : ''}${i.damaged_qty > 0 ? ` [Damaged: ${i.damaged_qty} bags]` : ''}${i.variance_reason !== 'Full Delivery - Intact' ? ` Reason: ${i.variance_reason}` : ''}`;
       }).join('; ');
 
       const formattedNotes = `Receiver: ${receiverName || profile?.full_name || 'Branch Manager'}. Driver Signed: ${driverSigned ? 'Yes' : 'No'}. ${
-        totalVariance !== 0 ? `[VARIANCE: ${totalVariance > 0 ? '+' : ''}${totalVariance} kg] ` : '[FULL RECEIPT] '
+        totalVariance !== 0 ? `[VARIANCE: ${totalVarianceBags > 0 ? '+' : ''}${totalVarianceBags} bags / ${totalVariance > 0 ? '+' : ''}${totalVariance} kg] ` : '[FULL RECEIPT] '
       }${totalDamaged > 0 ? `[DAMAGED: ${totalDamaged} bags/units] ` : ''}${branchNotes ? `Remarks: ${branchNotes}. ` : ''}Details: ${lineBreakdown}`;
 
       const updates = {
@@ -1667,22 +1681,28 @@ export default function DispatchPage() {
                 const totalRecv = branchConfirmItems.reduce((s, i) => s + i.received_qty, 0);
                 const totalDamaged = branchConfirmItems.reduce((s, i) => s + i.damaged_qty, 0);
                 const variance = totalRecv - totalSent;
+                const totalSentBags = branchConfirmItems.reduce((s, i) => s + i.dispatched_bags, 0);
+                const totalRecvBags = branchConfirmItems.reduce((s, i) => s + i.received_bags, 0);
+                const varianceBags = totalRecvBags - totalSentBags;
 
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <span className="text-[10px] text-slate-500 uppercase font-bold block">Sent / Dispatched</span>
-                      <span className="text-base font-black text-slate-900 font-mono">{totalSent.toLocaleString()} kg</span>
+                      <span className="text-base font-black text-slate-900 font-mono">{totalSentBags.toLocaleString()} bags</span>
+                      <span className="block text-[10px] text-slate-500 font-mono">{totalSent.toLocaleString()} kg</span>
                     </div>
                     <div className="bg-teal-50 p-3 rounded-xl border border-teal-200">
                       <span className="text-[10px] text-teal-700 uppercase font-bold block">Branch Received</span>
-                      <span className="text-base font-black text-teal-900 font-mono">{totalRecv.toLocaleString()} kg</span>
+                      <span className="text-base font-black text-teal-900 font-mono">{totalRecvBags.toLocaleString()} bags</span>
+                      <span className="block text-[10px] text-teal-700/70 font-mono">{totalRecv.toLocaleString()} kg</span>
                     </div>
                     <div className={`p-3 rounded-xl border ${variance < 0 ? 'bg-red-50 border-red-200 text-red-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
                       <span className="text-[10px] uppercase font-bold block opacity-75">Net Variance</span>
                       <span className="text-base font-black font-mono">
-                        {variance > 0 ? `+${variance}` : variance < 0 ? `${variance}` : '0 (Intact)'} kg
+                        {varianceBags > 0 ? `+${varianceBags}` : varianceBags < 0 ? `${varianceBags}` : '0 (Intact)'} bags
                       </span>
+                      <span className="block text-[10px] font-mono opacity-70">{variance > 0 ? `+${variance}` : variance < 0 ? `${variance}` : '0'} kg</span>
                     </div>
                     <div className={`p-3 rounded-xl border ${totalDamaged > 0 ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
                       <span className="text-[10px] uppercase font-bold block opacity-75">Damaged / Wet</span>
@@ -1708,8 +1728,8 @@ export default function DispatchPage() {
                         <th className="px-3.5 py-2.5 text-left">Product / Code</th>
                         <th className="px-3.5 py-2.5 text-left">Batch #</th>
                         <th className="px-3.5 py-2.5 text-right">Dispatched</th>
-                        <th className="px-3.5 py-2.5 text-right text-teal-800">Received Qty</th>
-                        <th className="px-3.5 py-2.5 text-right text-amber-800">Damaged Qty</th>
+                        <th className="px-3.5 py-2.5 text-right text-teal-800">Received Bags</th>
+                        <th className="px-3.5 py-2.5 text-right text-amber-800">Damaged Bags</th>
                         <th className="px-3.5 py-2.5 text-left">Discrepancy Reason</th>
                         <th className="px-3.5 py-2.5 text-left">Line Remarks</th>
                       </tr>
@@ -1717,6 +1737,7 @@ export default function DispatchPage() {
                     <tbody className="divide-y divide-slate-200 font-medium">
                       {branchConfirmItems.map((item, idx) => {
                         const lineVariance = item.received_qty - item.dispatched_qty;
+                        const lineBagVariance = item.received_bags - item.dispatched_bags;
                         return (
                           <tr key={item.id} className={lineVariance < 0 || item.damaged_qty > 0 ? 'bg-amber-50/40' : 'hover:bg-slate-50'}>
                             <td className="px-3.5 py-2.5">
@@ -1725,20 +1746,24 @@ export default function DispatchPage() {
                             </td>
                             <td className="px-3.5 py-2.5 font-mono text-slate-600">{item.batch_number}</td>
                             <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-700">
-                              {item.dispatched_qty.toLocaleString()} {item.unit}
+                              <span className="block">{item.dispatched_bags.toLocaleString()} bags</span>
+                              <span className="block text-[10px] text-slate-400">{item.dispatched_qty.toLocaleString()} {item.unit} • {item.bag_size_kg}kg/bag</span>
                             </td>
                             <td className="px-3.5 py-2.5 text-right">
                               <input
                                 type="number"
                                 step="1"
                                 min="0"
-                                value={item.received_qty}
-                                onChange={(e) => updateBranchItem(idx, 'received_qty', Number(e.target.value))}
+                                value={item.received_bags}
+                                onChange={(e) => updateBranchItem(idx, 'received_bags', Number(e.target.value))}
                                 className="w-24 text-right border border-teal-300 rounded-lg px-2 py-1 font-mono font-extrabold focus:ring-2 focus:ring-teal-500 outline-none bg-teal-50"
                               />
+                              <span className="block text-[10px] text-teal-700/70 font-mono">
+                                {item.received_qty.toLocaleString()} {item.unit}
+                              </span>
                               {lineVariance !== 0 && (
                                 <span className={`block text-[10px] font-mono font-bold ${lineVariance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                  {lineVariance > 0 ? `+${lineVariance}` : `${lineVariance}`} {item.unit}
+                                  {lineBagVariance > 0 ? `+${lineBagVariance}` : `${lineBagVariance}`} bags / {lineVariance > 0 ? `+${lineVariance}` : `${lineVariance}`} {item.unit}
                                 </span>
                               )}
                             </td>
