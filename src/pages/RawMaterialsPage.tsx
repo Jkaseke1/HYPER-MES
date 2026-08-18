@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, CreditCard as Edit2, Trash2, Package, AlertTriangle, DollarSign, Layers, GitBranch } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit2, Trash2, Package, AlertTriangle, DollarSign, Layers, GitBranch, RefreshCw, BellRing, ClipboardList } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { RawMaterial } from '../types/database';
 import Modal from '../components/ui/Modal';
@@ -12,22 +12,46 @@ const TABS = ['All', ...CATEGORIES] as const;
 
 const emptyForm = { name: '', code: '', category: 'grain', unit: 'ton', cost_per_unit: 0, reorder_level: 0, description: '', currency_code: 'USD', warehouse_id: '' };
 
-function getStockStatus(current: number, reorder: number): string {
-  if (current === 0) return 'out_of_stock';
-  if (current <= reorder && reorder > 0) return 'low_stock';
-  return 'in_stock';
-}
-
 const stockStyles: Record<string, string> = {
   in_stock: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   low_stock: 'bg-amber-50 text-amber-700 border-amber-200',
+  critical: 'bg-orange-50 text-orange-700 border-orange-200',
   out_of_stock: 'bg-red-50 text-red-700 border-red-200',
+  reorder_not_set: 'bg-slate-100 text-slate-600 border-slate-200',
 };
+
+const stockLabels: Record<string, string> = {
+  in_stock: 'In Stock',
+  low_stock: 'Watch List',
+  critical: 'Reorder Now',
+  out_of_stock: 'Out Of Stock',
+  reorder_not_set: 'Reorder Not Set',
+};
+
+function getAlertBand(material: RawMaterial): string {
+  const current = Number(material.current_stock || 0);
+  const reorder = Number(material.reorder_level || 0);
+  const thresholdPct = Number(material.alert_threshold_pct ?? 0.1);
+  const watchLimit = reorder > 0 ? reorder * (1 + thresholdPct) : 0;
+
+  if (current <= 0) return 'out_of_stock';
+  if (reorder <= 0) return 'reorder_not_set';
+  if (current <= reorder) return 'critical';
+  if (current <= watchLimit) return 'low_stock';
+  return 'in_stock';
+}
+
+function getReorderQty(material: RawMaterial): number {
+  const current = Number(material.current_stock || 0);
+  const reorder = Number(material.reorder_level || 0);
+  return Math.max(0, reorder - current);
+}
 
 export default function RawMaterialsPage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('All');
+  const [stockFilter, setStockFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -37,6 +61,8 @@ export default function RawMaterialsPage() {
   const [saving, setSaving] = useState(false);
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [refreshingStock, setRefreshingStock] = useState(false);
+  const [lastDbCheck, setLastDbCheck] = useState<Date | null>(null);
   
   // Inline reorder level editing state
   const [editingReorder, setEditingReorder] = useState<string | null>(null);
@@ -80,15 +106,29 @@ export default function RawMaterialsPage() {
     setLotsLoading(false);
   }
 
-  async function fetchMaterials() {
-    setLoading(true);
+  async function fetchMaterials(options: { silent?: boolean } = {}) {
+    if (!options.silent) setLoading(true);
     const { data } = await supabase
       .from('raw_materials')
       .select('*')
       .eq('is_active', true)
       .order('name');
     setMaterials(data || []);
-    setLoading(false);
+    setLastDbCheck(new Date());
+    if (!options.silent) setLoading(false);
+  }
+
+  async function refreshStockFromDb() {
+    setRefreshingStock(true);
+    await fetchMaterials({ silent: true });
+    setRefreshingStock(false);
+  }
+
+  async function checkCriticalAlerts() {
+    setStockFilter('critical_alerts');
+    setRefreshingStock(true);
+    await fetchMaterials({ silent: true });
+    setRefreshingStock(false);
   }
 
   async function fetchCurrencies() {
@@ -110,12 +150,16 @@ export default function RawMaterialsPage() {
   const filtered = useMemo(() => {
     let list = materials;
     if (activeTab !== 'All') list = list.filter((m) => m.category === activeTab);
+    if (stockFilter === 'critical_alerts') list = list.filter((m) => ['out_of_stock', 'critical'].includes(getAlertBand(m)));
+    if (stockFilter === 'watch_list') list = list.filter((m) => ['out_of_stock', 'critical', 'low_stock'].includes(getAlertBand(m)));
+    if (stockFilter === 'out_of_stock') list = list.filter((m) => getAlertBand(m) === 'out_of_stock');
+    if (stockFilter === 'reorder_not_set') list = list.filter((m) => getAlertBand(m) === 'reorder_not_set');
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((m) => m.name.toLowerCase().includes(q) || m.code.toLowerCase().includes(q));
     }
     return list;
-  }, [materials, activeTab, search]);
+  }, [materials, activeTab, stockFilter, search]);
 
   function openAdd() {
     setEditing(null);
@@ -210,9 +254,16 @@ export default function RawMaterialsPage() {
   const inputClass = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors';
 
   const totalMaterials = materials.length;
-  const lowStockCount = materials.filter(m => m.current_stock <= m.reorder_level && m.current_stock > 0).length;
-  const outOfStockCount = materials.filter(m => m.current_stock <= 0).length;
+  const outOfStockCount = materials.filter(m => getAlertBand(m) === 'out_of_stock').length;
+  const criticalCount = materials.filter(m => getAlertBand(m) === 'critical').length;
+  const watchListCount = materials.filter(m => ['out_of_stock', 'critical', 'low_stock'].includes(getAlertBand(m))).length;
+  const reorderNotSetCount = materials.filter(m => getAlertBand(m) === 'reorder_not_set').length;
   const totalValue = materials.reduce((sum, m) => sum + (m.current_stock * m.cost_per_unit), 0);
+  const criticalPreview = materials
+    .filter((m) => ['out_of_stock', 'critical'].includes(getAlertBand(m)))
+    .slice()
+    .sort((a, b) => getReorderQty(b) - getReorderQty(a))
+    .slice(0, 6);
 
   return (
     <div className="p-6 space-y-6">
@@ -220,18 +271,80 @@ export default function RawMaterialsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Raw Materials</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage inventory of raw materials and ingredients</p>
+          <p className="text-sm text-slate-500 mt-1">Manage inventory, reorder points and critical material alerts</p>
         </div>
-        <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> Add Material
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={refreshStockFromDb} disabled={refreshingStock} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+            <RefreshCw className={`w-4 h-4 ${refreshingStock ? 'animate-spin' : ''}`} /> Refresh DB Stock
+          </button>
+          <button onClick={checkCriticalAlerts} disabled={refreshingStock} className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+            <BellRing className="w-4 h-4" /> Check Critical Alerts
+          </button>
+          <button onClick={openAdd} className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
+            <Plus className="w-4 h-4" /> Add Material
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Materials" value={totalMaterials} icon={Package} color="teal" />
-        <StatCard title="Low Stock" value={lowStockCount} icon={AlertTriangle} color="amber" />
+        <StatCard title="Critical Reorder" value={criticalCount} icon={BellRing} color="amber" />
+        <StatCard title="Watch List" value={watchListCount} icon={AlertTriangle} color="amber" />
         <StatCard title="Out of Stock" value={outOfStockCount} icon={Layers} color="red" />
         <StatCard title="Total Value" value={`$${totalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}`} icon={DollarSign} color="emerald" />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100">
+              <ClipboardList className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900">Reorder control board</h2>
+              <p className="text-sm text-slate-500">
+                {outOfStockCount} out of stock, {criticalCount} at/below reorder level, {reorderNotSetCount} missing reorder levels.
+                {lastDbCheck && <span className="ml-1">Last database check: {lastDbCheck.toLocaleTimeString()}.</span>}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['all', 'All Materials'],
+              ['critical_alerts', 'Critical Alerts'],
+              ['watch_list', 'Watch List'],
+              ['out_of_stock', 'Out of Stock'],
+              ['reorder_not_set', 'Reorder Not Set'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setStockFilter(value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${stockFilter === value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {criticalPreview.length > 0 && (
+          <div className="border-t border-slate-100 px-4 py-3 bg-red-50/60">
+            <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-2">Top materials needing attention</p>
+            <div className="flex flex-wrap gap-2">
+              {criticalPreview.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    setStockFilter('all');
+                    setSearch(m.code);
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-white border border-red-100 text-xs text-red-700 hover:border-red-300"
+                >
+                  {m.code} · {stockLabels[getAlertBand(m)]} · {m.current_stock.toLocaleString()} {m.unit}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
@@ -243,9 +356,16 @@ export default function RawMaterialsPage() {
               </button>
             ))}
           </div>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors" />
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors" />
+            </div>
+            {stockFilter !== 'all' && (
+              <button onClick={() => setStockFilter('all')} className="text-xs font-semibold text-slate-500 hover:text-slate-800">
+                Clear alert filter
+              </button>
+            )}
           </div>
         </div>
 
@@ -263,14 +383,15 @@ export default function RawMaterialsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/50">
-                  {['Code', 'Name', 'Category', 'Unit', 'Cost/Unit', 'Current Stock', 'Valuation', 'Reorder Level', 'Status', ''].map((h) => (
+                  {['Code', 'Name', 'Category', 'Unit', 'Cost/Unit', 'Current Stock', 'Valuation', 'Reorder Level', 'Reorder Advice', 'Status', ''].map((h) => (
                     <th key={h} className="text-left px-4 py-3 font-semibold text-slate-600">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((m) => {
-                  const status = getStockStatus(m.current_stock, m.reorder_level);
+                  const status = getAlertBand(m);
+                  const reorderQty = getReorderQty(m);
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{m.code}</td>
@@ -284,7 +405,7 @@ export default function RawMaterialsPage() {
                           className="flex items-center gap-1.5 hover:underline hover:text-teal-700 cursor-pointer"
                           title="Click to see stock by batch / GRN lot"
                         >
-                          {status === 'low_stock' && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                          {['critical', 'low_stock'].includes(status) && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
                           <span className={status === 'out_of_stock' ? 'text-red-600 font-medium' : 'text-slate-700'}>{m.current_stock.toLocaleString()}</span>
                           <Layers className="w-3 h-3 text-slate-400" />
                         </button>
@@ -337,9 +458,20 @@ export default function RawMaterialsPage() {
                           </button>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-xs">
+                        {status === 'reorder_not_set' ? (
+                          <span className="text-slate-500">Set reorder level</span>
+                        ) : reorderQty > 0 ? (
+                          <span className="font-bold text-red-700">Order {reorderQty.toLocaleString()} {m.unit}</span>
+                        ) : status === 'low_stock' ? (
+                          <span className="font-semibold text-amber-700">Monitor closely</span>
+                        ) : (
+                          <span className="text-emerald-700">Above reorder</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full border ${stockStyles[status]}`}>
-                          {status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                          {stockLabels[status]}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -364,7 +496,7 @@ export default function RawMaterialsPage() {
         )}
 
         <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/50">
-          <p className="text-xs text-slate-500">{filtered.length} material{filtered.length !== 1 ? 's' : ''} shown</p>
+          <p className="text-xs text-slate-500">{filtered.length} material{filtered.length !== 1 ? 's' : ''} shown · Stock shown is the latest value loaded from MES database.</p>
         </div>
       </div>
 
