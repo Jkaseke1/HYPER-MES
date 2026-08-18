@@ -62,6 +62,7 @@ export default function DispatchPage() {
   // Accounts Approval Modal State
   const [showAccountsApproveModal, setShowAccountsApproveModal] = useState(false);
   const [accountsApproveOrder, setAccountsApproveOrder] = useState<DispatchOrder | null>(null);
+  const [accountsApproveItems, setAccountsApproveItems] = useState<DispatchItem[]>([]);
   const [accountsNotes, setAccountsNotes] = useState('');
 
   const initForm = {
@@ -421,6 +422,24 @@ export default function DispatchPage() {
       updated[idx] = current;
       return updated;
     });
+  };
+
+  const openAccountsApproveModal = async (order: DispatchOrder) => {
+    setAccountsApproveOrder(order);
+    setAccountsNotes(order.accounts_approval_notes || '');
+    setShowAccountsApproveModal(true);
+
+    if (viewOrder?.id === order.id && viewItems.length > 0) {
+      setAccountsApproveItems(viewItems);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('dispatch_items')
+      .select('*, formulations(name, code, sage_code)')
+      .eq('dispatch_order_id', order.id);
+
+    setAccountsApproveItems((data || []) as DispatchItem[]);
   };
 
   // Branch Confirm Delivery Action with Variance Declaration
@@ -947,10 +966,10 @@ export default function DispatchPage() {
                               isFinance ? (
                                 (o.dispatch_type === 'customer_direct' || isBranchConfirmed) && (
                                   <button
-                                    onClick={() => { setAccountsApproveOrder(o); setAccountsNotes(o.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                                    onClick={() => openAccountsApproveModal(o)}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-[10px] shadow-sm active:scale-95 transition-all shrink-0"
                                   >
-                                    <DollarSign className="w-3 h-3" /> Post / Invoice
+                                    <DollarSign className="w-3 h-3" /> Finance Review & Post
                                   </button>
                                 )
                               ) : (
@@ -1459,10 +1478,10 @@ export default function DispatchPage() {
                       isFinance ? (
                         (viewOrder.dispatch_type === 'customer_direct' || viewOrder.branch_confirmation_status === 'confirmed') && (
                           <button
-                            onClick={() => { setAccountsApproveOrder(viewOrder); setAccountsNotes(viewOrder.accounts_approval_notes || ''); setShowAccountsApproveModal(true); }}
+                            onClick={() => openAccountsApproveModal(viewOrder)}
                             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md"
                           >
-                            <DollarSign className="w-4 h-4" /> Step 4: Accounts Approve & Post
+                            <DollarSign className="w-4 h-4" /> Step 4: Finance Review & Post
                           </button>
                         )
                       ) : (
@@ -1870,21 +1889,105 @@ export default function DispatchPage() {
 
       {/* ACCOUNTS APPROVE POSTING MODAL (FINANCE & ADMIN ONLY) */}
       <Dialog open={showAccountsApproveModal} onOpenChange={setShowAccountsApproveModal}>
-        <DialogContent className="max-w-md w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200">
+        <DialogContent className="max-w-3xl w-full p-6 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
           <div className="space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
               <div className="p-2.5 bg-purple-100 rounded-xl text-purple-800">
                 <DollarSign className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Step 4: Accounts Approve & Post</h3>
-                <p className="text-xs text-slate-500">Raise Customer Invoice or Approve Sage Stock Transfer</p>
+                <h3 className="font-extrabold text-slate-900 text-base">Step 4: Finance Review & Sage Post</h3>
+                <p className="text-xs text-slate-500">Review dispatch evidence, bags, kg and Sage posting legs before release.</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-700 font-medium">
-              Approving dispatch <strong className="font-mono text-slate-900">{accountsApproveOrder?.dispatch_number}</strong> for {accountsApproveOrder?.dispatch_type === 'customer_direct' ? 'Direct Customer Invoicing' : 'Sage IBT Stock Posting'}.
-            </p>
+            {accountsApproveOrder && (
+              <>
+                {(() => {
+                  const totalBags = accountsApproveItems.reduce((sum, item) => sum + Number(item.quantity_bags ?? bagsFromKg(item.quantity, item.bag_size_kg)), 0);
+                  const totalKg = accountsApproveItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                  const sourceWarehouse = `${(accountsApproveOrder as any).warehouses?.name || 'Source warehouse'}${(accountsApproveOrder as any).warehouses?.code ? ` (${(accountsApproveOrder as any).warehouses.code})` : ''}`;
+                  const destination = accountsApproveOrder.dispatch_type === 'customer_direct'
+                    ? (accountsApproveOrder.customer_name || 'Direct customer')
+                    : `${(accountsApproveOrder.branches as any)?.name || 'Branch'}${(accountsApproveOrder.branches as any)?.sage_code ? ` (${(accountsApproveOrder.branches as any).sage_code})` : ''}`;
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Dispatch</span>
+                        <p className="font-mono font-black text-slate-900 mt-1">{accountsApproveOrder.dispatch_number}</p>
+                        <p className="text-slate-500 mt-0.5">D-Note #{accountsApproveOrder.physical_dnote_number || 'N/A'}</p>
+                      </div>
+                      <div className="rounded-2xl border border-purple-200 bg-purple-50 p-3">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700">Posting Route</span>
+                        <p className="font-bold text-purple-950 mt-1">{sourceWarehouse}</p>
+                        <p className="text-purple-700">→ {destination}</p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Quantity to Post</span>
+                        <p className="font-mono font-black text-emerald-950 mt-1">{totalBags.toLocaleString()} bags</p>
+                        <p className="text-emerald-700">{totalKg.toLocaleString()} kg / {(totalKg / 1000).toFixed(2)} t</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-extrabold uppercase tracking-wider">Dispatch Products Being Released to Sage</span>
+                    <span className="text-[10px] text-slate-300">Finance verification summary</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-extrabold">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Product</th>
+                          <th className="px-3 py-2 text-left">Sage Code</th>
+                          <th className="px-3 py-2 text-left">Batch #</th>
+                          <th className="px-3 py-2 text-right">Bags</th>
+                          <th className="px-3 py-2 text-right">Kg</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {accountsApproveItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-5 text-center text-slate-500 font-medium">Loading dispatch items...</td>
+                          </tr>
+                        ) : accountsApproveItems.map((item) => {
+                          const bags = Number(item.quantity_bags ?? bagsFromKg(item.quantity, item.bag_size_kg));
+                          const size = bagSizeKg(item.bag_size_kg);
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-bold text-slate-900">{(item.formulations as any)?.name || 'Product'}</td>
+                              <td className="px-3 py-2 font-mono font-bold text-blue-700">{(item.formulations as any)?.sage_code || (item.formulations as any)?.code || '-'}</td>
+                              <td className="px-3 py-2 font-mono text-slate-600">{item.batch_number || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right font-mono font-black text-slate-900">{bags.toLocaleString()} bags</td>
+                              <td className="px-3 py-2 text-right font-mono text-slate-600">{Number(item.quantity || 0).toLocaleString()} kg <span className="text-[10px] text-slate-400">({size}kg/bag)</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <p className="font-extrabold uppercase tracking-wider text-[10px] mb-1">Sage posting that will be released</p>
+                  {accountsApproveOrder.dispatch_type === 'branch_transfer' ? (
+                    <ul className="list-disc pl-4 space-y-1 font-medium">
+                      <li>Stock OUT from source warehouse using Sage dispatch issue leg.</li>
+                      <li>Stock IN to destination branch warehouse using Sage dispatch receipt leg.</li>
+                      <li>The bridge worker posts after this finance approval; this button replaces separate manual approval on Sage Posting Review for dispatch.</li>
+                    </ul>
+                  ) : (
+                    <ul className="list-disc pl-4 space-y-1 font-medium">
+                      <li>Customer direct dispatch will be released for invoice/posting workflow.</li>
+                      <li>Finance should verify customer, D-Note and quantities before approving.</li>
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
 
             {!isFinance && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
@@ -1918,7 +2021,7 @@ export default function DispatchPage() {
                 disabled={saving || !isFinance}
                 className="px-4 py-2 text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white rounded-xl shadow-md disabled:opacity-50"
               >
-                {saving ? 'Approving...' : 'Approve & Post to System'}
+                {saving ? 'Releasing...' : 'Approve & Release Sage Posting'}
               </button>
             </div>
           </div>
