@@ -56,6 +56,10 @@ export default function GoodsReceivedPage() {
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
+  const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
+  const [supplierDeliveryNoteNo, setSupplierDeliveryNoteNo] = useState('');
+  const [supplierOrderNo, setSupplierOrderNo] = useState('');
+  const [externalReference, setExternalReference] = useState('');
   const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
   const [wbTickets, setWbTickets] = useState<any[]>([]);
   const [wbExpanded, setWbExpanded] = useState(false);
@@ -178,6 +182,10 @@ export default function GoodsReceivedPage() {
         received_date: receivedDate,
         status: 'pending',
         notes: notes || null,
+        supplier_invoice_no: supplierInvoiceNo.trim() || null,
+        supplier_delivery_note_no: supplierDeliveryNoteNo.trim() || null,
+        supplier_order_no: supplierOrderNo.trim() || null,
+        external_reference: externalReference.trim() || wbForm.transaction_no || null,
         received_by: profile?.id,
       };
 
@@ -247,6 +255,10 @@ export default function GoodsReceivedPage() {
     setSupplierId('');
     setReceivedDate(new Date().toISOString().split('T')[0]);
     setNotes('');
+    setSupplierInvoiceNo('');
+    setSupplierDeliveryNoteNo('');
+    setSupplierOrderNo('');
+    setExternalReference('');
     setWeighBridgeTicketId('');
     setItems([emptyItem]);
     setWbForm({
@@ -612,6 +624,63 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
 
+              {/* Sage Reference Controls */}
+              <div className="rounded-lg border border-blue-200 bg-blue-50/40 shadow-sm overflow-hidden">
+                <div className="bg-white border-b border-blue-100 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-700 border border-blue-100">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-base font-extrabold text-slate-900">Sage & Finance References</p>
+                      <p className="text-xs text-slate-500 font-medium">Optional now, but important for supplier enquiry, invoice matching and audit traceability.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600">Supplier Invoice No</Label>
+                    <Input
+                      value={supplierInvoiceNo}
+                      onChange={(e) => setSupplierInvoiceNo(e.target.value)}
+                      placeholder="e.g. INV27539"
+                      className="bg-white border-blue-200 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-500">Maps to Sage external order/reference for Finance matching.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600">Supplier Delivery Note No</Label>
+                    <Input
+                      value={supplierDeliveryNoteNo}
+                      onChange={(e) => setSupplierDeliveryNoteNo(e.target.value)}
+                      placeholder="e.g. DN-4567"
+                      className="bg-white border-blue-200 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-500">Helps match physical delivery notes to Sage GRV records.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600">Supplier Order / PO No</Label>
+                    <Input
+                      value={supplierOrderNo}
+                      onChange={(e) => setSupplierOrderNo(e.target.value)}
+                      placeholder="e.g. PO61092"
+                      className="bg-white border-blue-200 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-500">Maps to Sage OrderNum when the bridge posts the GRV.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-600">External / Weighbridge Ref</Label>
+                    <Input
+                      value={externalReference}
+                      onChange={(e) => setExternalReference(e.target.value)}
+                      placeholder="Defaults to WB ticket if left blank"
+                      className="bg-white border-blue-200 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-500">Used for load, weighbridge or other external trace references.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Weigh Bridge Ticket Section */}
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <button
@@ -648,6 +717,9 @@ export default function GoodsReceivedPage() {
                               const matchedMaterial = materials.find((m) => m.code === ticket.product_code || (m as any).sage_code === ticket.product_code);
                               if (ticket.supplier_id) {
                                 setSupplierId(ticket.supplier_id);
+                              }
+                              if (ticket.ticket_no && !externalReference) {
+                                setExternalReference(ticket.ticket_no);
                               }
                               if (matchedMaterial) {
                                 setItems((prev) => {
@@ -1085,6 +1157,21 @@ export default function GoodsReceivedPage() {
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Initiated By</p>
                   <p className="text-xs font-semibold text-slate-800 mt-0.5">{(viewing as any)?.receiver?.full_name || (viewing as any)?.receiver?.email || 'System'}</p>
                 </div>
+
+                {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
+                  <div className="bg-blue-50/70 rounded-lg border border-blue-200 p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      <h3 className="text-xs font-semibold text-slate-700">Sage / Finance References</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-y-1 text-xs">
+                      <div><span className="text-slate-400">Supplier Invoice:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_invoice_no || '-'}</span></div>
+                      <div><span className="text-slate-400">Delivery Note:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_delivery_note_no || '-'}</span></div>
+                      <div><span className="text-slate-400">Order / PO:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_order_no || '-'}</span></div>
+                      <div><span className="text-slate-400">External Ref:</span> <span className="font-mono text-slate-800">{(viewing as any).external_reference || '-'}</span></div>
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* Weigh Bridge Ticket */}
                 {viewing && (viewing as any).wb_transaction_no && (

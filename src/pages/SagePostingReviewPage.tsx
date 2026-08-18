@@ -26,6 +26,9 @@ interface SagePostingReview {
   warehouse_code: string | null;
   reference: string | null;
   reference2: string | null;
+  sage_order_num?: string | null;
+  sage_ext_order_num?: string | null;
+  sage_delivery_note?: string | null;
   description: string | null;
   transaction_date: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -59,6 +62,12 @@ interface ReviewDocumentSummary {
   warehouse?: string;
   date?: string;
   notes?: string | null;
+  financeRefs?: {
+    supplierInvoiceNo?: string | null;
+    supplierDeliveryNoteNo?: string | null;
+    supplierOrderNo?: string | null;
+    externalReference?: string | null;
+  };
   totalQty?: number;
   totalValue?: number;
   weighbridge?: {
@@ -241,6 +250,27 @@ function DocumentSummaryPanel({ summary }: { summary?: ReviewDocumentSummary }) 
           </div>
         </div>
 
+        {summary.financeRefs && (
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div className="rounded-lg bg-white border border-indigo-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Supplier Invoice</p>
+              <p className="font-mono font-bold text-slate-800 truncate">{summary.financeRefs.supplierInvoiceNo || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-indigo-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Delivery Note</p>
+              <p className="font-mono font-bold text-slate-800 truncate">{summary.financeRefs.supplierDeliveryNoteNo || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-indigo-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Order / PO</p>
+              <p className="font-mono font-bold text-slate-800 truncate">{summary.financeRefs.supplierOrderNo || '-'}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-indigo-100 px-3 py-2">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">External Ref</p>
+              <p className="font-mono font-bold text-slate-800 truncate">{summary.financeRefs.externalReference || '-'}</p>
+            </div>
+          </div>
+        )}
+
         {summary.weighbridge?.ticket && (
           <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
             <div className="rounded-lg bg-white/80 border border-blue-100 px-3 py-2">
@@ -373,6 +403,12 @@ export default function SagePostingReviewPage() {
         warehouse: grn.warehouses?.name || grn.warehouses?.code,
         date: grn.received_date,
         notes: grn.notes,
+        financeRefs: {
+          supplierInvoiceNo: grn.supplier_invoice_no,
+          supplierDeliveryNoteNo: grn.supplier_delivery_note_no,
+          supplierOrderNo: grn.supplier_order_no,
+          externalReference: grn.external_reference,
+        },
         totalQty: lines.reduce((sum: number, line: any) => sum + Number(line.qty || 0), 0),
         totalValue: lines.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0),
         weighbridge: {

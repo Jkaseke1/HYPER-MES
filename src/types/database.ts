@@ -114,6 +114,10 @@ export interface GoodsReceivedNote {
   weigh_bridge_ticket_gross_weight?: number | null;
   weigh_bridge_ticket_tare_weight?: number | null;
   weigh_bridge_ticket_net_weight?: number | null;
+  supplier_invoice_no?: string | null;
+  supplier_delivery_note_no?: string | null;
+  supplier_order_no?: string | null;
+  external_reference?: string | null;
   status: 'pending' | 'rm_approved' | 'approved' | 'rejected' | 'inspecting';
   notes: string;
   received_by: string | null;
