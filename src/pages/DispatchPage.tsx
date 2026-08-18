@@ -625,6 +625,28 @@ export default function DispatchPage() {
     return { currentStep, step1Done, step2Done, step3Done, step4Done };
   };
 
+  const getDispatchStage = (o: DispatchOrder) => {
+    if (o.accounts_posting_status === 'approved') {
+      return { label: 'Step 4: Posted to Sage', tone: 'bg-purple-50 text-purple-700 border-purple-200', icon: DollarSign };
+    }
+    if (o.branch_confirmation_status === 'confirmed') {
+      return { label: 'Step 3: Branch Receipt Confirmed', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Check };
+    }
+    if (o.status === 'delivered') {
+      return { label: 'Step 3: Awaiting Branch Receipt', tone: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock };
+    }
+    if (o.status === 'in_transit') {
+      return { label: 'Step 2: In Transit / On Road', tone: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: Route };
+    }
+    if (o.status === 'dispatched') {
+      return { label: 'Step 2: Dispatched', tone: 'bg-blue-50 text-blue-700 border-blue-200', icon: Truck };
+    }
+    if (o.status === 'loading') {
+      return { label: 'Step 1: Loading', tone: 'bg-cyan-50 text-cyan-700 border-cyan-200', icon: Box };
+    }
+    return { label: 'Step 1: Pending Loading', tone: 'bg-slate-50 text-slate-600 border-slate-200', icon: Clock };
+  };
+
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
       <div className="max-w-[1600px] mx-auto w-full flex flex-col h-full space-y-4">
@@ -760,6 +782,8 @@ export default function DispatchPage() {
                   const stepInfo = getOrderStep(o);
                   const isBranchConfirmed = o.branch_confirmation_status === 'confirmed';
                   const isAccountsApproved = o.accounts_posting_status === 'approved';
+                  const stage = getDispatchStage(o);
+                  const StageIcon = stage.icon;
 
                   // Derive accent color per status
                   const accentClass = isAccountsApproved
@@ -870,6 +894,10 @@ export default function DispatchPage() {
 
                           {/* Left: action buttons */}
                           <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-extrabold text-[10px] shrink-0 ${stage.tone}`}>
+                              <StageIcon className="w-3 h-3" /> {stage.label}
+                            </span>
+
                             <button
                               onClick={() => openDNoteModal(o)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow-sm transition-all shrink-0"
@@ -882,6 +910,10 @@ export default function DispatchPage() {
                               isBranchConfirmed ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] shrink-0">
                                   <Check className="w-3 h-3" /> Branch Confirmed
+                                </span>
+                              ) : o.status !== 'delivered' ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 font-bold text-[10px] shrink-0" title="Available after the dispatch is delivered">
+                                  <Clock className="w-3 h-3" /> Receipt After Delivery
                                 </span>
                               ) : (
                                 <button
