@@ -509,9 +509,31 @@ export default function DispatchPage() {
         .limit(1);
 
       if (syncEventError) throw syncEventError;
-      const dispatchEvent = syncEvents?.[0];
+      let dispatchEvent = syncEvents?.[0];
       if (!dispatchEvent) {
-        throw new Error('The dispatch integration event has not been created yet. Confirm delivery first, then try again.');
+        const { data: createdEvent, error: createEventError } = await supabase
+          .from('sync_log')
+          .insert({
+            event_type: 'dispatch_delivered',
+            reference_id: accountsApproveOrder.id,
+            reference_type: 'dispatch_orders',
+            status: 'pending',
+            message: 'Dispatch order delivered',
+            details: {
+              dispatch_number: accountsApproveOrder.dispatch_number,
+              branch_id: accountsApproveOrder.branch_id,
+              dispatch_type: accountsApproveOrder.dispatch_type,
+              accounts_posting_status: 'approved',
+              total_weight: accountsApproveOrder.total_weight,
+              total_value: accountsApproveOrder.total_value,
+              delivered_at: accountsApproveOrder.delivered_at,
+            },
+          })
+          .select('id, status')
+          .single();
+
+        if (createEventError) throw createEventError;
+        dispatchEvent = createdEvent;
       }
       if (dispatchEvent.status === 'success') {
         throw new Error('This dispatch has already been posted to Sage.');
