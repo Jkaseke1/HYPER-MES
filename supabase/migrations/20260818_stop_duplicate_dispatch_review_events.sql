@@ -1,9 +1,8 @@
--- Harden dispatch → Sage bridge event creation.
+-- Stop duplicate dispatch finance review packages.
 --
--- Dispatch can be delivered first and finance-approved later. Older trigger
--- logic only fired on the status transition to delivered, so a missed/failed
--- event could leave Accounts approval with nothing real to post. This version
--- is idempotent and fires on both relevant state changes.
+-- A delivered dispatch may be approved by Accounts after delivery. That status
+-- update must not create a second dispatch_delivered sync event when the first
+-- event is already waiting in finance review.
 
 CREATE OR REPLACE FUNCTION trigger_dispatch_delivered()
 RETURNS trigger AS $$
@@ -61,4 +60,4 @@ CREATE TRIGGER on_dispatch_delivered
   EXECUTE FUNCTION trigger_dispatch_delivered();
 
 COMMENT ON FUNCTION trigger_dispatch_delivered() IS
-  'Idempotently creates Event 4 for Sage bridge when a dispatch is delivered or later approved by Accounts.';
+  'Idempotently creates Event 4 for Sage bridge when a dispatch is delivered or later approved by Accounts; pending finance review counts as already queued.';
