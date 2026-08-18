@@ -373,6 +373,11 @@ export default function DispatchPage() {
   const [branchNotes, setBranchNotes] = useState('');
 
   const openBranchConfirmModal = async (order: DispatchOrder) => {
+    if (order.status !== 'delivered') {
+      toast.error('Branch receipt can only be confirmed after the dispatch has been delivered.');
+      return;
+    }
+
     setBranchConfirmOrder(order);
     setBranchNotes(order.branch_confirmation_notes || '');
     setReceiverName(profile?.full_name || '');
@@ -606,9 +611,11 @@ export default function DispatchPage() {
       step2Done = true;
       currentStep = 2;
     }
-    if (o.branch_confirmation_status === 'confirmed' || o.status === 'delivered') {
-      step3Done = true;
+    if (o.status === 'delivered' || o.branch_confirmation_status === 'confirmed') {
       currentStep = 3;
+    }
+    if (o.branch_confirmation_status === 'confirmed') {
+      step3Done = true;
     }
     if (o.accounts_posting_status === 'approved') {
       step4Done = true;
@@ -1382,6 +1389,10 @@ export default function DispatchPage() {
                       viewOrder.branch_confirmation_status === 'confirmed' ? (
                         <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 cursor-default">
                           <Check className="w-4 h-4 text-emerald-600" /> Step 3: Branch Confirmed
+                        </span>
+                      ) : viewOrder.status !== 'delivered' ? (
+                        <span className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed">
+                          <Clock className="w-4 h-4" /> Step 3: Available After Delivery
                         </span>
                       ) : (
                         <button
