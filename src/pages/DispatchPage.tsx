@@ -436,7 +436,7 @@ export default function DispatchPage() {
         status: 'delivered',
         delivered_at: new Date().toISOString(),
         branch_confirmation_status: 'confirmed',
-        branch_confirmed_by: receiverName || profile?.full_name || 'Branch Receiver',
+        branch_confirmed_by: profile?.id || null,
         branch_confirmed_at: new Date().toISOString(),
         branch_confirmation_notes: formattedNotes,
       };
