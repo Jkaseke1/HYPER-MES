@@ -152,6 +152,7 @@ export default function FormulationsPage() {
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const currentFormulaMaterialIds = new Set(detailIngs.map((ingredient) => ingredient.raw_material_id));
+  const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
 
   const filtered = formulations.filter(f => {
     const categoryName = getFormulationCategory(f.name, f.category);
@@ -1098,17 +1099,17 @@ export default function FormulationsPage() {
                                 className="w-full px-2 py-1 border border-teal-200 rounded text-xs focus:outline-none focus:border-teal-500 bg-teal-50/50 font-medium"
                               >
                                 <option value="">Select component / material...</option>
-                                <optgroup label="✓ Current formula materials (prioritised)">
+                                <optgroup label="✓ Materials in this formula / BOM (shown first)">
                                   {materials.filter(m => currentFormulaMaterialIds.has(m.id)).map(m => (
                                     <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                                   ))}
                                 </optgroup>
-                                <optgroup label="📦 Premixes / macropacks (optional)">
+                                <optgroup label="📦 Other premixes / macropacks">
                                   {materials.filter(m => !currentFormulaMaterialIds.has(m.id) && isMacropackMaterial(m)).map(m => (
                                     <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
                                   ))}
                                 </optgroup>
-                                <optgroup label="🌾 Other raw materials (optional)">
+                                <optgroup label="🌾 All other raw materials">
                                   {materials.filter(m => !currentFormulaMaterialIds.has(m.id) && !isMacropackMaterial(m)).map(m => (
                                     <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                                   ))}
@@ -1482,13 +1483,19 @@ export default function FormulationsPage() {
                   <td className="py-1.5 pr-2">
                     <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
                       <option value="">Select component / material...</option>
-                      <optgroup label="🌾 Raw materials (primary formula inputs)">
-                        {materials.filter(m => !isMacropackMaterial(m)).map(m => (
+                      {draftFormulaMaterialIds.size > 0 && <optgroup label="✓ Materials already in this formula / BOM (shown first)">
+                        {materials.filter(m => draftFormulaMaterialIds.has(m.id)).map(m => (
                           <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                         ))}
                       </optgroup>
-                      <optgroup label="📦 Premixes / manufactured materials (optional)">
-                        {materials.filter(isMacropackMaterial).map(m => (
+                      }
+                      <optgroup label="🌾 All other raw materials">
+                        {materials.filter(m => !draftFormulaMaterialIds.has(m.id) && !isMacropackMaterial(m)).map(m => (
+                          <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="📦 Other premixes / manufactured materials">
+                        {materials.filter(m => !draftFormulaMaterialIds.has(m.id) && isMacropackMaterial(m)).map(m => (
                           <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
                         ))}
                       </optgroup>
