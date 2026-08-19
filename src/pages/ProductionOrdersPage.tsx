@@ -131,6 +131,7 @@ export default function ProductionOrdersPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [bomPreview, setBomPreview] = useState<any[]>([]);
   const [selectedFormulation, setSelectedFormulation] = useState<Formulation | null>(null);
+  const [bomPackaging, setBomPackaging] = useState<any[]>([]);
   const [showPkgModal, setShowPkgModal] = useState(false);
   const [pkgBomItems, setPkgBomItems] = useState<any[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
@@ -281,6 +282,7 @@ export default function ProductionOrdersPage() {
     if (!fid) { 
       setMaterials([]);
       setBomPreview([]);
+      setBomPackaging([]);
       setSelectedFormulation(null);
       return; 
     }
@@ -303,11 +305,19 @@ export default function ProductionOrdersPage() {
     if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
 
     // Check if BOM exists for this formulation
-    const { data: bomData, error: bomError } = await supabase
-      .from('formulation_ingredients')
-      .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
-      .eq('formulation_id', fid)
-      .eq('is_active', true);
+    const [bomResult, packagingResult] = await Promise.all([
+      supabase
+        .from('formulation_ingredients')
+        .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
+        .eq('formulation_id', fid)
+        .eq('is_active', true),
+      supabase
+        .from('production_bom_packaging')
+        .select('*')
+        .eq('formulation_id', fid),
+    ]);
+    const { data: bomData, error: bomError } = bomResult;
+    setBomPackaging(packagingResult.data || []);
     
     if (bomError || !bomData || bomData.length === 0) {
       setWorkflowError(`No BOM ingredients found for ${sel.name}. Please set up the BOM first.`);
@@ -332,14 +342,13 @@ export default function ProductionOrdersPage() {
     }));
     setMaterials(materials);
     
-    // Build BOM preview with percentage calculations
-    // BOM quantities are per 50kg bag from Sage, so percentage = (quantity / 50) * 100
+    // Formula quantities are stored against the approved formula batch size.
+    // Never assume a fixed 50kg recipe: a 1,000kg formula must remain a 1,000kg recipe.
     const preview = bomData.map((ing: any, idx: number) => ({
       index: idx + 1,
       code: ing.raw_materials?.code || '-',
       name: ing.raw_materials?.name || '-',
-      // Calculate percentage: (quantity per 50kg / 50) * 100
-      bomPercent: Math.round((ing.quantity / 50.0) * 100 * 100) / 100,
+      bomPercent: Number(ing.percentage) || Math.round((ing.quantity / sel.batch_size) * 10000) / 100,
       quantity: ing.quantity,
       unitCost: ing.raw_materials?.cost_per_unit || 0,
     }));
@@ -1679,7 +1688,7 @@ export default function ProductionOrdersPage() {
                   /premix/i.test(`${ingredient.code || ''} ${ingredient.name || ''}`)
                 );
                 const premixKg = premixLines.reduce((sum: number, ingredient: any) =>
-                  sum + ((Number(ingredient.quantity) || 0) / 50) * Number(form.planned_qty || 0), 0
+                  sum + ((Number(ingredient.quantity) || 0) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0), 0
                 );
                 return (
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -1714,8 +1723,7 @@ export default function ProductionOrdersPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {bomPreview.map((ing: any) => {
-                        // Calculate quantity required: (quantity per 50kg / 50.0) * planned_qty
-                        const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
+                        const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
                         const lineTotal = qtyRequired * ing.unitCost;
                         const isPremix = /premix/i.test(`${ing.code || ''} ${ing.name || ''}`);
                         return (
@@ -1729,9 +1737,9 @@ export default function ProductionOrdersPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
-                            <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(4)}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(4)}</td>
+                            <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(4)}</td>
                           </tr>
                         );
                       })}
@@ -1740,9 +1748,9 @@ export default function ProductionOrdersPage() {
                         <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
                           ${bomPreview.reduce((sum: number, ing: any) => {
-                            const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
+                            const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
                             return sum + (qtyRequired * ing.unitCost);
-                          }, 0).toFixed(2)}
+                          }, 0).toFixed(4)}
                         </td>
                       </tr>
                     </tbody>
@@ -1754,7 +1762,7 @@ export default function ProductionOrdersPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {(() => {
                   const totalCost = bomPreview.reduce((sum: number, ing: any) => {
-                    const qtyRequired = (ing.quantity / 50.0) * form.planned_qty;
+                    const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
                     return sum + (qtyRequired * ing.unitCost);
                   }, 0);
                   const bagSize = parseInt(form.unit_size) || 25;
@@ -1780,6 +1788,27 @@ export default function ProductionOrdersPage() {
                     </>
                   );
                 })()}
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-extrabold uppercase tracking-wide text-amber-900">Packaging linked to {selectedFormulation.code}</p>
+                    <p className="text-[11px] text-amber-800">This formula's packaging requirements scale with the production order.</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-amber-900">{Number(form.planned_bags || bagsFromKg(form.planned_qty, form.unit_size)).toLocaleString()} bags</span>
+                </div>
+                {bomPackaging.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {bomPackaging.map((item: any) => {
+                      const expectedQty = (Number(item.expected_qty_per_tonne || 0) / 1000) * Number(form.planned_qty || 0);
+                      return <div key={item.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs">
+                        <p className="font-bold text-slate-800">{item.item_code} — {item.description}</p>
+                        <p className="mt-1 text-slate-600">Expected: <strong>{expectedQty.toFixed(4)} {item.unit}</strong></p>
+                      </div>;
+                    })}
+                  </div>
+                ) : <p className="text-xs text-amber-800">No packaging SKU is linked yet. Finance can add it on the Packaging tab of this formula.</p>}
               </div>
             </div>
           )}

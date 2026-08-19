@@ -151,6 +151,7 @@ export default function FormulationsPage() {
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const currentFormulaMaterialIds = new Set(detailIngs.map((ingredient) => ingredient.raw_material_id));
 
   const filtered = formulations.filter(f => {
     const categoryName = getFormulationCategory(f.name, f.category);
@@ -1097,13 +1098,18 @@ export default function FormulationsPage() {
                                 className="w-full px-2 py-1 border border-teal-200 rounded text-xs focus:outline-none focus:border-teal-500 bg-teal-50/50 font-medium"
                               >
                                 <option value="">Select component / material...</option>
-                                <optgroup label="📦 Manufactured Macropacks & Premixes">
-                                  {materials.filter(isMacropackMaterial).map(m => (
+                                <optgroup label="✓ Current formula materials (prioritised)">
+                                  {materials.filter(m => currentFormulaMaterialIds.has(m.id)).map(m => (
+                                    <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="📦 Premixes / macropacks (optional)">
+                                  {materials.filter(m => !currentFormulaMaterialIds.has(m.id) && isMacropackMaterial(m)).map(m => (
                                     <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
                                   ))}
                                 </optgroup>
-                                <optgroup label="🌾 Raw Materials">
-                                  {materials.filter(m => !isMacropackMaterial(m)).map(m => (
+                                <optgroup label="🌾 Other raw materials (optional)">
+                                  {materials.filter(m => !currentFormulaMaterialIds.has(m.id) && !isMacropackMaterial(m)).map(m => (
                                     <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                                   ))}
                                 </optgroup>
@@ -1167,7 +1173,7 @@ export default function FormulationsPage() {
                             )}
                           </td>
                           <td className="px-3 py-2 text-right text-slate-700 font-medium">${unitCost.toFixed(4)}</td>
-                          <td className="px-3 py-2 text-right text-slate-700 font-semibold">${totalCost.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700 font-semibold">${totalCost.toFixed(4)}</td>
                           <td className={`px-3 py-2 text-right font-medium ${stockStatus}`}>{currentStock.toLocaleString()}</td>
                           <td className="px-3 py-2 text-center">
                             {bomEditMode ? (
@@ -1193,24 +1199,6 @@ export default function FormulationsPage() {
                 <div className="space-y-3 mt-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-amber-50/80 border border-amber-200 rounded-xl">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const newIng: FormulationIngredient = {
-                            id: crypto.randomUUID(),
-                            formulation_id: selected.id,
-                            raw_material_id: '',
-                            quantity: 0,
-                            unit: 'kg',
-                            percentage: 0,
-                            is_critical: false,
-                            sort_order: bomEditIngs.length + 1,
-                          };
-                          setBomEditIngs([...bomEditIngs, newIng]);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-extrabold shadow-sm transition-all active:scale-95"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> ⭐️ Add Premix / Micro-Ingredient
-                      </button>
                       <button
                         onClick={() => {
                           const newIng: FormulationIngredient = {
@@ -1349,6 +1337,9 @@ export default function FormulationsPage() {
               {/* Packaging Tab */}
               {detailTab === 'packaging' && (
                 <div className="space-y-3">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <strong>Linked product:</strong> {selected.code} — {selected.name}. Packaging below belongs only to this formula and is calculated from its standard {selected.batch_size.toLocaleString()} {selected.batch_unit} batch.
+                  </div>
                   <div className="border border-slate-200 rounded-lg overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200">
@@ -1356,17 +1347,19 @@ export default function FormulationsPage() {
                           <th className="px-3 py-2 text-left font-medium text-slate-600">Item Code</th>
                           <th className="px-3 py-2 text-left font-medium text-slate-600">Description</th>
                           <th className="px-3 py-2 text-right font-medium text-slate-600">Qty / Tonne</th>
+                          <th className="px-3 py-2 text-right font-medium text-slate-600">Expected / Formula Batch</th>
                           <th className="px-3 py-2 text-left font-medium text-slate-600">Unit</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {detailPkgItems.length === 0 ? (
-                          <tr><td colSpan={4} className="px-3 py-4 text-center text-slate-400">No packaging items defined for this formulation</td></tr>
+                          <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-400">No packaging items defined for this formulation</td></tr>
                         ) : detailPkgItems.map(item => (
                           <tr key={item.id} className="hover:bg-slate-50">
                             <td className="px-3 py-2 font-mono text-slate-700">{item.item_code}</td>
                             <td className="px-3 py-2 text-slate-600">{item.description}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-800">{item.expected_qty_per_tonne}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-800">{Number(item.expected_qty_per_tonne).toFixed(4)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold text-teal-700">{((Number(item.expected_qty_per_tonne || 0) / 1000) * Number(selected.batch_size || 0)).toFixed(4)}</td>
                             <td className="px-3 py-2 text-slate-500">{item.unit}</td>
                           </tr>
                         ))}
@@ -1442,8 +1435,8 @@ export default function FormulationsPage() {
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Size</label>
-              <input type="number" value={form.unit_size_variants[0]?.batch_size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], batch_size: Number(e.target.value) }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Standard Formula Batch Size (kg) *</label>
+              <input type="number" min="0.0001" step="0.0001" value={form.batch_size} onChange={e => { const batchSize = e.target.value; const v = [...form.unit_size_variants]; v[0] = { ...(v[0] || { size: '', batch_size: 0 }), batch_size: Number(batchSize) || 0 }; setForm({ ...form, batch_size: batchSize, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
@@ -1474,7 +1467,7 @@ export default function FormulationsPage() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients</h4>
+              <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Each quantity is for the approved {form.batch_size || '—'} kg formula batch and will scale proportionally on production orders.</p></div>
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : totalPct > 100 ? 'text-red-600' : 'text-amber-600'}`}>Total: {totalPct.toFixed(1)}%</span>
                 <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>
@@ -1489,18 +1482,18 @@ export default function FormulationsPage() {
                   <td className="py-1.5 pr-2">
                     <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
                       <option value="">Select component / material...</option>
-                      <optgroup label="📦 Manufactured Macropacks & Premixes">
-                        {materials.filter(isMacropackMaterial).map(m => (
-                          <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="🌾 Raw Materials">
+                      <optgroup label="🌾 Raw materials (primary formula inputs)">
                         {materials.filter(m => !isMacropackMaterial(m)).map(m => (
                           <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                         ))}
                       </optgroup>
+                      <optgroup label="📦 Premixes / manufactured materials (optional)">
+                        {materials.filter(isMacropackMaterial).map(m => (
+                          <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
+                        ))}
+                      </optgroup>
                     </select></td>
-                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" min="0" step="0.0001" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantities" /></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
