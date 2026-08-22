@@ -1,8 +1,9 @@
 # MES ↔ Sage Pastel Integration Map
 
 **Live Sage DB:** `Hyperfeeds 2024`
-**Bridge project:** `C:\Users\Joseph Kaseke\CascadeProjects\hyper-integration`
-**Mechanism:** MES DB triggers insert a row into `sync_log`. The bridge worker polls `sync_log` every 30 s, processes `pending` rows, posts to Sage, and flips status to `completed` or `failed`.
+**MES bridge project:** `C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\bridge`
+**Sage SDK API:** `C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\sage-sdk-api`
+**Mechanism:** MES DB triggers insert a row into `sync_log`. The MES bridge worker polls `sync_log` every 30 s, processes `pending` rows, posts to the local Sage SDK API at `http://127.0.0.1:5088`, and flips status to `success` or `failed`.
 
 ---
 
@@ -10,13 +11,13 @@
 
 | MES Action | MES Tables Updated | `sync_log.event_type` | Sage Pastel Effect | Bridge Handler |
 |---|---|---|---|---|
-| **GRN approved** (received goods from supplier) | `goods_received_notes.status='approved'`, `grn_items`, `raw_materials.current_stock` ↑, `raw_material_lots` row created (one per `grn_item`) | `grn_confirmed` | Creates a **Supplier Invoice** (AP document). Posts to supplier account, debits stock item (raw material), credits AP. | `bridge/goodsReceiptAuto.js` |
-| **Material Transfer approved** (warehouse → warehouse / warehouse → shop floor) | `stock_movements`, `raw_material_lots.qty_remaining` ↓, `raw_materials.current_stock` unchanged in aggregate (internal move) | *(none — no row inserted)* | **None**. Purely internal MES movement, not visible to Sage. | n/a |
+| **GRN approved** (received goods from supplier) | `goods_received_notes.status='approved'`, `grn_items`, `raw_materials.current_stock` ↑, `raw_material_lots` row created (one per `grn_item`) | `grn_confirmed` | Creates a **GRV** using the Sage SDK API `PurchaseOrder.ProcessStock(grvNumber)`. | `bridge/goodsReceiptAuto.js` |
+| **Material Transfer received** (RM → Production) | `material_transfers.status='received'`, MES buffer/warehouse balances updated | `material_transfer_to_production` | Creates a **Warehouse Transfer** through the protected Sage SDK API. | `bridge/materialTransferSdkAuto.js` |
 | **Production Issue** (issue ingredient to Production Order) | `production_order_materials.issued=true`, `raw_material_lots.qty_remaining` ↓ (FIFO), `stock_movements` (type=`consumption`), `raw_materials.current_stock` ↓ | `materials_issued` | Creates a **Inventory Journal / Goods Issue** on the raw-material stock item (debits WIP / COGS, credits stock). | `bridge/goodsIssueAuto.js` |
 | **Production Completed** (batch finished, FG entered) | `production_orders.status='completed'`, `finished_goods_stock` ↑ (if wired) | `production_completed` | Creates an **Inventory Receipt** on the FG stock item (debits FG, credits WIP). | `bridge/batchCompleteAuto.js` |
 | **Dispatch Delivered** (customer sales dispatch) | `dispatches.status='delivered'` | `dispatch_delivered` | Creates a **Customer Invoice** (AR document). Debits customer, credits FG stock + sales. | `bridge/dispatchAuto.js` |
 
-> **Material Transfer is the only inventory event that does NOT sync to Sage.** Sage treats all warehouses as one stock pool; internal transfers are a MES-only concept for shop-floor traceability.
+> RM → Production material transfer now syncs to Sage through the local SDK API. Older direct bridge/SQL posting paths are fallback only.
 
 ---
 
@@ -61,4 +62,10 @@ update sync_log set status='pending', error_message=null, retry_count=0
 where id = '<uuid>';
 ```
 
-Bridge worker logs: run `npm start` in `C:\Users\Joseph Kaseke\CascadeProjects\hyper-integration`.
+Bridge worker logs: run `npm start` in `C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\bridge`.
+
+Sage SDK API health:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5088/api/v1/health
+```

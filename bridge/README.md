@@ -6,11 +6,11 @@ This bridge connects the HYPER MES system with Sage Pastel accounting software, 
 ## 📋 **Priority Implementation Status**
 
 ### ✅ **Priority 1: Auto Event Handlers (COMPLETE)**
-- **goodsReceiptAuto.js** - Handles GRN confirmations → Sage supplier invoices
+- **goodsReceiptAuto.js** - Handles GRN confirmations → Sage GRVs through the protected Sage SDK API
 - **goodsIssueAuto.js** - Handles material issuance → Sage inventory issues  
 - **batchCompleteAuto.js** - Handles production completion → Sage finished goods receipts
 - **dispatchAuto.js** - Handles dispatch deliveries → Sage customer invoices
-- **materialTransferSdkAuto.js** - Handles approved RM → Production warehouse transfers through the protected Sage SDK API
+- **materialTransferSdkAuto.js** - Handles received RM → Production warehouse transfers through the protected Sage SDK API
 
 ### ✅ **Priority 3: Bridge Worker (COMPLETE)**
 - **bridgeWorker.js** - Main worker that polls sync_log every 30 seconds
@@ -42,13 +42,21 @@ npm run test-connection
 npm start
 ```
 
+### 5. Start the Local Sage SDK API
+From the repository root:
+
+```powershell
+.\sage-sdk-api\Build-SageSdkApi.ps1
+.\sage-sdk-api\Start-SageSdkApi.ps1
+```
+
 ## 📊 **Event Flow**
 
 ### **Event 1: GRN Confirmation**
 1. MES: GRN status changed to 'approved'
 2. Trigger: Creates sync_log entry
 3. Bridge: Reads goods_received_notes + grn_items
-4. Sage: Posts supplier invoice/stock receipt
+4. Sage SDK API: Posts Sage GRV with Sage `HFGRV######` numbering
 
 ### **Event 2: Material Issuance**  
 1. MES: production_order_materials.issued = true
@@ -94,7 +102,7 @@ POLL_INTERVAL=30000  # 30 seconds
 BATCH_SIZE=10
 MAX_RETRIES=3
 
-# Sage SDK API for warehouse transfers
+# Sage SDK API for GRVs and warehouse transfers
 SAGE_SDK_API_BASE_URL=http://127.0.0.1:5088
 SAGE_SDK_API_KEY=your-protected-sdk-api-key
 ```
@@ -114,10 +122,40 @@ SAGE_SDK_API_KEY=your-protected-sdk-api-key
 # Trigger: At system startup, repeat every 5 minutes
 # Action: Start program
 # Program: C:\Program Files\nodejs\node.exe
-# Arguments: "C:\path\to\bridge\bridgeWorker.js"
-# Start in: C:\path\to\bridge\
+# Arguments: "C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\bridge\bridgeWorker.js"
+# Start in: C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\bridge\
 # Run with highest privileges
 # Configure for: Windows 10, Windows Server 2016
+```
+
+### **Create Sage SDK API Service**
+```powershell
+$taskName = "HYPER MES Sage SDK API"
+$apiExe = "C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\sage-sdk-api\HyperMes.SageSdkApi\bin\Debug\HyperMes.SageSdkApi.exe"
+$apiDir = "C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\sage-sdk-api\HyperMes.SageSdkApi\bin\Debug"
+
+$action = New-ScheduledTaskAction `
+  -Execute $apiExe `
+  -WorkingDirectory $apiDir
+
+$trigger = New-ScheduledTaskTrigger -AtStartup
+
+$settings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -StartWhenAvailable `
+  -RestartCount 3 `
+  -RestartInterval (New-TimeSpan -Minutes 1) `
+  -MultipleInstances IgnoreNew
+
+Register-ScheduledTask `
+  -TaskName $taskName `
+  -Action $action `
+  -Trigger $trigger `
+  -Settings $settings `
+  -Description "Runs the local HYPER MES Sage SDK API on 127.0.0.1:5088." `
+  -RunLevel Highest `
+  -Force
 ```
 
 ### **Nightly Reconciliation Job**

@@ -3,7 +3,7 @@
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', '..', 'hyper-integration', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', 'sage-sdk-api', '.env') });
 
 const sql = require('mssql');
 const { createClient } = require('@supabase/supabase-js');
@@ -16,11 +16,11 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const sageConfig = {
-  server: process.env.SAGE_SERVER || 'localhost',
+  server: process.env.SAGE_SERVER || process.env.HYPER_SAGE_SERVER || 'localhost',
   port: Number(process.env.SAGE_PORT || 1433),
-  database: process.env.SAGE_DATABASE,
-  user: process.env.SAGE_USER,
-  password: process.env.SAGE_PASSWORD,
+  database: process.env.SAGE_DATABASE || process.env.HYPER_SAGE_COMPANY_DATABASE,
+  user: process.env.SAGE_USER || process.env.HYPER_SAGE_SQL_USERNAME,
+  password: process.env.SAGE_PASSWORD || process.env.HYPER_SAGE_SQL_PASSWORD,
   options: {
     encrypt: false,
     trustServerCertificate: true,
