@@ -68,7 +68,7 @@ export default function GoodsReceivedPageV2() {
   async function fetchData() {
     setLoading(true);
     const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-      supabase.from('goods_received_notes').select('*, suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
+      supabase.from('goods_received_notes').select('*, suppliers(name, code, sage_code), warehouses(name)').order('created_at', { ascending: false }),
       supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('*').eq('status', 'open').order('created_at', { ascending: false }),
@@ -269,9 +269,17 @@ export default function GoodsReceivedPageV2() {
     return <Badge variant="secondary">{sync.status}</Badge>;
   };
 
+  const supplierLabel = (supplier?: Supplier | null) => {
+    if (!supplier) return '';
+    const code = supplier.sage_code || supplier.code;
+    return code ? `${code} - ${supplier.name}` : supplier.name;
+  };
+
   const filteredGRNs = grns.filter(grn =>
     grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
-    grn.suppliers?.name.toLowerCase().includes(search.toLowerCase())
+    grn.suppliers?.name.toLowerCase().includes(search.toLowerCase()) ||
+    grn.suppliers?.code?.toLowerCase().includes(search.toLowerCase()) ||
+    grn.suppliers?.sage_code?.toLowerCase().includes(search.toLowerCase())
   );
 
   const stats = {
@@ -322,7 +330,7 @@ export default function GoodsReceivedPageV2() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by GRN number or supplier..."
+            placeholder="Search by GRN number, supplier, or Sage code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -360,7 +368,7 @@ export default function GoodsReceivedPageV2() {
                 filteredGRNs.map((grn) => (
                   <TableRow key={grn.id}>
                     <TableCell className="font-medium">{grn.grn_number}</TableCell>
-                    <TableCell>{grn.suppliers?.name}</TableCell>
+                    <TableCell>{supplierLabel(grn.suppliers)}</TableCell>
                     <TableCell>{format(new Date(grn.received_date), 'PPP')}</TableCell>
                     <TableCell>{getStatusBadge(grn.status)}</TableCell>
                     <TableCell>{getSageBadge(grn.id)}</TableCell>
@@ -405,7 +413,7 @@ export default function GoodsReceivedPageV2() {
                   <SelectContent className="z-[100]">
                     {suppliers.map((supplier) => (
                       <SelectItem key={supplier.id} value={supplier.id}>
-                        {supplier.name}
+                        {supplierLabel(supplier)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -569,7 +577,7 @@ export default function GoodsReceivedPageV2() {
               <div>
                 <DialogTitle className="text-2xl">{viewing?.grn_number}</DialogTitle>
                 <DialogDescription className="mt-2">
-                  {viewing?.suppliers?.name} | {viewing && format(new Date(viewing.received_date), 'PPP')}
+                  {supplierLabel(viewing?.suppliers)} | {viewing && format(new Date(viewing.received_date), 'PPP')}
                 </DialogDescription>
               </div>
               <Badge variant={viewing?.status === 'approved' ? 'default' : 'secondary'}>

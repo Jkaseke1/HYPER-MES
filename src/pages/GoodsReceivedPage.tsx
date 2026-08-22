@@ -87,7 +87,7 @@ export default function GoodsReceivedPage() {
     setLoading(true);
     try {
       const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name), warehouses(name)').order('created_at', { ascending: false }),
+        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name)').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
         supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code)').eq('status', 'open').order('created_at', { ascending: false }),
@@ -313,9 +313,17 @@ export default function GoodsReceivedPage() {
     }
   };
 
+  const supplierLabel = (supplier?: Supplier | null) => {
+    if (!supplier) return '';
+    const code = supplier.sage_code || supplier.code;
+    return code ? `${code} - ${supplier.name}` : supplier.name;
+  };
+
   const filteredGRNs = grns.filter(grn => {
     const matchesSearch = grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
-      grn.suppliers?.name.toLowerCase().includes(search.toLowerCase());
+      grn.suppliers?.name.toLowerCase().includes(search.toLowerCase()) ||
+      grn.suppliers?.code?.toLowerCase().includes(search.toLowerCase()) ||
+      grn.suppliers?.sage_code?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || grn.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -381,7 +389,7 @@ export default function GoodsReceivedPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
-            placeholder="Search by GRN number or supplier..."
+            placeholder="Search by GRN number, supplier, or Sage code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10 bg-slate-50/50 border-slate-200 focus:bg-white"
@@ -451,7 +459,7 @@ export default function GoodsReceivedPage() {
                           <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">{grn.grn_number}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium text-slate-900">{grn.suppliers?.name}</TableCell>
+                      <TableCell className="font-medium text-slate-900">{supplierLabel(grn.suppliers)}</TableCell>
                       <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
                       <TableCell className="text-xs text-slate-700 font-medium">{(grn as any).receiver?.full_name || (grn as any).receiver?.email || '—'}</TableCell>
@@ -501,7 +509,7 @@ export default function GoodsReceivedPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-slate-900 text-base">{grn.suppliers?.name}</h4>
+                    <h4 className="font-bold text-slate-900 text-base">{supplierLabel(grn.suppliers)}</h4>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Received: {format(new Date(grn.received_date), 'PPP')}
                     </p>
@@ -592,7 +600,7 @@ export default function GoodsReceivedPage() {
                           <SelectContent>
                             {suppliers.map((supplier) => (
                               <SelectItem key={supplier.id} value={supplier.id}>
-                                {supplier.name}
+                                {supplierLabel(supplier)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1142,7 +1150,7 @@ export default function GoodsReceivedPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="border-l-3 border-l-blue-500 bg-white rounded-lg border border-slate-200 p-2.5">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Supplier</p>
-                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing?.suppliers?.name || 'N/A'}</p>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{supplierLabel(viewing?.suppliers) || 'N/A'}</p>
                   </div>
                   <div className="border-l-3 border-l-amber-500 bg-white rounded-lg border border-slate-200 p-2.5">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Warehouse</p>
