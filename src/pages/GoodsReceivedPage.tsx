@@ -47,6 +47,8 @@ const emptyItem: GRNItem = {
   expiry_date: '',
 };
 
+const localDateInputValue = () => format(new Date(), 'yyyy-MM-dd');
+
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
@@ -64,7 +66,7 @@ export default function GoodsReceivedPage() {
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
-  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [receivedDate, setReceivedDate] = useState(localDateInputValue);
   const [notes, setNotes] = useState('');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
   const [supplierDeliveryNoteNo, setSupplierDeliveryNoteNo] = useState('');
@@ -336,7 +338,7 @@ export default function GoodsReceivedPage() {
 
   const resetForm = () => {
     setSupplierId('');
-    setReceivedDate(new Date().toISOString().split('T')[0]);
+    setReceivedDate(localDateInputValue());
     setNotes('');
     setSupplierInvoiceNo('');
     setSupplierDeliveryNoteNo('');
