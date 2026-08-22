@@ -45,7 +45,10 @@ function postJson(urlString, apiKey, body) {
           }
 
           const message = parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
-          reject(new Error(`Sage GRV API failed: ${message}`));
+          const error = new Error(`Sage GRV API failed: ${message}`);
+          error.statusCode = res.statusCode;
+          error.response = parsed;
+          reject(error);
         });
       }
     );

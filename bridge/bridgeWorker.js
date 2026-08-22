@@ -109,7 +109,12 @@ async function processPendingEvents() {
         .update({
           status:        'failed',
           message:       err.message,
-          error_details: { message: err.message, stack: err.stack },
+          error_details: {
+            message: err.message,
+            stack: err.stack,
+            statusCode: err.statusCode || null,
+            response: err.response || null,
+          },
           retry_count:   (event.retry_count || 0) + 1,
           next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           updated_at:    new Date().toISOString(),
