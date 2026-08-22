@@ -1,6 +1,8 @@
 using Pastel.Evolution;
 using System;
 using System.Collections.Concurrent;
+using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Web.Http;
@@ -12,6 +14,7 @@ namespace SDK_Test
     {
         private static readonly ConcurrentDictionary<string, bool> PostedReferences =
             new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object GrvNumberLock = new object();
 
         [HttpPost]
         [Route("validate")]
@@ -32,7 +35,7 @@ namespace SDK_Test
                 sageConnection = "verified",
                 sagePosting = "not performed",
                 message = "Validated against Sage UAT. No GRV was created.",
-                goodsReceipt = GoodsReceiptSummary(request, null, null)
+                goodsReceipt = GoodsReceiptSummary(request, null)
             });
         }
 
@@ -59,19 +62,25 @@ namespace SDK_Test
                 SdkSession.EnsureConnected();
                 ValidateSageMasters(request);
 
-                var postedReceipt = PostGoodsReceivedVoucher(request);
+                string grvNumber;
+                lock (GrvNumberLock)
+                {
+                    grvNumber = GetNextSageGrvNumber();
+                    PostStandaloneGoodsReceivedVoucher(request, grvNumber);
+                    AdvanceSageGrvSequence(grvNumber);
+                }
 
                 return Ok(new
                 {
                     status = "posted",
                     environment = "UAT",
                     action = "goods-receipt-grv",
+                    postingMode = "legacy-standalone-grv",
                     sagePosting = "completed",
-                    grvNumber = postedReceipt.GrvNumber,
-                    purchaseOrderNumber = postedReceipt.PurchaseOrderNumber,
-                    documentNumber = postedReceipt.GrvNumber,
-                    message = "Goods receipt posted to Sage UAT as a purchase-order GRV receipt.",
-                    goodsReceipt = GoodsReceiptSummary(request, postedReceipt.GrvNumber, postedReceipt.PurchaseOrderNumber)
+                    grvNumber = grvNumber,
+                    documentNumber = grvNumber,
+                    message = "Goods receipt posted to Sage UAT as a standalone GRV.",
+                    goodsReceipt = GoodsReceiptSummary(request, grvNumber)
                 });
             }
             catch (Exception ex)
@@ -92,54 +101,113 @@ namespace SDK_Test
             }
         }
 
-        private static PostedGoodsReceipt PostGoodsReceivedVoucher(GoodsReceiptRequest request)
+        private static string GetNextSageGrvNumber()
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                SELECT COALESCE(MAX(TRY_CONVERT(int, SUBSTRING(GrvValue, 6, 6))), 0) + 1
+                FROM (
+                    SELECT InvNumber AS GrvValue FROM InvNum WHERE DocType = 2 AND InvNumber LIKE 'HFGRV[0-9]%'
+                    UNION ALL
+                    SELECT GrvNumber AS GrvValue FROM InvNum WHERE DocType = 2 AND GrvNumber LIKE 'HFGRV[0-9]%'
+                ) AS Numbers
+                WHERE LEN(GrvValue) = 11
+                  AND TRY_CONVERT(int, SUBSTRING(GrvValue, 6, 6)) IS NOT NULL;", connection))
+            {
+                connection.Open();
+                var next = Convert.ToInt32(command.ExecuteScalar());
+                return "HFGRV" + next.ToString("000000");
+            }
+        }
+
+        private static string GetCompanyConnectionString()
+        {
+            var builder = new SqlConnectionStringBuilder
+            {
+                DataSource = GetRequiredSetting("HYPER_SAGE_SERVER"),
+                InitialCatalog = GetRequiredSetting("HYPER_SAGE_COMPANY_DATABASE"),
+                UserID = GetRequiredSetting("HYPER_SAGE_SQL_USERNAME"),
+                Password = GetRequiredSetting("HYPER_SAGE_SQL_PASSWORD"),
+                ConnectTimeout = 30,
+                TrustServerCertificate = true
+            };
+
+            return builder.ConnectionString;
+        }
+
+        private static string GetRequiredSetting(string name)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Missing Windows environment variable: " + name);
+            return value;
+        }
+
+        private static void PostStandaloneGoodsReceivedVoucher(GoodsReceiptRequest request, string grvNumber)
         {
             var txDate = request.ReceivedDate == default(DateTime)
                 ? DateTime.Today
                 : request.ReceivedDate.Date;
 
-            var purchaseOrder = new PurchaseOrder
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
             {
-                Supplier = new Supplier(request.SupplierCode.Trim()),
-                OrderDate = txDate,
-                InvoiceDate = txDate,
-                DeliveryDate = txDate,
-                DueDate = txDate,
-                Description = "MES Goods Received Voucher",
-                ExternalOrderNo = Trim(FirstNonBlank(request.SupplierInvoiceNo, request.ExternalReference, request.Reference), 50),
-                SupplierInvoiceNo = Trim(FirstNonBlank(request.SupplierInvoiceNo, request.Reference), 50),
-                MessageLine1 = Trim("MES GRN " + request.Reference, 50),
-                MessageLine2 = Trim(request.SupplierDeliveryNoteNo, 50),
-                MessageLine3 = Trim(request.ExternalReference, 50),
-                TaxMode = TaxMode.Exclusive
-            };
-
-            foreach (var line in request.Lines)
-            {
-                var item = new InventoryItem(line.ItemCode.Trim().ToUpperInvariant());
-                var warehouseCode = FirstNonBlank(line.Warehouse, request.Warehouse, "RM")
-                    .Trim()
-                    .ToUpperInvariant();
-                var detail = purchaseOrder.Detail.Add(
-                    item,
-                    warehouseCode,
-                    (double)line.Quantity,
-                    (double)line.UnitCost);
-
-                detail.Warehouse = new Warehouse(warehouseCode);
-                detail.Quantity = (double)line.Quantity;
-                detail.ToProcess = (double)line.Quantity;
-                detail.UnitCostPrice = (double)line.UnitCost;
-                detail.Note = Trim(FirstNonBlank(line.LotNumber, request.Reference), 255);
+                connection.Open();
+                foreach (var line in request.Lines)
+                {
+                    using (var command = new SqlCommand("dbo.PostGRVV2", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+                        command.CommandTimeout = 120;
+                        command.Parameters.Add("@ItemCode", SqlDbType.VarChar, 50).Value = line.ItemCode.Trim().ToUpperInvariant();
+                        command.Parameters.Add("@InventoryTransactionCode", SqlDbType.VarChar, 50).Value = "GRV";
+                        command.Parameters.Add("@Quantity", SqlDbType.Float).Value = (double)line.Quantity;
+                        command.Parameters.Add("@WHCode", SqlDbType.VarChar, 50).Value = FirstNonBlank(line.Warehouse, request.Warehouse, "RM").Trim().ToUpperInvariant();
+                        command.Parameters.Add("@LotNumber", SqlDbType.VarChar, 50).Value = Trim(line.LotNumber, 50);
+                        command.Parameters.Add("@UnitCost", SqlDbType.Float).Value = (double)line.UnitCost;
+                        command.Parameters.Add("@ProjectID", SqlDbType.Int).Value = 0;
+                        command.Parameters.Add("@TradePayablesAccountCode", SqlDbType.VarChar, 100).Value = "";
+                        command.Parameters.Add("@VarianceAccountCode", SqlDbType.VarChar, 100).Value = "";
+                        command.Parameters.Add("@Reference", SqlDbType.VarChar, 50).Value = grvNumber;
+                        command.Parameters.Add("@Reference2", SqlDbType.VarChar, 50).Value = Trim(request.Reference, 50);
+                        command.Parameters.Add("@TransactionDate", SqlDbType.DateTime).Value = txDate;
+                        command.Parameters.Add("@Description", SqlDbType.VarChar, 255).Value = Trim(FirstNonBlank(line.Description, "Goods Received Voucher"), 255);
+                        command.Parameters.Add("@UserName", SqlDbType.VarChar, 50).Value = "HYPER MES";
+                        command.Parameters.Add("@SupplierCode", SqlDbType.VarChar, 50).Value = request.SupplierCode.Trim();
+                        command.ExecuteNonQuery();
+                    }
+                }
             }
 
-            // Sage controls the GRV number through its configured HFGRV sequence.
-            var grvNumber = purchaseOrder.ProcessStock();
-            return new PostedGoodsReceipt
+            ValidateStandaloneGrvDocument(grvNumber);
+        }
+
+        private static void ValidateStandaloneGrvDocument(string grvNumber)
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 DocType FROM InvNum
+                WHERE InvNumber = @GrvNumber OR GrvNumber = @GrvNumber
+                ORDER BY CASE WHEN InvNumber = @GrvNumber THEN 0 ELSE 1 END, AutoIndex;", connection))
             {
-                GrvNumber = grvNumber,
-                PurchaseOrderNumber = purchaseOrder.OrderNo
-            };
+                command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
+                connection.Open();
+                var docType = command.ExecuteScalar();
+                if (docType == null || Convert.ToInt32(docType) != (int)DocumentType.GoodsReceivedVoucher)
+                    throw new InvalidOperationException("Sage did not create standalone Goods Received Voucher " + grvNumber + ".");
+            }
+        }
+
+        private static void AdvanceSageGrvSequence(string grvNumber)
+        {
+            var sequence = int.Parse(grvNumber.Substring(5));
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                UPDATE StDfTbl SET GrvNum = CASE WHEN ISNULL(GrvNum, 0) < @Sequence THEN @Sequence ELSE GrvNum END;", connection))
+            {
+                command.Parameters.Add("@Sequence", SqlDbType.Int).Value = sequence;
+                connection.Open();
+                command.ExecuteNonQuery();
+            }
         }
 
         private static void ValidateSageMasters(GoodsReceiptRequest request)
@@ -190,13 +258,12 @@ namespace SDK_Test
             return null;
         }
 
-        private static object GoodsReceiptSummary(GoodsReceiptRequest request, string grvNumber, string purchaseOrderNumber)
+        private static object GoodsReceiptSummary(GoodsReceiptRequest request, string grvNumber)
         {
             return new
             {
                 reference = request.Reference.Trim(),
                 grvNumber = grvNumber,
-                purchaseOrderNumber = purchaseOrderNumber,
                 supplierCode = request.SupplierCode.Trim(),
                 supplierName = request.SupplierName,
                 supplierInvoiceNo = request.SupplierInvoiceNo,
@@ -229,10 +296,5 @@ namespace SDK_Test
             return value.Length <= length ? value : value.Substring(0, length);
         }
 
-        private sealed class PostedGoodsReceipt
-        {
-            public string GrvNumber { get; set; }
-            public string PurchaseOrderNumber { get; set; }
-        }
     }
 }
