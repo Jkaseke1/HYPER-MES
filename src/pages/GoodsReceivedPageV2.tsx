@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +26,14 @@ interface GRNItem {
   expiry_date: string;
 }
 
+interface SageSyncStatus {
+  status: string;
+  message?: string;
+  sage_response?: any;
+  error_details?: any;
+  updated_at?: string;
+}
+
 const emptyItem: GRNItem = {
   raw_material_id: '',
   ordered_qty: 0,
@@ -46,6 +54,7 @@ export default function GoodsReceivedPageV2() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
+  const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
   const [saving, setSaving] = useState(false);
   const [wbTickets, setWbTickets] = useState<any[]>([]);
   
@@ -68,6 +77,27 @@ export default function GoodsReceivedPageV2() {
     setSuppliers(suppliersRes.data || []);
     setMaterials(materialsRes.data || []);
     setWbTickets(wbRes.data || []);
+
+    const grnIds = (grnsRes.data || []).map((grn: GoodsReceivedNote) => grn.id);
+    if (grnIds.length > 0) {
+      const { data: syncRows } = await supabase
+        .from('sync_log')
+        .select('reference_id, status, message, sage_response, error_details, updated_at')
+        .eq('event_type', 'grn_confirmed')
+        .in('reference_id', grnIds)
+        .order('updated_at', { ascending: false });
+
+      const latestByGrn: Record<string, SageSyncStatus> = {};
+      (syncRows || []).forEach((row: any) => {
+        if (!latestByGrn[row.reference_id]) {
+          latestByGrn[row.reference_id] = row;
+        }
+      });
+      setSyncByGrnId(latestByGrn);
+    } else {
+      setSyncByGrnId({});
+    }
+
     setLoading(false);
   }
 
@@ -202,6 +232,43 @@ export default function GoodsReceivedPageV2() {
     return <Badge variant={variants[status] || 'outline'}>{status}</Badge>;
   };
 
+  const getSageGrvNumber = (sync?: SageSyncStatus) => {
+    if (!sync?.sage_response) return '';
+    return sync.sage_response.grvNumber ||
+      sync.sage_response.documentNumber ||
+      sync.sage_response.goodsReceipt?.grvNumber ||
+      sync.sage_response.goodsReceipt?.documentNumber ||
+      '';
+  };
+
+  const getSageBadge = (grnId: string) => {
+    const sync = syncByGrnId[grnId];
+    if (!sync) {
+      return <Badge variant="outline">Not queued</Badge>;
+    }
+
+    if (sync.status === 'success') {
+      const grvNumber = getSageGrvNumber(sync);
+      return (
+        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          {grvNumber ? `GRV ${grvNumber}` : 'Posted'}
+        </Badge>
+      );
+    }
+
+    if (sync.status === 'failed') {
+      return (
+        <Badge variant="destructive">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Failed
+        </Badge>
+      );
+    }
+
+    return <Badge variant="secondary">{sync.status}</Badge>;
+  };
+
   const filteredGRNs = grns.filter(grn =>
     grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
     grn.suppliers?.name.toLowerCase().includes(search.toLowerCase())
@@ -277,6 +344,7 @@ export default function GoodsReceivedPageV2() {
                 <TableHead>Supplier</TableHead>
                 <TableHead>Received Date</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Sage</TableHead>
                 <TableHead>Created By</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -284,7 +352,7 @@ export default function GoodsReceivedPageV2() {
             <TableBody>
               {filteredGRNs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No GRNs found
                   </TableCell>
                 </TableRow>
@@ -295,6 +363,7 @@ export default function GoodsReceivedPageV2() {
                     <TableCell>{grn.suppliers?.name}</TableCell>
                     <TableCell>{format(new Date(grn.received_date), 'PPP')}</TableCell>
                     <TableCell>{getStatusBadge(grn.status)}</TableCell>
+                    <TableCell>{getSageBadge(grn.id)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {format(new Date(grn.created_at), 'PPp')}
                     </TableCell>
@@ -510,6 +579,16 @@ export default function GoodsReceivedPageV2() {
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto flex-1 pr-4">
+            {viewing && syncByGrnId[viewing.id] && (
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-lg">
+                <Label className="text-sm font-semibold mb-2 block text-emerald-800">Sage Posting</Label>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-800">
+                  {getSageBadge(viewing.id)}
+                  <span>{syncByGrnId[viewing.id].message}</span>
+                </div>
+              </div>
+            )}
+
             {viewing?.notes && (
               <div>
                 <Label>Notes</Label>

@@ -1,170 +1,220 @@
 // goodsReceiptAuto.js - Event 1: GRN Confirmation Handler
-// Reads from goods_received_notes + grn_items by reference_id from sync_log
-// Posts to Sage Pastel via direct MSSQL: journal line + QtyOnHand + average cost
+// Posts approved MES GRNs through the protected local Sage API so Sage owns the GRV number.
 
-const { sql, sageConfig, supabase, DRY_RUN } = require('./lib/db');
+const http = require('http');
+const https = require('https');
+const { supabase, DRY_RUN } = require('./lib/db');
+
+const DEFAULT_SDK_BASE_URL = 'http://127.0.0.1:5088';
+const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || DEFAULT_SDK_BASE_URL).replace(/\/+$/, '');
+const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
+
+function postJson(urlString, apiKey, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const payload = JSON.stringify(body);
+    const transport = url.protocol === 'https:' ? https : http;
+
+    const req = transport.request(
+      {
+        method: 'POST',
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'X-Hyper-Api-Key': apiKey,
+        },
+      },
+      (res) => {
+        let responseBody = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { responseBody += chunk; });
+        res.on('end', () => {
+          let parsed = responseBody;
+          try {
+            parsed = responseBody ? JSON.parse(responseBody) : {};
+          } catch (_) {
+            // Keep plain text responses intact for diagnostics.
+          }
+
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+            return;
+          }
+
+          const message = parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
+          reject(new Error(`Sage GRV API failed: ${message}`));
+        });
+      }
+    );
+
+    req.on('error', (err) => {
+      reject(new Error(`Sage GRV API connection failed: ${err.message}`));
+    });
+
+    req.write(payload);
+    req.end();
+  });
+}
+
+function requirePositiveNumber(value, label) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be greater than zero`);
+  }
+  return parsed;
+}
 
 async function handleGoodsReceipt(syncEvent) {
-  console.log('\n  → Event 1: Goods Receipt (Auto)');
+  console.log('\n  -> Event 1: Goods Receipt / GRV (SDK)');
+
+  if (!SDK_API_KEY) {
+    throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for protected Sage SDK API');
+  }
 
   const grnId = syncEvent.reference_id;
   console.log(`  GRN ID: ${grnId}`);
 
   const { data: grn, error: grnError } = await supabase
     .from('goods_received_notes')
-    .select('id, grn_number, received_date, status, supplier_id')
+    .select(`
+      id,
+      grn_number,
+      received_date,
+      status,
+      supplier_id,
+      supplier_invoice_no,
+      supplier_delivery_note_no,
+      supplier_order_no,
+      external_reference,
+      wb_transaction_no,
+      suppliers (
+        id,
+        name,
+        code,
+        sage_code
+      ),
+      warehouses (
+        id,
+        name,
+        code
+      )
+    `)
     .eq('id', grnId)
     .single();
 
   if (grnError || !grn) {
-    throw new Error(`GRN not found: ${grnId} — ${grnError?.message}`);
+    throw new Error(`GRN not found: ${grnId} - ${grnError?.message || 'no row returned'}`);
   }
 
-  const { data: supplier } = await supabase
-    .from('suppliers')
-    .select('id, name, sage_code')
-    .eq('id', grn.supplier_id)
-    .single();
+  if (grn.status !== 'approved') {
+    throw new Error(`GRN ${grn.grn_number || grn.id} is not approved; current status is ${grn.status}`);
+  }
 
-  console.log(`  GRN: ${grn.grn_number} — ${supplier?.name}`);
+  const supplierCode = (grn.suppliers?.sage_code || grn.suppliers?.code || '').trim();
+  if (!supplierCode) {
+    throw new Error(`No Sage supplier code for ${grn.suppliers?.name || grn.supplier_id}`);
+  }
 
   const { data: items, error: itemsError } = await supabase
     .from('grn_items')
-    .select('id, received_qty, unit_cost, raw_material_id')
+    .select(`
+      id,
+      received_qty,
+      unit_cost,
+      batch_number,
+      raw_material_id,
+      raw_materials (
+        id,
+        name,
+        code,
+        sage_code
+      )
+    `)
     .eq('grn_id', grnId);
 
-  console.log(`  Items: count=${items?.length} error=${itemsError?.message}`);
-
-  if (itemsError) throw new Error(`Items query error: ${itemsError.message}`);
+  if (itemsError) throw new Error(`GRN items query failed: ${itemsError.message}`);
   if (!items || items.length === 0) throw new Error(`No items found for GRN: ${grn.grn_number}`);
 
-  for (const item of items) {
-    const { data: rm } = await supabase
-      .from('raw_materials')
-      .select('id, name, sage_code')
-      .eq('id', item.raw_material_id)
-      .single();
-    item.raw_materials = rm;
-    console.log(`  RM: ${item.raw_material_id} → ${rm?.name} (${rm?.sage_code})`);
-  }
+  const warehouseCode = (grn.warehouses?.code || 'RM').trim().toUpperCase();
+  const lines = items.map((item) => {
+    const itemCode = (item.raw_materials?.sage_code || item.raw_materials?.code || '').trim();
+    if (!itemCode) {
+      throw new Error(`No Sage item code for ${item.raw_materials?.name || item.raw_material_id}`);
+    }
+
+    return {
+      itemCode,
+      description: (item.raw_materials?.name || itemCode).substring(0, 100),
+      quantity: requirePositiveNumber(item.received_qty, `Received quantity for ${itemCode}`),
+      unitCost: Number(item.unit_cost || 0),
+      warehouse: warehouseCode,
+      lotNumber: item.batch_number || '',
+    };
+  });
+
+  const body = {
+    reference: grn.grn_number,
+    supplierCode,
+    supplierName: grn.suppliers?.name || '',
+    supplierInvoiceNo: grn.supplier_invoice_no || '',
+    supplierDeliveryNoteNo: grn.supplier_delivery_note_no || '',
+    supplierOrderNo: grn.supplier_order_no || '',
+    externalReference: grn.external_reference || grn.wb_transaction_no || '',
+    warehouse: warehouseCode,
+    receivedDate: grn.received_date,
+    lines,
+    confirmPost: true,
+  };
+
+  console.log(`  GRN: ${grn.grn_number} - ${grn.suppliers?.name || supplierCode}`);
+  console.log(`  Lines: ${lines.length}, warehouse ${warehouseCode}`);
 
   if (DRY_RUN) {
-    console.log(`[DRY RUN] Would write ${items.length} GRN line(s) to Sage`);
-    return;
+    console.log(`[DRY RUN] Would POST ${SDK_BASE_URL}/api/v1/goods-receipts/post`);
+    console.log(`[DRY RUN] Payload: ${JSON.stringify({ ...body, confirmPost: false })}`);
+    return {
+      dryRun: true,
+      message: `DRY RUN: ${grn.grn_number} would post to Sage GRV through SDK API`,
+      details: { sdkGoodsReceipt: { ...body, confirmPost: false } },
+    };
   }
 
-  const pool = await sql.connect(sageConfig);
+  const result = await postJson(
+    `${SDK_BASE_URL}/api/v1/goods-receipts/post`,
+    SDK_API_KEY,
+    body
+  );
 
-  try {
-    for (const item of items) {
-      const sageCode = item.raw_materials?.sage_code;
-      const rmName   = item.raw_materials?.name;
+  const grvNumber = result.grvNumber || result.goodsReceipt?.grvNumber || result.documentNumber;
+  console.log(`  Sage GRV response: ${result.status || 'ok'} - ${grvNumber || result.message || 'posted'}`);
 
-      if (!sageCode) {
-        console.log(`  ⚠️  No sage_code for item — skipping`);
-        continue;
-      }
-
-      const stockResult = await pool.request()
-        .input('Code', sql.VarChar, sageCode)
-        .query(`SELECT StockLink FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
-
-      if (stockResult.recordset.length === 0) {
-        console.log(`  ⚠️  ${sageCode} not found in Sage — skipping`);
-        continue;
-      }
-
-      const stockLink   = stockResult.recordset[0].StockLink;
-      const reference   = grn.grn_number.substring(0, 20);
-      const description = (rmName || sageCode).substring(0, 40);
-      const qty         = Number(item.received_qty);
-      const cost        = Number(item.unit_cost || 0);
-
-      console.log(`  Processing: ${sageCode} — ${qty}kg @ $${cost}`);
-
-      // STEP A — Write journal line
-      await pool.request()
-        .input('iInvJrBatchID', sql.Int,      2)
-        .input('iStockID',      sql.Int,      stockLink)
-        .input('iWarehouseID',  sql.Int,      18)
-        .input('dTrDate',       sql.DateTime, new Date(grn.received_date))
-        .input('iTrCodeID',     sql.Int,      31)
-        .input('iGLContraID',   sql.Int,      0)
-        .input('cReference',    sql.VarChar,  reference)
-        .input('cDescription',  sql.VarChar,  description)
-        .input('fQtyIn',        sql.Float,    qty)
-        .input('fQtyOut',       sql.Float,    0)
-        .input('fNewCost',      sql.Float,    cost)
-        .input('bIsLotItem',    sql.Bit,      0)
-        .input('bIsSerialItem', sql.Bit,      0)
-        .query(`
-          INSERT INTO _etblInvJrBatchLines (
-            iInvJrBatchID, iStockID, iWarehouseID,
-            dTrDate, iTrCodeID, iGLContraID,
-            cReference, cDescription,
-            fQtyIn, fQtyOut, fNewCost,
-            bIsLotItem, bIsSerialItem
-          ) VALUES (
-            @iInvJrBatchID, @iStockID, @iWarehouseID,
-            @dTrDate, @iTrCodeID, @iGLContraID,
-            @cReference, @cDescription,
-            @fQtyIn, @fQtyOut, @fNewCost,
-            @bIsLotItem, @bIsSerialItem
-          )
-        `);
-
-      console.log(`  ✅ Journal line written: ${sageCode} +${qty}kg`);
-
-      // STEP B — Update QtyOnHand
-      const existing = await pool.request()
-        .input('StockID', sql.Int, stockLink)
-        .input('WhseID',  sql.Int, 18)
-        .query(`SELECT idStockQtys, QtyOnHand FROM _etblStockQtys WHERE StockID = @StockID AND WhseID = @WhseID`);
-
-      if (existing.recordset.length > 0) {
-        const before = existing.recordset[0].QtyOnHand;
-        await pool.request()
-          .input('StockID', sql.Int,   stockLink)
-          .input('WhseID',  sql.Int,   18)
-          .input('QtyIn',   sql.Float, qty)
-          .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand + @QtyIn WHERE StockID = @StockID AND WhseID = @WhseID`);
-        console.log(`  ✅ QtyOnHand updated: ${before} → ${before + qty} (${sageCode} WhseID=18)`);
-      } else {
-        await pool.request()
-          .input('StockID', sql.Int,   stockLink)
-          .input('WhseID',  sql.Int,   18)
-          .input('QtyIn',   sql.Float, qty)
-          .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
-        console.log(`  ✅ QtyOnHand inserted: ${qty} (${sageCode} WhseID=18 — new row)`);
-      }
-
-      // STEP C — Update average cost
-      const whseResult = await pool.request()
-        .input('StockLink', sql.Int, stockLink)
-        .input('WhseID',    sql.Int, 18)
-        .query(`SELECT IdWhseStk, fAverageCost FROM WhseStk WHERE WHStockLink = @StockLink AND WHWhseID = @WhseID`);
-
-      if (whseResult.recordset.length > 0) {
-        await pool.request()
-          .input('StockLink', sql.Int,   stockLink)
-          .input('WhseID',    sql.Int,   18)
-          .input('NewCost',   sql.Float, cost)
-          .query(`UPDATE WhseStk SET fAverageCost = @NewCost WHERE WHStockLink = @StockLink AND WHWhseID = @WhseID`);
-        console.log(`  ✅ Average cost updated: ${sageCode} → $${cost}/kg (WhseStk)`);
-      } else {
-        console.log(`  ℹ️  No WhseStk row for ${sageCode} WhseID=18 — fAverageCost not set (non-critical)`);
-      }
-    }
-  } finally {
-    await sql.close();
-    console.log(`  Connection closed.`);
-  }
+  return {
+    message: grvNumber
+      ? `Posted to Sage GRV ${grvNumber} from MES ${grn.grn_number}`
+      : `Posted to Sage GRV from MES ${grn.grn_number}`,
+    sage_response: result,
+    details: {
+      sdkGoodsReceipt: body,
+      sageStatus: result.status || 'posted',
+      sageGrvNumber: grvNumber || null,
+      sageMessage: result.message || null,
+    },
+  };
 }
 
 module.exports = { handleGoodsReceipt };
 
 if (require.main === module) {
-  handleGoodsReceipt({ reference_id: process.argv[2] })
-    .then(() => { console.log('✅ Done'); process.exit(0); })
-    .catch((err) => { console.error('❌', err.message); process.exit(1); });
+  const grnId = process.argv[2];
+  if (!grnId) {
+    console.error('ERROR: Usage: node goodsReceiptAuto.js <goods_received_note_id>');
+    process.exit(1);
+  }
+
+  handleGoodsReceipt({ reference_id: grnId })
+    .then(() => process.exit(0))
+    .catch((err) => { console.error('ERROR:', err.message); process.exit(1); });
 }
