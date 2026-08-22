@@ -8,6 +8,7 @@ const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
 const { handleMaterialTransferToProduction } = require('./materialTransferSdkAuto');
+const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 
 const POLL_INTERVAL_MS = 30000;
 
@@ -75,6 +76,9 @@ async function processPendingEvents() {
           break;
         case 'material_transfer_to_production':
           handlerResult = await handleMaterialTransferToProduction(event);
+          break;
+        case 'rm_cost_updated':
+          handlerResult = await handleRmCostUpdated(event);
           break;
         default:
           console.log(`  ⚠️  Unknown event type: ${event.event_type} — skipping`);
