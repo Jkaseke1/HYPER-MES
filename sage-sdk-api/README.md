@@ -76,4 +76,4 @@ Invoke-RestMethod http://127.0.0.1:5088/api/v1/health
 - `POST /api/v1/goods-receipts/validate`
 - `POST /api/v1/goods-receipts/post`
 
-GRV posting uses the Sage SDK `PurchaseOrder.ProcessStock(grvNumber)` path. The direct SQL GRV stored procedure path is not the primary route.
+GRV posting uses the Sage SDK `PurchaseOrder.ProcessStock()` path. Sage controls the GRV number using its configured `HFGRV` sequence; MES must not supply a document number or use a database posting procedure.

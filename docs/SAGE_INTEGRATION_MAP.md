@@ -11,7 +11,7 @@
 
 | MES Action | MES Tables Updated | `sync_log.event_type` | Sage Pastel Effect | Bridge Handler |
 |---|---|---|---|---|
-| **GRN approved** (received goods from supplier) | `goods_received_notes.status='approved'`, `grn_items`, `raw_materials.current_stock` ↑, `raw_material_lots` row created (one per `grn_item`) | `grn_confirmed` | Creates a **GRV** using the Sage SDK API `PurchaseOrder.ProcessStock(grvNumber)`. | `bridge/goodsReceiptAuto.js` |
+| **GRN approved** (received goods from supplier) | `goods_received_notes.status='approved'`, `grn_items`, `raw_materials.current_stock` ↑, `raw_material_lots` row created (one per `grn_item`) | `grn_confirmed` | Creates a **GRV** using the Sage SDK API `PurchaseOrder.ProcessStock()`. Sage assigns the configured `HFGRV` number. | `bridge/goodsReceiptAuto.js` |
 | **Material Transfer received** (RM → Production) | `material_transfers.status='received'`, MES buffer/warehouse balances updated | `material_transfer_to_production` | Creates a **Warehouse Transfer** through the protected Sage SDK API. | `bridge/materialTransferSdkAuto.js` |
 | **Production Issue** (issue ingredient to Production Order) | `production_order_materials.issued=true`, `raw_material_lots.qty_remaining` ↓ (FIFO), `stock_movements` (type=`consumption`), `raw_materials.current_stock` ↓ | `materials_issued` | Creates a **Inventory Journal / Goods Issue** on the raw-material stock item (debits WIP / COGS, credits stock). | `bridge/goodsIssueAuto.js` |
 | **Production Completed** (batch finished, FG entered) | `production_orders.status='completed'`, `finished_goods_stock` ↑ (if wired) | `production_completed` | Creates an **Inventory Receipt** on the FG stock item (debits FG, credits WIP). | `bridge/batchCompleteAuto.js` |
