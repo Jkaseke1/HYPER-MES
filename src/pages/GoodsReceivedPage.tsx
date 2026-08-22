@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -30,6 +30,14 @@ interface GRNItem {
   expiry_date: string;
 }
 
+interface SageSyncStatus {
+  status: string;
+  message?: string | null;
+  sage_response?: any;
+  error_details?: any;
+  updated_at?: string | null;
+}
+
 const emptyItem: GRNItem = {
   raw_material_id: '',
   ordered_qty: '',
@@ -50,6 +58,8 @@ export default function GoodsReceivedPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
+  const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
+  const notifiedSyncRef = useRef<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   
   // Form state
@@ -96,6 +106,7 @@ export default function GoodsReceivedPage() {
       if (grnsRes.data) {
         setGrns(grnsRes.data as any);
         cacheData('goods_received_notes', grnsRes.data);
+        await fetchSageSyncStatuses(grnsRes.data as any[], false);
       }
       if (suppliersRes.data) {
         setSuppliers(suppliersRes.data as any);
@@ -116,7 +127,10 @@ export default function GoodsReceivedPage() {
         const cachedMaterials = await getCachedData('raw_materials');
         const cachedWb = await getCachedData('weigh_bridge_tickets');
 
-        if (cachedGrns) setGrns(cachedGrns);
+        if (cachedGrns) {
+          setGrns(cachedGrns);
+          await fetchSageSyncStatuses(cachedGrns as any[], false);
+        }
         if (cachedSuppliers) setSuppliers(cachedSuppliers);
         if (cachedMaterials) setMaterials(cachedMaterials);
         if (cachedWb) setWbTickets(cachedWb);
@@ -127,7 +141,10 @@ export default function GoodsReceivedPage() {
       const cachedMaterials = await getCachedData('raw_materials');
       const cachedWb = await getCachedData('weigh_bridge_tickets');
 
-      if (cachedGrns) setGrns(cachedGrns);
+      if (cachedGrns) {
+        setGrns(cachedGrns);
+        await fetchSageSyncStatuses(cachedGrns as any[], false);
+      }
       if (cachedSuppliers) setSuppliers(cachedSuppliers);
       if (cachedMaterials) setMaterials(cachedMaterials);
       if (cachedWb) setWbTickets(cachedWb);
@@ -138,6 +155,70 @@ export default function GoodsReceivedPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!document.hidden && grns.length > 0) {
+        fetchSageSyncStatuses(grns as any[]);
+      }
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, [grns]);
+
+  async function fetchSageSyncStatuses(grnRows: any[], notify = true) {
+    const grnIds = (grnRows || []).map((grn) => grn.id).filter(Boolean);
+    if (grnIds.length === 0) {
+      setSyncByGrnId({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('sync_log')
+      .select('reference_id, status, message, sage_response, error_details, updated_at')
+      .eq('event_type', 'grn_confirmed')
+      .in('reference_id', grnIds)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.warn('Failed to load GRN Sage sync statuses:', error.message);
+      return;
+    }
+
+    const latestByGrn: Record<string, SageSyncStatus> = {};
+    (data || []).forEach((row: any) => {
+      if (!latestByGrn[row.reference_id]) {
+        latestByGrn[row.reference_id] = row;
+      }
+    });
+
+    setSyncByGrnId(latestByGrn);
+
+    if (!notify) {
+      Object.entries(latestByGrn).forEach(([grnId, sync]) => {
+        if (['success', 'failed'].includes(sync.status)) {
+          notifiedSyncRef.current[grnId] = `${sync.status}:${sync.updated_at || ''}`;
+        }
+      });
+      return;
+    }
+    Object.entries(latestByGrn).forEach(([grnId, sync]) => {
+      if (!['success', 'failed'].includes(sync.status)) return;
+      const notificationKey = `${sync.status}:${sync.updated_at || ''}`;
+      if (notifiedSyncRef.current[grnId] === notificationKey) return;
+      notifiedSyncRef.current[grnId] = notificationKey;
+
+      const grn = grnRows.find((row) => row.id === grnId);
+      const grnNumber = grn?.grn_number || 'GRN';
+
+      if (sync.status === 'success') {
+        const grvNumber = getSageGrvNumber(sync);
+        toast.success(grvNumber ? `${grnNumber} posted to Sage as ${grvNumber}` : `${grnNumber} posted to Sage`);
+      } else {
+        toast.error(`${grnNumber} Sage posting failed`);
+      }
+    });
+  }
 
   const generateGRNNumber = async () => {
     const year = new Date().getFullYear();
@@ -313,6 +394,61 @@ export default function GoodsReceivedPage() {
     }
   };
 
+  const getSageGrvNumber = (sync?: SageSyncStatus) => {
+    if (!sync?.sage_response) return '';
+    return sync.sage_response.grvNumber ||
+      sync.sage_response.documentNumber ||
+      sync.sage_response.goodsReceipt?.grvNumber ||
+      sync.sage_response.goodsReceipt?.documentNumber ||
+      '';
+  };
+
+  const getSageErrorMessage = (sync?: SageSyncStatus) => {
+    return sync?.error_details?.response?.exceptionMessage ||
+      sync?.error_details?.response?.message ||
+      sync?.error_details?.message ||
+      sync?.message ||
+      'Sage posting failed';
+  };
+
+  const getSageBadge = (grnId: string) => {
+    const sync = syncByGrnId[grnId];
+
+    if (!sync) {
+      return <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 font-semibold">Not queued</Badge>;
+    }
+
+    if (sync.status === 'success') {
+      const grvNumber = getSageGrvNumber(sync);
+      return (
+        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          {grvNumber ? `Posted ${grvNumber}` : 'Posted to Sage'}
+        </Badge>
+      );
+    }
+
+    if (sync.status === 'failed') {
+      return (
+        <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border border-rose-200 font-semibold" title={getSageErrorMessage(sync)}>
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Failed
+        </Badge>
+      );
+    }
+
+    if (sync.status === 'pending' || sync.status === 'processing') {
+      return (
+        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border border-amber-200 font-semibold">
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          {sync.status === 'processing' ? 'Posting' : 'Queued'}
+        </Badge>
+      );
+    }
+
+    return <Badge variant="outline" className="font-semibold capitalize">{sync.status}</Badge>;
+  };
+
   const supplierLabel = (supplier?: Supplier | null) => {
     if (!supplier) return '';
     const code = supplier.sage_code || supplier.code;
@@ -347,6 +483,8 @@ export default function GoodsReceivedPage() {
   );
   const wbNettMassValue = Number(wbForm.nett_mass || 0);
   const wbVariancePct = wbNettMassValue > 0 ? Math.abs((totalReceivedQty - wbNettMassValue) / wbNettMassValue) * 100 : 0;
+  const selectedSync = viewing ? syncByGrnId[viewing.id] : undefined;
+  const selectedGrvNumber = getSageGrvNumber(selectedSync);
 
   if (loading) {
     return (
@@ -437,6 +575,7 @@ export default function GoodsReceivedPage() {
                   <TableHead className="font-bold text-slate-700">Received Date</TableHead>
                   <TableHead className="font-bold text-slate-700">Initiated By</TableHead>
                   <TableHead className="font-bold text-slate-700">Status</TableHead>
+                  <TableHead className="font-bold text-slate-700">Sage</TableHead>
                   <TableHead className="font-bold text-slate-700">Created Date</TableHead>
                   <TableHead className="text-right font-bold text-slate-700 pr-6">Action</TableHead>
                 </TableRow>
@@ -444,7 +583,7 @@ export default function GoodsReceivedPage() {
               <TableBody>
                 {filteredGRNs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-slate-400 py-12">
+                    <TableCell colSpan={9} className="text-center text-slate-400 py-12">
                       No Goods Received Notes found matching criteria
                     </TableCell>
                   </TableRow>
@@ -464,6 +603,7 @@ export default function GoodsReceivedPage() {
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
                       <TableCell className="text-xs text-slate-700 font-medium">{(grn as any).receiver?.full_name || (grn as any).receiver?.email || '—'}</TableCell>
                       <TableCell>{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell>{getSageBadge(grn.id)}</TableCell>
                       <TableCell className="text-xs text-slate-500">
                         {format(new Date(grn.created_at), 'MMM d, yyyy • HH:mm')}
                       </TableCell>
@@ -506,6 +646,10 @@ export default function GoodsReceivedPage() {
                       )}
                     </div>
                     {getStatusBadge(grn.status)}
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Sage</span>
+                    {getSageBadge(grn.id)}
                   </div>
 
                   <div>
@@ -1102,6 +1246,7 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {viewing && getSageBadge(viewing.id)}
                 {viewing && (
                   <Badge
                     variant={viewing.status === 'approved' ? 'default' : viewing.status === 'rejected' ? 'destructive' : 'secondary'}
@@ -1141,6 +1286,32 @@ export default function GoodsReceivedPage() {
             </div>
           )}
 
+          {viewing && (
+            <div className={`flex-shrink-0 mx-5 mt-2 rounded-lg px-3 py-2 border ${
+              selectedSync?.status === 'success'
+                ? 'bg-emerald-50 border-emerald-200'
+                : selectedSync?.status === 'failed'
+                  ? 'bg-rose-50 border-rose-200'
+                  : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {getSageBadge(viewing.id)}
+                  <span className="text-xs font-semibold text-slate-700">
+                    {selectedSync?.message || (viewing.status === 'approved' ? 'Waiting for Sage bridge posting result' : 'Sage posting starts after approval')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400 font-semibold uppercase tracking-wide">Sage GRV</span>
+                  <span className="font-mono font-bold text-slate-900">{selectedGrvNumber || '-'}</span>
+                </div>
+              </div>
+              {selectedSync?.status === 'failed' && (
+                <p className="text-xs text-rose-700 mt-1">{getSageErrorMessage(selectedSync)}</p>
+              )}
+            </div>
+          )}
+
           {/* Main Content - Two Column */}
           <div className="flex-1 overflow-y-auto px-5 py-3">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 h-full">
@@ -1164,6 +1335,10 @@ export default function GoodsReceivedPage() {
                 <div className="border-l-3 border-l-purple-500 bg-white rounded-lg border border-slate-200 p-2.5">
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Initiated By</p>
                   <p className="text-xs font-semibold text-slate-800 mt-0.5">{(viewing as any)?.receiver?.full_name || (viewing as any)?.receiver?.email || 'System'}</p>
+                </div>
+                <div className="border-l-3 border-l-teal-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Sage GRV Number</p>
+                  <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{selectedGrvNumber || '-'}</p>
                 </div>
 
                 {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
