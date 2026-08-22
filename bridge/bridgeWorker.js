@@ -30,6 +30,25 @@ async function processPendingEvents() {
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
 
   for (const event of pending) {
+    // Claim the event atomically. A second bridge instance may have fetched the
+    // same pending row, but only one instance is allowed to post it to Sage.
+    const { data: claimed, error: claimError } = await supabase
+      .from('sync_log')
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .eq('id', event.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+
+    if (claimError) {
+      console.error(`  ❌ Failed to claim ${event.id}: ${claimError.message}`);
+      continue;
+    }
+
+    if (!claimed) {
+      console.log(`  ⏭️  ${event.event_type} for ${event.reference_id} was claimed by another worker`);
+      continue;
+    }
 
     // ── Idempotency check ─────────────────────────────────────────────────────
     const { data: alreadyDone } = await supabase
@@ -54,11 +73,6 @@ async function processPendingEvents() {
     console.log(`\nProcessing: ${event.event_type} — ${event.reference_type} — ${event.reference_id}`);
 
     try {
-      await supabase
-        .from('sync_log')
-        .update({ status: 'processing', updated_at: new Date().toISOString() })
-        .eq('id', event.id);
-
       let handlerResult = null;
 
       switch (event.event_type) {

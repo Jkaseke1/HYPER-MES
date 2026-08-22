@@ -54,8 +54,18 @@ namespace SDK_Test
             }
 
             var reference = request.Reference.Trim();
+            var existingGrvNumber = FindStandaloneGrvByMesReference(reference);
+            if (!string.IsNullOrWhiteSpace(existingGrvNumber))
+                return Ok(PostedGoodsReceiptResponse(request, existingGrvNumber, "already-posted"));
+
             if (!PostedReferences.TryAdd(reference, true))
+            {
+                existingGrvNumber = FindStandaloneGrvByMesReference(reference);
+                if (!string.IsNullOrWhiteSpace(existingGrvNumber))
+                    return Ok(PostedGoodsReceiptResponse(request, existingGrvNumber, "already-posted"));
+
                 return StatusCode(System.Net.HttpStatusCode.Conflict);
+            }
 
             try
             {
@@ -70,18 +80,7 @@ namespace SDK_Test
                     AdvanceSageGrvSequence(grvNumber);
                 }
 
-                return Ok(new
-                {
-                    status = "posted",
-                    environment = "UAT",
-                    action = "goods-receipt-grv",
-                    postingMode = "legacy-standalone-grv",
-                    sagePosting = "completed",
-                    grvNumber = grvNumber,
-                    documentNumber = grvNumber,
-                    message = "Goods receipt posted to Sage UAT as a standalone GRV.",
-                    goodsReceipt = GoodsReceiptSummary(request, grvNumber)
-                });
+                return Ok(PostedGoodsReceiptResponse(request, grvNumber, "posted"));
             }
             catch (Exception ex)
             {
@@ -98,6 +97,43 @@ namespace SDK_Test
                     exceptionMessage = ex.Message,
                     detail = ex.ToString()
                 });
+            }
+        }
+
+        private static object PostedGoodsReceiptResponse(GoodsReceiptRequest request, string grvNumber, string status)
+        {
+            var alreadyPosted = string.Equals(status, "already-posted", StringComparison.OrdinalIgnoreCase);
+            return new
+            {
+                status = status,
+                environment = "UAT",
+                action = "goods-receipt-grv",
+                postingMode = "legacy-standalone-grv",
+                sagePosting = "completed",
+                grvNumber = grvNumber,
+                documentNumber = grvNumber,
+                message = alreadyPosted
+                    ? "Sage UAT already contains this standalone GRV; returning the existing posting."
+                    : "Goods receipt posted to Sage UAT as a standalone GRV.",
+                goodsReceipt = GoodsReceiptSummary(request, grvNumber)
+            };
+        }
+
+        private static string FindStandaloneGrvByMesReference(string mesReference)
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 inv.InvNumber
+                FROM PostAP AS ap
+                INNER JOIN InvNum AS inv ON inv.AutoIndex = ap.InvNumKey
+                WHERE ap.Id = 'Grv'
+                  AND ap.Reference2 = @MesReference
+                  AND inv.DocType = 2
+                ORDER BY ap.AutoIdx DESC;", connection))
+            {
+                command.Parameters.Add("@MesReference", SqlDbType.VarChar, 50).Value = mesReference;
+                connection.Open();
+                return command.ExecuteScalar() as string;
             }
         }
 
