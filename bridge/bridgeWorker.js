@@ -1,12 +1,13 @@
 // bridgeWorker.js - Main bridge worker that polls sync_log and processes events
 // Coordinates all auto event handlers and runs continuously
-// Uses direct MSSQL to Sage Pastel — no COM / winax dependency required
+// Uses direct MSSQL for legacy handlers and the validated Sage SDK API for warehouse transfers.
 
 const { supabase, DRY_RUN } = require('./lib/db');
 const { handleGoodsReceipt }  = require('./goodsReceiptAuto');
 const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
+const { handleMaterialTransferToProduction } = require('./materialTransferSdkAuto');
 
 const POLL_INTERVAL_MS = 30000;
 
@@ -57,18 +58,23 @@ async function processPendingEvents() {
         .update({ status: 'processing', updated_at: new Date().toISOString() })
         .eq('id', event.id);
 
+      let handlerResult = null;
+
       switch (event.event_type) {
         case 'grn_confirmed':
-          await handleGoodsReceipt(event);
+          handlerResult = await handleGoodsReceipt(event);
           break;
         case 'materials_issued':
-          await handleGoodsIssue(event);
+          handlerResult = await handleGoodsIssue(event);
           break;
         case 'production_completed':
-          await handleBatchComplete(event);
+          handlerResult = await handleBatchComplete(event);
           break;
         case 'dispatch_delivered':
-          await handleDispatch(event);
+          handlerResult = await handleDispatch(event);
+          break;
+        case 'material_transfer_to_production':
+          handlerResult = await handleMaterialTransferToProduction(event);
           break;
         default:
           console.log(`  ⚠️  Unknown event type: ${event.event_type} — skipping`);
@@ -79,9 +85,18 @@ async function processPendingEvents() {
           continue;
       }
 
+      const successUpdate = {
+        status: 'success',
+        updated_at: new Date().toISOString(),
+      };
+
+      if (handlerResult?.message) successUpdate.message = handlerResult.message;
+      if (handlerResult?.sage_response) successUpdate.sage_response = handlerResult.sage_response;
+      if (handlerResult?.details) successUpdate.details = handlerResult.details;
+
       await supabase
         .from('sync_log')
-        .update({ status: 'success', updated_at: new Date().toISOString() })
+        .update(successUpdate)
         .eq('id', event.id);
 
       console.log(`  ✅ ${event.event_type} processed successfully`);

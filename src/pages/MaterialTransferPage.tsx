@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -33,8 +33,71 @@ interface MaterialTransfer {
   warehouses?: { name: string };
 }
 
+interface SageTransferSyncLog {
+  id: string;
+  reference_id: string;
+  status: 'success' | 'failed' | 'pending' | 'processing' | 'pending_finance_review' | 'retry';
+  message?: string | null;
+  error_details?: any;
+  sage_response?: any;
+  updated_at: string;
+  created_at: string;
+}
+
+function getSageSyncText(log?: SageTransferSyncLog) {
+  if (!log) return 'Not queued';
+  if (log.status === 'success') return 'Posted to Sage';
+  if (log.status === 'failed') return 'Sage failed';
+  if (log.status === 'processing') return 'Posting to Sage';
+  if (log.status === 'pending') return 'Sage pending';
+  return log.status.replace(/_/g, ' ');
+}
+
+function SageSyncBadge({ log }: { log?: SageTransferSyncLog }) {
+  const base = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap';
+
+  if (!log) {
+    return (
+      <span className={`${base} bg-slate-50 text-slate-500 border-slate-200`}>
+        <Clock className="w-3 h-3" /> Not queued
+      </span>
+    );
+  }
+
+  if (log.status === 'success') {
+    return (
+      <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>
+        <CheckCircle2 className="w-3 h-3" /> Posted to Sage
+      </span>
+    );
+  }
+
+  if (log.status === 'failed') {
+    return (
+      <span className={`${base} bg-red-50 text-red-700 border-red-200`}>
+        <AlertTriangle className="w-3 h-3" /> Sage failed
+      </span>
+    );
+  }
+
+  if (log.status === 'processing') {
+    return (
+      <span className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>
+        <Loader2 className="w-3 h-3 animate-spin" /> Posting
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>
+      <Clock className="w-3 h-3" /> Pending Sage
+    </span>
+  );
+}
+
 export default function MaterialTransferPage() {
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
+  const [sageSyncLogs, setSageSyncLogs] = useState<Record<string, SageTransferSyncLog>>({});
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
@@ -79,6 +142,9 @@ export default function MaterialTransferPage() {
         fetchData(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
+        fetchData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
         fetchData(true);
       })
       .subscribe();
@@ -133,7 +199,30 @@ export default function MaterialTransferPage() {
     ]);
 
     if (transfersRes.data) {
-      setTransfers(transfersRes.data as any);
+      const nextTransfers = transfersRes.data as any;
+      setTransfers(nextTransfers);
+
+      const transferIds = nextTransfers.map((transfer: MaterialTransfer) => transfer.id);
+      if (transferIds.length > 0) {
+        const { data: syncRows, error: syncError } = await supabase
+          .from('sync_log')
+          .select('id, reference_id, status, message, error_details, sage_response, created_at, updated_at')
+          .eq('event_type', 'material_transfer_to_production')
+          .in('reference_id', transferIds)
+          .order('created_at', { ascending: false });
+
+        if (syncError) {
+          console.warn('Failed to load material transfer Sage sync logs:', syncError);
+        } else {
+          const nextLogs: Record<string, SageTransferSyncLog> = {};
+          (syncRows || []).forEach((row: SageTransferSyncLog) => {
+            if (!nextLogs[row.reference_id]) nextLogs[row.reference_id] = row;
+          });
+          setSageSyncLogs(nextLogs);
+        }
+      } else {
+        setSageSyncLogs({});
+      }
     }
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
@@ -484,7 +573,7 @@ export default function MaterialTransferPage() {
                     title="Select all in-buffer transfers"
                   />
                 </th>
-                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Initiated By', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Actions'].map((header) => (
+                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Initiated By', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
@@ -494,7 +583,7 @@ export default function MaterialTransferPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={13} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
@@ -505,6 +594,7 @@ export default function MaterialTransferPage() {
                   const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
                   const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
                   const isSelected = selectedTransferIds.includes(transfer.id);
+                  const sageSyncLog = sageSyncLogs[transfer.id];
                   return (
                     <tr
                       key={transfer.id}
@@ -555,6 +645,9 @@ export default function MaterialTransferPage() {
                       <td className="px-3 py-2 text-sm text-slate-600">{transfer.purpose || '-'}</td>
                       <td className="px-3 py-2">
                         <StatusBadge status={transfer.status || 'pending'} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <SageSyncBadge log={sageSyncLog} />
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -831,7 +924,7 @@ export default function MaterialTransferPage() {
             {viewTransfer && (
               <>
                 {/* Top Stat Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Material Name</p>
                     <p className="mt-1 text-base font-black text-slate-900">{viewTransfer.raw_materials?.name || '-'}</p>
@@ -848,6 +941,15 @@ export default function MaterialTransferPage() {
                     <div className="mt-1.5">
                       <StatusBadge status={viewTransfer.status || 'pending'} />
                     </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Sage Posting</p>
+                    <div className="mt-1.5">
+                      <SageSyncBadge log={sageSyncLogs[viewTransfer.id]} />
+                    </div>
+                    <p className="mt-2 text-[11px] font-medium text-slate-500 leading-snug">
+                      {sageSyncLogs[viewTransfer.id]?.message || getSageSyncText(sageSyncLogs[viewTransfer.id])}
+                    </p>
                   </div>
                 </div>
 

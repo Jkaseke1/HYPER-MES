@@ -10,6 +10,7 @@ This bridge connects the HYPER MES system with Sage Pastel accounting software, 
 - **goodsIssueAuto.js** - Handles material issuance → Sage inventory issues  
 - **batchCompleteAuto.js** - Handles production completion → Sage finished goods receipts
 - **dispatchAuto.js** - Handles dispatch deliveries → Sage customer invoices
+- **materialTransferSdkAuto.js** - Handles approved RM → Production warehouse transfers through the protected Sage SDK API
 
 ### ✅ **Priority 3: Bridge Worker (COMPLETE)**
 - **bridgeWorker.js** - Main worker that polls sync_log every 30 seconds
@@ -67,6 +68,12 @@ npm start
 3. Bridge: Reads dispatch_orders + dispatch_items
 4. Sage: Posts customer invoice
 
+### **Event 5: Material Transfer to Production**
+1. MES: material_transfers.status = 'received'
+2. Trigger: Creates sync_log entry with event_type `material_transfer_to_production`
+3. Bridge: Reads material_transfers + raw_materials.sage_code
+4. Sage SDK API: Posts warehouse transfer RM → PD with `confirmPost: true`
+
 ## 🔧 **Configuration**
 
 ### **Environment Variables**
@@ -86,6 +93,10 @@ SAGE_PASSWORD=
 POLL_INTERVAL=30000  # 30 seconds
 BATCH_SIZE=10
 MAX_RETRIES=3
+
+# Sage SDK API for warehouse transfers
+SAGE_SDK_API_BASE_URL=http://127.0.0.1:5088
+SAGE_SDK_API_KEY=your-protected-sdk-api-key
 ```
 
 ### **Required Sage Codes**
@@ -172,6 +183,7 @@ npm run test-grn      # Process GRN events
 npm run test-issue    # Process material issue events  
 npm run test-batch    # Process batch completion events
 npm run test-dispatch # Process dispatch events
+npm run test-material-transfer-sdk -- <material_transfer_id>
 ```
 
 ## 🔄 **Development**

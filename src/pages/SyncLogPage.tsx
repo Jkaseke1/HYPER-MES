@@ -7,9 +7,12 @@ interface SyncLog {
   event_type: string;
   reference_type: string;
   reference_id: string;
-  status: 'success' | 'failed' | 'pending' | 'processing';
-  description: string;
-  error_details?: string;
+  status: 'success' | 'failed' | 'pending' | 'processing' | 'pending_finance_review' | 'retry';
+  description?: string;
+  message?: string;
+  details?: any;
+  sage_response?: any;
+  error_details?: any;
   created_at: string;
   updated_at: string;
 }
@@ -24,15 +27,28 @@ const EVENT_TYPES = [
   'reconciliation_variance_approved',
   'rm_cost_updated',
   'reconciliation_completed',
+  'material_transfer_to_production',
 ];
-const STATUS_FILTERS = ['all', 'success', 'failed', 'pending', 'processing'];
+const STATUS_FILTERS = ['all', 'success', 'failed', 'pending', 'processing', 'pending_finance_review', 'retry'];
 
 const statusConfig: Record<string, { color: string; icon: any; label: string }> = {
   success: { color: 'emerald', icon: CheckCircle, label: 'Success' },
   failed: { color: 'red', icon: XCircle, label: 'Failed' },
   pending: { color: 'amber', icon: Clock, label: 'Pending' },
-  processing: { color: 'blue', icon: RefreshCw, label: 'Processing' }
+  processing: { color: 'blue', icon: RefreshCw, label: 'Processing' },
+  pending_finance_review: { color: 'purple', icon: Clock, label: 'Finance Review' },
+  retry: { color: 'amber', icon: RotateCcw, label: 'Retry' }
 };
+
+function logMessage(log: SyncLog) {
+  return log.message || log.description || '';
+}
+
+function formatJson(value: any) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}
 
 export default function SyncLogPage() {
   const [logs, setLogs] = useState<SyncLog[]>([]);
@@ -113,8 +129,9 @@ export default function SyncLogPage() {
   const filteredLogs = logs.filter(log => 
     log && 
     log.status && 
-    (log.description?.toLowerCase().includes(search.toLowerCase()) ||
-     log.reference_type?.toLowerCase().includes(search.toLowerCase()))
+    (logMessage(log).toLowerCase().includes(search.toLowerCase()) ||
+     log.reference_type?.toLowerCase().includes(search.toLowerCase()) ||
+     log.event_type?.toLowerCase().includes(search.toLowerCase()))
   );
 
   const toggleErrorExpansion = (logId: string) => {
@@ -278,7 +295,12 @@ export default function SyncLogPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-sm text-slate-700">{log.description}</p>
+                          <p className="text-sm text-slate-700">{logMessage(log)}</p>
+                          {log.event_type === 'material_transfer_to_production' && log.status === 'success' && (
+                            <p className="mt-1 text-xs font-semibold text-emerald-700">
+                              Sage warehouse transfer confirmed
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm text-slate-700">
@@ -297,11 +319,11 @@ export default function SyncLogPage() {
                                 Retry
                               </button>
                             )}
-                            {log.error_details && (
+                            {(log.error_details || log.sage_response || log.details) && (
                               <button
                                 onClick={() => toggleErrorExpansion(log.id)}
                                 className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                                title="View error details"
+                                title="View sync details"
                               >
                                 {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </button>
@@ -309,14 +331,28 @@ export default function SyncLogPage() {
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && log.error_details && (
-                        <tr className="bg-red-50">
+                      {isExpanded && (log.error_details || log.sage_response || log.details) && (
+                        <tr className={log.status === 'failed' ? 'bg-red-50' : 'bg-emerald-50'}>
                           <td colSpan={6} className="px-4 py-3">
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold text-red-700">Error Details:</p>
-                              <pre className="text-xs text-red-600 bg-red-100 p-2 rounded overflow-x-auto">
-                                {log.error_details}
-                              </pre>
+                              {log.error_details && (
+                                <>
+                                  <p className="text-xs font-semibold text-red-700">Error Details:</p>
+                                  <pre className="text-xs text-red-600 bg-red-100 p-2 rounded overflow-x-auto">{formatJson(log.error_details)}</pre>
+                                </>
+                              )}
+                              {log.sage_response && (
+                                <>
+                                  <p className="text-xs font-semibold text-emerald-700">Sage Response:</p>
+                                  <pre className="text-xs text-emerald-700 bg-emerald-100 p-2 rounded overflow-x-auto">{formatJson(log.sage_response)}</pre>
+                                </>
+                              )}
+                              {log.details && (
+                                <>
+                                  <p className="text-xs font-semibold text-slate-700">Sync Details:</p>
+                                  <pre className="text-xs text-slate-700 bg-white p-2 rounded overflow-x-auto">{formatJson(log.details)}</pre>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
