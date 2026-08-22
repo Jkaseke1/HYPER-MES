@@ -213,7 +213,9 @@ export default function GoodsReceivedPage() {
 
       if (sync.status === 'success') {
         const grvNumber = getSageGrvNumber(sync);
-        toast.success(grvNumber ? `${grnNumber} posted to Sage as ${grvNumber}` : `${grnNumber} posted to Sage`);
+        const purchaseOrderNumber = getSagePurchaseOrderNumber(sync);
+        const documentLabel = [purchaseOrderNumber, grvNumber].filter(Boolean).join(' / ');
+        toast.success(documentLabel ? `${grnNumber} posted to Sage as ${documentLabel}` : `${grnNumber} posted to Sage`);
       } else {
         toast.error(`${grnNumber} Sage posting failed`);
       }
@@ -403,6 +405,13 @@ export default function GoodsReceivedPage() {
       '';
   };
 
+  const getSagePurchaseOrderNumber = (sync?: SageSyncStatus) => {
+    if (!sync?.sage_response) return '';
+    return sync.sage_response.purchaseOrderNumber ||
+      sync.sage_response.goodsReceipt?.purchaseOrderNumber ||
+      '';
+  };
+
   const getSageErrorMessage = (sync?: SageSyncStatus) => {
     return sync?.error_details?.response?.exceptionMessage ||
       sync?.error_details?.response?.message ||
@@ -420,10 +429,12 @@ export default function GoodsReceivedPage() {
 
     if (sync.status === 'success') {
       const grvNumber = getSageGrvNumber(sync);
+      const purchaseOrderNumber = getSagePurchaseOrderNumber(sync);
+      const documentLabel = [purchaseOrderNumber, grvNumber].filter(Boolean).join(' / ');
       return (
-        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold">
+        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold" title={documentLabel || undefined}>
           <CheckCircle className="h-3 w-3 mr-1" />
-          {grvNumber ? `Posted ${grvNumber}` : 'Posted to Sage'}
+          {documentLabel ? `Posted ${documentLabel}` : 'Posted to Sage'}
         </Badge>
       );
     }

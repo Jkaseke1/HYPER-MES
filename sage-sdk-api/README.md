@@ -76,4 +76,4 @@ Invoke-RestMethod http://127.0.0.1:5088/api/v1/health
 - `POST /api/v1/goods-receipts/validate`
 - `POST /api/v1/goods-receipts/post`
 
-GRV posting uses the Sage SDK `PurchaseOrder.ProcessStock()` path. Sage controls the GRV number using its configured `HFGRV` sequence; MES must not supply a document number or use a database posting procedure.
+GRV posting uses the Sage SDK `PurchaseOrder.ProcessStock()` path. Sage controls the GRV number using its configured `HFGRV` sequence; MES must not supply a document number or use a database posting procedure. This is a receipt-only step: Sage creates a purchase order plus GRV receipt, while the supplier invoice remains unprocessed until Finance posts it.

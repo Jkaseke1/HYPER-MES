@@ -32,7 +32,7 @@ namespace SDK_Test
                 sageConnection = "verified",
                 sagePosting = "not performed",
                 message = "Validated against Sage UAT. No GRV was created.",
-                goodsReceipt = GoodsReceiptSummary(request, null)
+                goodsReceipt = GoodsReceiptSummary(request, null, null)
             });
         }
 
@@ -59,7 +59,7 @@ namespace SDK_Test
                 SdkSession.EnsureConnected();
                 ValidateSageMasters(request);
 
-                var grvNumber = PostGoodsReceivedVoucher(request);
+                var postedReceipt = PostGoodsReceivedVoucher(request);
 
                 return Ok(new
                 {
@@ -67,10 +67,11 @@ namespace SDK_Test
                     environment = "UAT",
                     action = "goods-receipt-grv",
                     sagePosting = "completed",
-                    grvNumber = grvNumber,
-                    documentNumber = grvNumber,
-                    message = "Goods receipt posted to Sage UAT as GRV.",
-                    goodsReceipt = GoodsReceiptSummary(request, grvNumber)
+                    grvNumber = postedReceipt.GrvNumber,
+                    purchaseOrderNumber = postedReceipt.PurchaseOrderNumber,
+                    documentNumber = postedReceipt.GrvNumber,
+                    message = "Goods receipt posted to Sage UAT as a purchase-order GRV receipt.",
+                    goodsReceipt = GoodsReceiptSummary(request, postedReceipt.GrvNumber, postedReceipt.PurchaseOrderNumber)
                 });
             }
             catch (Exception ex)
@@ -91,7 +92,7 @@ namespace SDK_Test
             }
         }
 
-        private static string PostGoodsReceivedVoucher(GoodsReceiptRequest request)
+        private static PostedGoodsReceipt PostGoodsReceivedVoucher(GoodsReceiptRequest request)
         {
             var txDate = request.ReceivedDate == default(DateTime)
                 ? DateTime.Today
@@ -133,7 +134,12 @@ namespace SDK_Test
             }
 
             // Sage controls the GRV number through its configured HFGRV sequence.
-            return purchaseOrder.ProcessStock();
+            var grvNumber = purchaseOrder.ProcessStock();
+            return new PostedGoodsReceipt
+            {
+                GrvNumber = grvNumber,
+                PurchaseOrderNumber = purchaseOrder.OrderNo
+            };
         }
 
         private static void ValidateSageMasters(GoodsReceiptRequest request)
@@ -184,12 +190,13 @@ namespace SDK_Test
             return null;
         }
 
-        private static object GoodsReceiptSummary(GoodsReceiptRequest request, string grvNumber)
+        private static object GoodsReceiptSummary(GoodsReceiptRequest request, string grvNumber, string purchaseOrderNumber)
         {
             return new
             {
                 reference = request.Reference.Trim(),
                 grvNumber = grvNumber,
+                purchaseOrderNumber = purchaseOrderNumber,
                 supplierCode = request.SupplierCode.Trim(),
                 supplierName = request.SupplierName,
                 supplierInvoiceNo = request.SupplierInvoiceNo,
@@ -220,6 +227,12 @@ namespace SDK_Test
                 return "";
             value = value.Trim();
             return value.Length <= length ? value : value.Substring(0, length);
+        }
+
+        private sealed class PostedGoodsReceipt
+        {
+            public string GrvNumber { get; set; }
+            public string PurchaseOrderNumber { get; set; }
         }
     }
 }

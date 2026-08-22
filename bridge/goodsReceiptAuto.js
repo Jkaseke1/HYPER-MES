@@ -192,17 +192,20 @@ async function handleGoodsReceipt(syncEvent) {
   );
 
   const grvNumber = result.grvNumber || result.goodsReceipt?.grvNumber || result.documentNumber;
-  console.log(`  Sage GRV response: ${result.status || 'ok'} - ${grvNumber || result.message || 'posted'}`);
+  const purchaseOrderNumber = result.purchaseOrderNumber || result.goodsReceipt?.purchaseOrderNumber || '';
+  const sageDocumentLabel = [purchaseOrderNumber, grvNumber].filter(Boolean).join(' / ');
+  console.log(`  Sage PO + GRV response: ${result.status || 'ok'} - ${sageDocumentLabel || result.message || 'posted'}`);
 
   return {
-    message: grvNumber
-      ? `Posted to Sage GRV ${grvNumber} from MES ${grn.grn_number}`
-      : `Posted to Sage GRV from MES ${grn.grn_number}`,
+    message: sageDocumentLabel
+      ? `Posted to Sage PO + GRV ${sageDocumentLabel} from MES ${grn.grn_number}`
+      : `Posted to Sage PO + GRV receipt from MES ${grn.grn_number}`,
     sage_response: result,
     details: {
       sdkGoodsReceipt: body,
       sageStatus: result.status || 'posted',
       sageGrvNumber: grvNumber || null,
+      sagePurchaseOrderNumber: purchaseOrderNumber || null,
       sageMessage: result.message || null,
     },
   };
