@@ -127,7 +127,7 @@ namespace SDK_Test
                 FROM PostAP AS ap
                 INNER JOIN InvNum AS inv ON inv.AutoIndex = ap.InvNumKey
                 WHERE ap.Id = 'Grv'
-                  AND ap.Reference2 = @MesReference
+                  AND ap.cReference2 = @MesReference
                   AND inv.DocType = 2
                 ORDER BY ap.AutoIdx DESC;", connection))
             {
