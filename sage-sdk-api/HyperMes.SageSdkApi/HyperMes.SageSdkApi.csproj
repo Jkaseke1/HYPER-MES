@@ -77,6 +77,8 @@
     <Compile Include="GoodsReceiptController.cs" />
     <Compile Include="GoodsReceiptRequest.cs" />
     <Compile Include="HealthController.cs" />
+    <Compile Include="MaterialIssueController.cs" />
+    <Compile Include="MaterialIssueRequest.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SdkConnectionController.cs" />
