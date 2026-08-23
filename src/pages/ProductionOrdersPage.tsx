@@ -1529,6 +1529,11 @@ export default function ProductionOrdersPage() {
                     </div>
                   </div>
 
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Sage material issue</span>
+                    {renderSageIssueStatus(order, true)}
+                  </div>
+
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                     <span className="text-[11px] text-slate-400">
                       {order.profiles?.full_name ? `Operator: ${order.profiles.full_name}` : ''}
@@ -1723,10 +1728,6 @@ export default function ProductionOrdersPage() {
                     bags
                   </div>
 
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Sage material issue</span>
-                    {renderSageIssueStatus(order, true)}
-                  </div>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-500">Sage stock quantity: {Number(form.planned_qty || 0).toLocaleString()} kg</p>
               </div>
