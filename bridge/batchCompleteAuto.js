@@ -1,155 +1,94 @@
-// batchCompleteAuto.js - Event 3: Production Completion Handler
-// Reads from production_orders by reference_id from sync_log
-// Posts to Sage Pastel via direct MSSQL: FG receipt into Despatch Warehouse (WhseID=20)
+// Posts completed production batches as Sage MFMF finished-goods receipts through the SDK API.
 
-const { sql, sageConfig, supabase, safeWrite } = require('./lib/db');
+const http = require('http');
+const https = require('https');
+const { supabase, DRY_RUN } = require('./lib/db');
+
+const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
+const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
+// Production completion is a manufacture receipt into Production. A clerk moves
+// finished goods to Dispatch later through the separate PD -> DEB workflow.
+const FINISHED_GOODS_WAREHOUSE = (process.env.SAGE_FINISHED_GOODS_WAREHOUSE_CODE || 'PD').trim().toUpperCase();
+
+function postJson(urlString, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const payload = JSON.stringify(body);
+    const transport = url.protocol === 'https:' ? https : http;
+    const request = transport.request({
+      method: 'POST', hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: `${url.pathname}${url.search}`,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-Hyper-Api-Key': SDK_API_KEY },
+    }, (response) => {
+      let responseBody = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { responseBody += chunk; });
+      response.on('end', () => {
+        let parsed = {};
+        try { parsed = responseBody ? JSON.parse(responseBody) : {}; } catch (_) { parsed = { message: responseBody }; }
+        if (response.statusCode >= 200 && response.statusCode < 300) return resolve(parsed);
+        const error = new Error(`Sage finished-goods API failed: ${parsed.message || parsed.Message || `HTTP ${response.statusCode}`}`);
+        error.statusCode = response.statusCode;
+        error.response = parsed;
+        reject(error);
+      });
+    });
+    request.on('error', (error) => reject(new Error(`Sage finished-goods API connection failed: ${error.message}`)));
+    request.write(payload);
+    request.end();
+  });
+}
+
+function localDateValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 async function handleBatchComplete(syncEvent) {
-  console.log('\n  → Event 3: Batch Complete (Auto)');
-
-  const orderId = syncEvent.reference_id;
+  console.log('\n  -> Batch Complete / Finished Goods Receipt (SDK)');
+  if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for protected Sage SDK API');
 
   const { data: order, error } = await supabase
     .from('production_orders')
-    .select(`
-      id, batch_number, actual_qty, actual_end,
-      cost_per_unit, rejected_qty,
-      formulations ( id, name, sage_code )
-    `)
-    .eq('id', orderId)
+    .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, formulations(id, name, sage_code)')
+    .eq('id', syncEvent.reference_id)
     .single();
+  if (error || !order) throw new Error(`Production order not found: ${syncEvent.reference_id}`);
 
-  if (error || !order) throw new Error(`Production order not found: ${orderId}`);
+  const itemCode = (order.formulations?.sage_code || '').trim();
+  const quantity = Number(order.actual_qty || 0) - Number(order.rejected_qty || 0);
+  const unitCost = Number(order.cost_per_unit || 0);
+  if (!itemCode) throw new Error(`No Sage code for finished good ${order.formulations?.name || order.id}`);
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`Invalid finished-goods quantity: ${quantity}`);
+  if (!Number.isFinite(unitCost) || unitCost < 0) throw new Error(`Invalid finished-goods unit cost: ${unitCost}`);
 
-  const sageCode = order.formulations?.sage_code;
-  const netQty   = Number(order.actual_qty || 0) - Number(order.rejected_qty || 0);
+  const body = {
+    reference: `WO-${order.batch_number}`.substring(0, 50),
+    reference2: `MES production order ${order.id}`.substring(0, 50),
+    itemCode,
+    description: `${order.formulations?.name || itemCode} manufacture`.substring(0, 255),
+    warehouse: FINISHED_GOODS_WAREHOUSE,
+    transactionCode: 'MFMF',
+    quantity,
+    unitCost,
+    receiptDate: localDateValue(),
+    confirmPost: true,
+  };
 
   console.log(`  Batch: ${order.batch_number}`);
-  console.log(`  Product: ${sageCode} — ${netQty}kg net`);
+  console.log(`  Product: ${itemCode} - ${quantity}kg to ${FINISHED_GOODS_WAREHOUSE}`);
+  console.log(`  Cost: ${unitCost} per kg, reference ${body.reference}`);
 
-  if (!sageCode) throw new Error(`No sage_code for formulation`);
-  if (netQty <= 0) throw new Error(`Invalid net quantity: ${netQty}`);
-
-  const { data: materials } = await supabase
-    .from('production_order_materials')
-    .select('unit_cost, actual_qty')
-    .eq('production_order_id', orderId);
-
-  const totalMaterialCost = materials?.reduce((sum, m) =>
-    sum + (Number(m.unit_cost || 0) * Number(m.actual_qty || 0)), 0) || 0;
-
-  const costPerUnit = netQty > 0
-    ? Number((totalMaterialCost / netQty).toFixed(4))
-    : 0;
-
-  console.log(`  Cost: $${totalMaterialCost.toFixed(2)} total / $${costPerUnit}/kg`);
-
-  let pool;
-  try {
-    pool = await sql.connect(sageConfig);
-
-    const stockResult = await pool.request()
-      .input('Code', sql.VarChar, sageCode)
-      .query(`SELECT StockLink, Description_1 FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
-
-    if (stockResult.recordset.length === 0) throw new Error(`${sageCode} not found in Sage`);
-
-    const stockLink   = stockResult.recordset[0].StockLink;
-    const reference   = `WO-${order.batch_number}`.substring(0, 20);
-    const description = `${order.formulations?.name} complete`.substring(0, 40);
-
-    await safeWrite(
-      `FG receipt: ${netQty}kg of ${sageCode} into Despatch Warehouse`,
-      async () => {
-        await pool.request()
-          .input('iInvJrBatchID', sql.Int,      1)
-          .input('iStockID',      sql.Int,      stockLink)
-          .input('iWarehouseID',  sql.Int,      20)
-          .input('dTrDate',       sql.DateTime, new Date())
-          .input('iTrCodeID',     sql.Int,      31)
-          .input('iGLContraID',   sql.Int,      0)
-          .input('cReference',    sql.VarChar,  reference)
-          .input('cDescription',  sql.VarChar,  description)
-          .input('fQtyIn',        sql.Float,    netQty)
-          .input('fQtyOut',       sql.Float,    0)
-          .input('fNewCost',      sql.Float,    costPerUnit)
-          .input('bIsLotItem',    sql.Bit,      0)
-          .input('bIsSerialItem', sql.Bit,      0)
-          .query(`
-            INSERT INTO _etblInvJrBatchLines (
-              iInvJrBatchID, iStockID, iWarehouseID,
-              dTrDate, iTrCodeID, iGLContraID,
-              cReference, cDescription,
-              fQtyIn, fQtyOut, fNewCost,
-              bIsLotItem, bIsSerialItem
-            ) VALUES (
-              @iInvJrBatchID, @iStockID, @iWarehouseID,
-              @dTrDate, @iTrCodeID, @iGLContraID,
-              @cReference, @cDescription,
-              @fQtyIn, @fQtyOut, @fNewCost,
-              @bIsLotItem, @bIsSerialItem
-            )
-          `);
-
-        const existing = await pool.request()
-          .input('StockID', sql.Int, stockLink)
-          .input('WhseID',  sql.Int, 20)
-          .query(`SELECT idStockQtys FROM _etblStockQtys WHERE StockID = @StockID AND WhseID = @WhseID`);
-
-        if (existing.recordset.length > 0) {
-          await pool.request()
-            .input('StockID', sql.Int,   stockLink)
-            .input('WhseID',  sql.Int,   20)
-            .input('QtyIn',   sql.Float, netQty)
-            .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand + @QtyIn WHERE StockID = @StockID AND WhseID = @WhseID`);
-        } else {
-          await pool.request()
-            .input('StockID', sql.Int,   stockLink)
-            .input('WhseID',  sql.Int,   20)
-            .input('QtyIn',   sql.Float, netQty)
-            .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
-        }
-
-        // Also record in Sage BOM Module Manufacture Processes table (_btblMFProcessHeader) if table exists
-        try {
-          const mfHeaderCheck = await pool.request().query(`SELECT OBJECT_ID('_btblMFProcessHeader', 'U') AS tblExists`);
-          if (mfHeaderCheck.recordset[0]?.tblExists) {
-            const nextSeqRes = await pool.request().query(`SELECT ISNULL(MAX(idMFProcessHeader), 0) + 1 AS NextID FROM _btblMFProcessHeader`);
-            const nextId = nextSeqRes.recordset[0]?.NextID || 10240;
-            const processRef = `MFP${String(nextId).padStart(6, '0')}`;
-            
-            await pool.request()
-              .input('cProcessRef',     sql.VarChar,  processRef)
-              .input('cExternalRef',    sql.VarChar,  String(order.batch_number).substring(0, 50))
-              .input('iMasterItemID',   sql.Int,      stockLink)
-              .input('cDescription',    sql.VarChar,  description)
-              .input('dStartDate',      sql.DateTime, new Date())
-              .input('dActualCompDate', sql.DateTime, new Date())
-              .input('fQuantity',       sql.Float,    netQty)
-              .input('fManufactured',   sql.Float,    netQty)
-              .query(`
-                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '_btblMFProcessHeader' AND COLUMN_NAME = 'cProcessRef')
-                BEGIN
-                  INSERT INTO _btblMFProcessHeader (cProcessRef, cExternalRef, iMasterItemID, cDescription, dStartDate, dActualCompDate, fQuantity, fManufactured)
-                  VALUES (@cProcessRef, @cExternalRef, @iMasterItemID, @cDescription, @dStartDate, @dActualCompDate, @fQuantity, @fManufactured)
-                END
-              `);
-            console.log(`  ✅ Sage BOM Process Header recorded: ${processRef} (${order.batch_number})`);
-          }
-        } catch (bErr) {
-          console.warn(`  ℹ️  Sage BOM Header note: ${bErr.message}`);
-        }
-      }
-    );
-  } finally {
-    if (pool) await sql.close();
+  if (DRY_RUN) {
+    return { dryRun: true, message: `DRY RUN: ${body.reference} would post finished goods through Sage SDK`, details: { sdkFinishedGoodsReceipt: { ...body, confirmPost: false } } };
   }
+
+  const result = await postJson(`${SDK_BASE_URL}/api/v1/finished-goods-receipts/post`, body);
+  console.log(`  Sage SDK response: ${result.status || 'ok'} - ${result.message || 'posted'}`);
+  return {
+    message: `Posted ${quantity}kg of ${itemCode} to Sage finished goods for ${order.batch_number}`,
+    sage_response: result,
+    details: { sdkFinishedGoodsReceipt: body, sageStatus: result.status || 'posted', sageMessage: result.message || null },
+  };
 }
 
 module.exports = { handleBatchComplete };
-
-if (require.main === module) {
-  handleBatchComplete({ reference_id: process.argv[2] })
-    .then(() => { console.log('✅ Done'); process.exit(0); })
-    .catch((err) => { console.error('❌', err.message); process.exit(1); });
-}

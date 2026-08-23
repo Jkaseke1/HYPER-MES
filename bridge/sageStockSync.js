@@ -10,6 +10,11 @@ const WAREHOUSES = [
   { code: 'RM', id: 18 },
   { code: 'PD', id: 19 },
 ];
+const FINISHED_GOODS_WAREHOUSES = [
+  { code: 'PD', id: 19 },
+  { code: 'DEB', id: 17 },
+  { code: 'DSP', id: 20 }, // retained for historical receipts only
+];
 const FULL_SYNC_BATCH_SIZE = Math.max(1, Number(process.env.SAGE_STOCK_SYNC_BATCH_SIZE || 25));
 let nextFullSyncOffset = 0;
 
@@ -90,4 +95,47 @@ async function syncSageStock(itemCodes) {
   return { materialCount: materials.length, synced, failures, fullSyncBatch: !itemCodes?.length };
 }
 
-module.exports = { syncSageStock };
+async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
+  if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for Sage stock sync');
+  if (!itemCodes?.length) return { formulationCount: 0, synced: 0, failures: [] };
+
+  const { data: formulations, error: formulationError } = await supabase
+    .from('formulations')
+    .select('id, sage_code')
+    .in('sage_code', itemCodes);
+  if (formulationError) throw new Error(`Could not load MES finished goods: ${formulationError.message}`);
+
+  const warehouses = (warehouseCodes?.length
+    ? FINISHED_GOODS_WAREHOUSES.filter((warehouse) => warehouseCodes.includes(warehouse.code))
+    : FINISHED_GOODS_WAREHOUSES);
+  let synced = 0;
+  const failures = [];
+  for (const formulation of formulations || []) {
+    const itemCode = (formulation.sage_code || '').trim().toUpperCase();
+    if (!itemCode) continue;
+    for (const warehouse of warehouses) {
+      try {
+        const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock?itemCode=${encodeURIComponent(itemCode)}&warehouse=${warehouse.code}`);
+        const now = new Date().toISOString();
+        const { error } = await supabase.from('sage_stock_balances').upsert({
+          raw_material_id: null,
+          formulation_id: formulation.id,
+          macropack_bom_id: null,
+          sage_code: itemCode,
+          warehouse_id: warehouse.id,
+          quantity: Number(stock.quantity || 0),
+          last_synced_at: now,
+          updated_at: now,
+        }, { onConflict: 'sage_code,warehouse_id' });
+        if (error) throw new Error(error.message);
+        synced += 1;
+      } catch (error) {
+        failures.push(`${itemCode}/${warehouse.code}: ${error.message}`);
+      }
+    }
+  }
+
+  return { formulationCount: (formulations || []).length, synced, failures };
+}
+
+module.exports = { syncSageStock, syncFinishedGoodsStock };

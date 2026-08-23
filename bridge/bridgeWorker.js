@@ -8,12 +8,26 @@ const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
 const { handleMaterialTransferToProduction } = require('./materialTransferSdkAuto');
+const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto');
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
-const { syncSageStock } = require('./sageStockSync');
+const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
 
 const POLL_INTERVAL_MS = 30000;
 const STOCK_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 let stockSyncInProgress = false;
+
+async function verifySdkConnection() {
+  const baseUrl = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
+  const apiKey = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
+  if (!apiKey) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY');
+
+  const response = await fetch(`${baseUrl}/api/v1/sdk/connection`, {
+    headers: { 'X-Hyper-Api-Key': apiKey },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.message || `Sage SDK connection check failed: HTTP ${response.status}`);
+  console.log(`Sage SDK connection: ${body.sdkConnection || 'verified'}`);
+}
 
 async function refreshSageStock(itemCodes, reason) {
   if (stockSyncInProgress) return;
@@ -26,6 +40,16 @@ async function refreshSageStock(itemCodes, reason) {
     console.error(`  Sage stock sync failed (${reason}): ${error.message}`);
   } finally {
     stockSyncInProgress = false;
+  }
+}
+
+async function refreshFinishedGoodsStock(itemCodes, reason, warehouseCodes) {
+  try {
+    const result = await syncFinishedGoodsStock(itemCodes, warehouseCodes);
+    console.log(`  Sage finished-goods sync (${reason}): ${result.synced} balance(s) refreshed for ${result.formulationCount} formulation(s)`);
+    if (result.failures.length) console.warn(`  Sage finished-goods sync warnings: ${result.failures.slice(0, 3).join('; ')}`);
+  } catch (error) {
+    console.error(`  Sage finished-goods sync failed (${reason}): ${error.message}`);
   }
 }
 
@@ -115,6 +139,9 @@ async function processPendingEvents() {
         case 'material_transfer_to_production':
           handlerResult = await handleMaterialTransferToProduction(event);
           break;
+        case 'finished_goods_transfer_to_dispatch':
+          handlerResult = await handleFinishedGoodsTransfer(event);
+          break;
         case 'rm_cost_updated':
           handlerResult = await handleRmCostUpdated(event);
           break;
@@ -144,6 +171,14 @@ async function processPendingEvents() {
       const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
       if (itemCodes.length) {
         await refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
+      }
+      if (event.event_type === 'production_completed') {
+        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsReceipt?.itemCode;
+        if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after production_completed');
+      }
+      if (event.event_type === 'finished_goods_transfer_to_dispatch') {
+        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsTransfer?.itemCode;
+        if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
       }
 
       console.log(`  ✅ ${event.event_type} processed successfully`);
@@ -179,6 +214,16 @@ async function startWorker() {
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');
+
+  // Initialise the Evolution SDK before claiming any event. This prevents a
+  // fresh API process from accepting a bridge event before Sage is ready.
+  try {
+    await verifySdkConnection();
+  } catch (error) {
+    console.error(`Sage SDK startup check failed: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
 
   // A full stock refresh is batched so a large catalogue never delays posting events.
   void refreshSageStock(undefined, 'startup reconciliation batch');

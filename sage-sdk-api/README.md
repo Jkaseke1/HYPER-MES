@@ -77,8 +77,12 @@ Invoke-RestMethod http://127.0.0.1:5088/api/v1/health
 - `POST /api/v1/goods-receipts/post`
 - `POST /api/v1/material-issues/validate`
 - `POST /api/v1/material-issues/post`
+- `POST /api/v1/finished-goods-receipts/validate`
+- `POST /api/v1/finished-goods-receipts/post`
 - `GET /api/v1/stock?itemCode={itemCode}&warehouse=RM|PD` (protected read-only Sage stock lookup)
 
 GRV posting uses the legacy Sage `PostGRVV2` procedure to preserve the established standalone Goods Received Voucher workflow. The protected local API and MES bridge remain the only callers. The API assigns the next `HFGRV` number, verifies `DocType = 2`, and advances Sage's GRV sequence after a successful post.
 
 Material issues use the public Evolution SDK `InventoryTransaction` API with `Operation = Decrease`, transaction code `MFDR`, and the Production (`PD`) warehouse. The API starts an SDK database transaction, validates every line against Sage warehouse stock and average cost, posts the package, then commits or rolls back the full SDK transaction.
+
+Finished-goods receipts use the same SDK transaction mechanism with `Operation = Increase`, transaction code `MFMF`, and Sage warehouse `PD` (Production). A production clerk later moves finished goods from `PD` to `DEB` through the protected warehouse-transfer endpoint; completion never transfers stock to Dispatch automatically.

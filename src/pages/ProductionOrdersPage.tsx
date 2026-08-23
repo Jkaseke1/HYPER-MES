@@ -10,7 +10,7 @@ import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
-import { generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
+import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 
 interface OrderMaterial {
@@ -117,6 +117,10 @@ export default function ProductionOrdersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showEditQty, setShowEditQty] = useState(false);
+  const [showFinishedGoodsTransfer, setShowFinishedGoodsTransfer] = useState(false);
+  const [finishedGoodsTransferQty, setFinishedGoodsTransferQty] = useState('');
+  const [finishedGoodsTransferNotes, setFinishedGoodsTransferNotes] = useState('');
+  const [finishedGoodsTransferSaving, setFinishedGoodsTransferSaving] = useState(false);
   const [selected, setSelected] = useState<ProductionOrder | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
@@ -168,6 +172,50 @@ export default function ProductionOrdersPage() {
   const closeConfirmDialog = () => {
     if (confirmingAction) return;
     setConfirmDialog((prev) => ({ ...prev, open: false, onConfirm: null }));
+  };
+
+  const openFinishedGoodsTransfer = () => {
+    if (!selected || selected.status !== 'completed') return;
+    setFinishedGoodsTransferQty(String(selected.actual_qty || 0));
+    setFinishedGoodsTransferNotes('');
+    setWorkflowError(null);
+    setShowFinishedGoodsTransfer(true);
+  };
+
+  const createFinishedGoodsTransfer = async () => {
+    if (!selected) return;
+    const quantity = Number(finishedGoodsTransferQty);
+    if (!selected.formulation_id) {
+      setWorkflowError('This batch has no finished-good formulation to transfer.');
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setWorkflowError('Enter a finished-goods transfer quantity greater than zero.');
+      return;
+    }
+    setFinishedGoodsTransferSaving(true);
+    try {
+      const transferNumber = await generateBatchNumber('FGT');
+      const { error } = await supabase.from('finished_goods_transfers').insert({
+        transfer_number: transferNumber,
+        production_order_id: selected.id,
+        formulation_id: selected.formulation_id,
+        quantity,
+        unit: selected.unit || 'kg',
+        transfer_date: format(new Date(), 'yyyy-MM-dd'),
+        notes: finishedGoodsTransferNotes.trim() || null,
+        initiated_by: profile?.id || null,
+        status: 'pending',
+      });
+      if (error) throw error;
+      toast.success(`Transfer ${transferNumber} queued: Production to DEB.`);
+      setShowFinishedGoodsTransfer(false);
+    } catch (error: any) {
+      console.error('Error creating finished-goods transfer:', error);
+      setWorkflowError(error?.message || 'Could not queue the finished-goods transfer.');
+    } finally {
+      setFinishedGoodsTransferSaving(false);
+    }
   };
 
   const handleConfirmDialog = async () => {
@@ -2032,6 +2080,39 @@ export default function ProductionOrdersPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showFinishedGoodsTransfer} onOpenChange={setShowFinishedGoodsTransfer}>
+        <DialogContent className="max-w-md p-0 overflow-hidden [&>button.absolute]:hidden">
+          <div className="bg-slate-950 px-5 py-4 text-white flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-extrabold">Transfer Finished Goods</h2>
+              <p className="text-xs text-slate-300 mt-0.5">Production (PD) to Dispatch (DEB)</p>
+            </div>
+            <button onClick={() => setShowFinishedGoodsTransfer(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center" aria-label="Close">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+              {selected?.formulations?.name || 'Finished goods'} from batch <span className="font-mono font-bold">{selected?.batch_number}</span>. Sage receives a warehouse transfer only after this clerk action.
+            </div>
+            <div>
+              <label className={labelCls}>Quantity to transfer (kg)</label>
+              <input type="number" min="0.001" step="0.001" value={finishedGoodsTransferQty} onChange={(event) => setFinishedGoodsTransferQty(event.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Notes</label>
+              <textarea value={finishedGoodsTransferNotes} onChange={(event) => setFinishedGoodsTransferNotes(event.target.value)} rows={3} className={inputCls} placeholder="Optional handover or pallet reference" />
+            </div>
+          </div>
+          <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <button onClick={() => setShowFinishedGoodsTransfer(false)} disabled={finishedGoodsTransferSaving} className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg">Cancel</button>
+            <button onClick={createFinishedGoodsTransfer} disabled={finishedGoodsTransferSaving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Queuing...' : 'Queue Sage Transfer'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Order Detail Modal - Redesigned modern layout */}
       <Dialog open={showDetail} onOpenChange={() => setShowDetail(false)}>
         <DialogContent className="max-w-[1280px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1280px] [&>button.absolute]:hidden">
@@ -2172,6 +2253,15 @@ export default function ProductionOrdersPage() {
                       Complete Production
                     </button>
                   )}
+                  {selected.status === 'completed' && (
+                    <button
+                      onClick={openFinishedGoodsTransfer}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all disabled:opacity-50"
+                    >
+                      <ArrowRight className="w-4 h-4" /> Transfer Finished Goods to DEB
+                    </button>
+                  )}
                   <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
                     Pending → Materials Issued → In Progress → Completed
                   </span>
@@ -2243,10 +2333,10 @@ export default function ProductionOrdersPage() {
                     🏭
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider font-black text-slate-400">Target Warehouse</div>
+                    <div className="text-[10px] uppercase tracking-wider font-black text-slate-400">Finished-Goods Location</div>
                     <div className="text-xs font-black text-blue-300 flex items-center gap-1.5 mt-0.5">
-                      <span>Despatch Warehouse</span>
-                      <span className="text-[10px] bg-blue-950 border border-blue-800 text-blue-300 px-2 py-0.5 rounded font-mono font-bold">Sage Whse 20 (DS)</span>
+                      <span>Production Warehouse</span>
+                      <span className="text-[10px] bg-blue-950 border border-blue-800 text-blue-300 px-2 py-0.5 rounded font-mono font-bold">Sage PD (19)</span>
                     </div>
                   </div>
                 </div>

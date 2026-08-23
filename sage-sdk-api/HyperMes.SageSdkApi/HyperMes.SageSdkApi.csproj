@@ -76,6 +76,8 @@
     <Compile Include="ApiKeyMiddleware.cs" />
     <Compile Include="GoodsReceiptController.cs" />
     <Compile Include="GoodsReceiptRequest.cs" />
+    <Compile Include="FinishedGoodsReceiptController.cs" />
+    <Compile Include="FinishedGoodsReceiptRequest.cs" />
     <Compile Include="HealthController.cs" />
     <Compile Include="MaterialIssueController.cs" />
     <Compile Include="MaterialIssueRequest.cs" />
