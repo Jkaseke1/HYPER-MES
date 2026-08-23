@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -35,6 +35,14 @@ interface ConfirmDialogState {
   confirmLabel: string;
   destructive?: boolean;
   onConfirm: (() => Promise<void> | void) | null;
+}
+
+interface SageIssueStatus {
+  status: string;
+  message?: string | null;
+  sage_response?: any;
+  error_details?: any;
+  updated_at?: string | null;
 }
 
 // Helper to normalize raw_materials from array to object
@@ -143,6 +151,8 @@ export default function ProductionOrdersPage() {
     onConfirm: null,
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
+  const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
+  const notifiedSageIssueRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
   const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
@@ -233,6 +243,50 @@ export default function ProductionOrdersPage() {
   }, [tab, search]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
+    const { data, error } = await supabase
+      .from('sync_log')
+      .select('status, message, sage_response, error_details, updated_at')
+      .eq('event_type', 'materials_issued')
+      .eq('reference_type', 'production_orders')
+      .eq('reference_id', orderId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error loading Sage material issue status:', error);
+      return;
+    }
+
+    setSageIssueStatus((data as SageIssueStatus | null) || null);
+    if (!notify || !data) return;
+
+    const notificationKey = `${data.status}:${data.updated_at || ''}`;
+    if (notifiedSageIssueRef.current[orderId] === notificationKey) return;
+    notifiedSageIssueRef.current[orderId] = notificationKey;
+
+    if (data.status === 'success') {
+      const reference = data.sage_response?.materialIssue?.reference || 'Sage';
+      toast.success(`Material issue posted to Sage: ${reference}`);
+    } else if (data.status === 'failed') {
+      toast.error(`Sage material issue failed: ${data.message || 'review the production order'}`);
+    } else if (data.status === 'pending' || data.status === 'processing') {
+      toast(`Material issue ${data.status === 'pending' ? 'queued' : 'processing'} in Sage`, { icon: '...' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setSageIssueStatus(null);
+      return;
+    }
+
+    loadSageIssueStatus(selected.id);
+    const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
+    return () => window.clearInterval(interval);
+  }, [selected?.id, loadSageIssueStatus]);
 
   // Keep the production queue current when another MES user, the bridge, or a
   // database workflow changes an order. This removes the need to refresh the
@@ -469,7 +523,7 @@ export default function ProductionOrdersPage() {
     const { data, error } = await supabase
       .from('sage_stock_balances')
       .select('raw_material_id, quantity, last_synced_at')
-      .eq('warehouse_id', 18) // Raw Materials warehouse in Sage
+      .eq('warehouse_id', 19) // Production warehouse in Sage: material issues are posted from PD.
       .in('raw_material_id', materialIds);
 
     if (error) {
@@ -513,11 +567,11 @@ export default function ProductionOrdersPage() {
       // retired `quantity_on_hand` field caused Supabase to reject the whole
       // request, then the UI silently fell back to MES zero balances.
       .select('raw_material_id, quantity, last_synced_at')
-      .eq('warehouse_id', 18)
+      .eq('warehouse_id', 19)
       .in('raw_material_id', materialIds);
 
     if (sageStockError) {
-      throw new Error(`Unable to read Sage Raw Materials balances: ${sageStockError.message}`);
+      throw new Error(`Unable to read Sage Production balances: ${sageStockError.message}`);
     }
 
     // Query raw_materials current stock as fallback
@@ -595,6 +649,7 @@ export default function ProductionOrdersPage() {
 
   const openDetail = async (order: ProductionOrder) => {
     setSelected(order);
+    setSageIssueStatus(null);
     setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
     setOutput({
       actual_qty: order.actual_qty,
@@ -1151,6 +1206,15 @@ export default function ProductionOrdersPage() {
 
       const { error } = await supabase.from('production_orders').update(updates).eq('id', selected.id);
       if (error) throw error;
+
+      if (status === 'materials_issued') {
+        setSageIssueStatus({
+          status: 'pending',
+          message: 'Materials issued in MES. The Sage material issue has been queued.',
+        });
+        toast('Materials issued in MES. Sage posting has been queued.', { icon: '...' });
+        window.setTimeout(() => loadSageIssueStatus(selected.id, true), 1500);
+      }
 
       // Record stock movement for completed orders
       if (status === 'completed' && output.actual_qty > 0) {
@@ -1917,6 +1981,37 @@ export default function ProductionOrdersPage() {
                   <div className="flex items-center gap-2 text-red-800">
                     <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                     <span className="text-xs font-semibold">{workflowError}</span>
+                  </div>
+                </div>
+              )}
+
+              {sageIssueStatus && (
+                <div className={`mx-4 mt-3 p-3 border rounded-xl flex items-start gap-3 ${
+                  sageIssueStatus.status === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : sageIssueStatus.status === 'failed'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  {sageIssueStatus.status === 'success' ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : sageIssueStatus.status === 'failed' ? (
+                    <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold uppercase tracking-wide">
+                      Sage Material Issue: {sageIssueStatus.status === 'success' ? 'Posted' : sageIssueStatus.status}
+                    </div>
+                    <div className="text-xs mt-0.5 break-words">
+                      {sageIssueStatus.status === 'success' && sageIssueStatus.sage_response?.materialIssue?.reference
+                        ? `Posted to Sage as ${sageIssueStatus.sage_response.materialIssue.reference} (${sageIssueStatus.sage_response.materialIssue.transactionCode || 'MFDR'}).`
+                        : sageIssueStatus.message || 'Awaiting Sage bridge update.'}
+                    </div>
+                    {sageIssueStatus.status === 'failed' && sageIssueStatus.error_details?.message && (
+                      <div className="text-[11px] mt-1 text-red-700 break-words">{sageIssueStatus.error_details.message}</div>
+                    )}
                   </div>
                 </div>
               )}

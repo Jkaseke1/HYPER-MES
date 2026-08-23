@@ -21,7 +21,9 @@ interface AggregatedMaterial {
   name: string;
   code: string;
   unit: string;
-  net_available: number;
+  mes_ledger_quantity: number;
+  sage_pd_quantity: number | null;
+  sage_pd_synced_at: string | null;
   last_transfer: string;
   transfer_count: number;
   transfers: TransferRow[];
@@ -43,6 +45,7 @@ interface PendingTransfer {
 export default function ProductionWarehousePage() {
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
+  const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +58,7 @@ export default function ProductionWarehousePage() {
     const [
       { data: smData, error: smError },
       { data: wbData, error: wbError },
+      { data: sagePdData, error: sagePdError },
       { data: pendingData, error: pendingError }
     ] = await Promise.all([
       supabase
@@ -67,6 +71,10 @@ export default function ProductionWarehousePage() {
         .select('raw_material_id, quantity, warehouses!inner(code)')
         .eq('warehouses.code', 'PRODUCTION'),
       supabase
+        .from('sage_stock_balances')
+        .select('raw_material_id, quantity, last_synced_at')
+        .eq('warehouse_id', 19),
+      supabase
         .from('material_transfers')
         .select('id, transfer_number, quantity, unit, status, created_at, raw_materials(name, code)')
         .in('status', ['in_buffer', 'pending'])
@@ -74,6 +82,7 @@ export default function ProductionWarehousePage() {
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
     if (wbError) console.error('Failed to load production balances:', wbError);
+    if (sagePdError) console.error('Failed to load Sage Production balances:', sagePdError);
     if (pendingError) console.error('Failed to load pending transfers:', pendingError);
 
     setTransfers((smData as any) || []);
@@ -83,6 +92,14 @@ export default function ProductionWarehousePage() {
       balMap[b.raw_material_id] = Number(b.quantity || 0);
     });
     setBalances(balMap);
+    const sagePdMap: Record<string, { quantity: number; syncedAt: string | null }> = {};
+    (sagePdData as any || []).forEach((balance: any) => {
+      sagePdMap[balance.raw_material_id] = {
+        quantity: Number(balance.quantity || 0),
+        syncedAt: balance.last_synced_at || null,
+      };
+    });
+    setSageProductionBalances(sagePdMap);
     setLastRefresh(new Date());
     if (!silent) setLoading(false);
   }
@@ -138,13 +155,15 @@ export default function ProductionWarehousePage() {
           name: (t.raw_materials as any)?.name || 'Unknown',
           code: (t.raw_materials as any)?.code || '',
           unit: (t.raw_materials as any)?.unit || t.unit,
-          net_available: 0,
+          mes_ledger_quantity: 0,
+          sage_pd_quantity: null,
+          sage_pd_synced_at: null,
           last_transfer: t.movement_date || t.created_at,
           transfer_count: 0,
           transfers: [],
         };
       }
-      map[id].net_available += Number(t.quantity || 0);
+      map[id].mes_ledger_quantity += Number(t.quantity || 0);
       map[id].transfer_count += 1;
       map[id].transfers.push(t);
       if ((t.movement_date || t.created_at) > map[id].last_transfer) {
@@ -153,11 +172,15 @@ export default function ProductionWarehousePage() {
     }
     for (const [id, m] of Object.entries(map)) {
       if (balances[id] !== undefined) {
-        map[id].net_available = balances[id];
+        map[id].mes_ledger_quantity = balances[id];
+      }
+      if (sageProductionBalances[id] !== undefined) {
+        map[id].sage_pd_quantity = sageProductionBalances[id].quantity;
+        map[id].sage_pd_synced_at = sageProductionBalances[id].syncedAt;
       }
     }
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
-  }, [transfers, balances]);
+  }, [transfers, balances, sageProductionBalances]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return aggregated;
@@ -166,7 +189,8 @@ export default function ProductionWarehousePage() {
   }, [aggregated, search]);
 
   const totalMaterials = aggregated.length;
-  const totalQty = aggregated.reduce((s, m) => s + Math.max(0, m.net_available), 0);
+  const totalMesLedgerQty = aggregated.reduce((sum, material) => sum + Math.max(0, material.mes_ledger_quantity), 0);
+  const totalSagePdQty = aggregated.reduce((sum, material) => sum + Math.max(0, material.sage_pd_quantity || 0), 0);
   const recentCount = aggregated.filter(m => {
     const d = new Date(m.last_transfer);
     const diff = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
@@ -251,15 +275,16 @@ export default function ProductionWarehousePage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Materials on Floor" value={totalMaterials} icon={Boxes} color="teal" />
-        <StatCard title="Net Qty on Floor" value={`${totalQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
+        <StatCard title="MES Floor Ledger" value={`${totalMesLedgerQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
+        <StatCard title="Sage PD (cached)" value={`${totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`} icon={Package} color="emerald" />
         <StatCard title="Transfers (last 7 days)" value={recentCount} icon={TrendingDown} color="emerald" />
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
         <p className="text-xs text-amber-800">
-          This view shows <strong>net available quantity</strong> on the production floor from `production_input` movements 
-          (transfers in minus issues out). For exact lot-level stock, use <strong>RM Warehouse / Inventory</strong>.
+          <strong>MES Floor Ledger</strong> is an internal operational ledger, not Sage stock. <strong>Sage PD (cached)</strong>
+          is the Sage warehouse 19 balance at its last sync. Use Sage inventory enquiries as the source of truth when the cache is stale.
         </p>
       </div>
 
@@ -309,8 +334,12 @@ export default function ProductionWarehousePage() {
                   </div>
                   <div className="flex items-center gap-6 text-sm mr-4">
                     <div className="text-right">
-                      <p className="font-semibold text-slate-800">{Math.max(0, m.net_available).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
-                      <p className="text-xs text-slate-400">Net on floor</p>
+                      <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
+                      <p className="text-xs text-slate-400">MES floor ledger</p>
+                    </div>
+                    <div className="text-right hidden md:block">
+                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
+                      <p className="text-xs text-slate-400">Sage PD {m.sage_pd_synced_at ? format(new Date(m.sage_pd_synced_at), 'dd MMM HH:mm') : ''}</p>
                     </div>
                     <div className="text-right hidden sm:block">
                       <p className="text-slate-600 flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(m.last_transfer), 'dd MMM yyyy')}</p>

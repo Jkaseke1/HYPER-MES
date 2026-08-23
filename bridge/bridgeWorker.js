@@ -9,8 +9,32 @@ const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
 const { handleMaterialTransferToProduction } = require('./materialTransferSdkAuto');
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
+const { syncSageStock } = require('./sageStockSync');
 
 const POLL_INTERVAL_MS = 30000;
+const STOCK_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+let stockSyncInProgress = false;
+
+async function refreshSageStock(itemCodes, reason) {
+  if (stockSyncInProgress) return;
+  stockSyncInProgress = true;
+  try {
+    const result = await syncSageStock(itemCodes);
+    console.log(`  Sage stock sync (${reason}): ${result.synced} warehouse balance(s) refreshed for ${result.materialCount} material(s)`);
+    if (result.failures.length) console.warn(`  Sage stock sync warnings: ${result.failures.slice(0, 3).join('; ')}`);
+  } catch (error) {
+    console.error(`  Sage stock sync failed (${reason}): ${error.message}`);
+  } finally {
+    stockSyncInProgress = false;
+  }
+}
+
+function postedStockCodes(eventType, details) {
+  if (eventType === 'material_transfer_to_production') return [details?.sdkTransfer?.itemCode].filter(Boolean);
+  if (eventType === 'materials_issued') return (details?.sdkMaterialIssue?.lines || []).map((line) => line.itemCode).filter(Boolean);
+  if (eventType === 'grn_confirmed') return (details?.sdkGoodsReceipt?.lines || []).map((line) => line.itemCode).filter(Boolean);
+  return [];
+}
 
 async function processPendingEvents() {
   const { data: pending, error } = await supabase
@@ -117,6 +141,11 @@ async function processPendingEvents() {
         .update(successUpdate)
         .eq('id', event.id);
 
+      const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
+      if (itemCodes.length) {
+        await refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
+      }
+
       console.log(`  ✅ ${event.event_type} processed successfully`);
 
     } catch (err) {
@@ -151,8 +180,12 @@ async function startWorker() {
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');
 
+  // A full stock refresh is batched so a large catalogue never delays posting events.
+  void refreshSageStock(undefined, 'startup reconciliation batch');
+
   await processPendingEvents();
   setInterval(processPendingEvents, POLL_INTERVAL_MS);
+  setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
 }
 
 process.on('SIGINT',  () => { console.log('\n📡 Shutting down...'); process.exit(0); });
