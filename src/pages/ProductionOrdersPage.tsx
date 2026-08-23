@@ -45,6 +45,8 @@ interface SageIssueStatus {
   updated_at?: string | null;
 }
 
+type SageIssueStatusByOrder = Record<string, SageIssueStatus>;
+
 // Helper to normalize raw_materials from array to object
 const normalizeRawMaterials = (materials: any[]): OrderMaterial[] => {
   return materials.map(m => ({
@@ -152,6 +154,7 @@ export default function ProductionOrdersPage() {
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
+  const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
@@ -244,6 +247,40 @@ export default function ProductionOrdersPage() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
+  const loadSageIssueStatuses = useCallback(async (orderIds: string[]) => {
+    if (!orderIds.length) {
+      setSageIssueStatuses({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('sync_log')
+      .select('reference_id, status, message, sage_response, error_details, updated_at')
+      .eq('event_type', 'materials_issued')
+      .eq('reference_type', 'production_orders')
+      .in('reference_id', orderIds)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading Sage issue statuses:', error);
+      return;
+    }
+
+    const nextStatuses: SageIssueStatusByOrder = {};
+    for (const row of data || []) {
+      const orderId = (row as any).reference_id;
+      if (orderId && !nextStatuses[orderId]) nextStatuses[orderId] = row as SageIssueStatus;
+    }
+    setSageIssueStatuses(nextStatuses);
+  }, []);
+
+  useEffect(() => {
+    const orderIds = orders.map((order) => order.id).filter(Boolean);
+    loadSageIssueStatuses(orderIds);
+    const interval = window.setInterval(() => loadSageIssueStatuses(orderIds), 10000);
+    return () => window.clearInterval(interval);
+  }, [orders, loadSageIssueStatuses]);
+
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
       .from('sync_log')
@@ -300,12 +337,62 @@ export default function ProductionOrdersPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => {
         fetchOrders();
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sync_log' }, (payload) => {
+        const event = payload.new as any;
+        if (event?.event_type !== 'materials_issued' || event?.reference_type !== 'production_orders') return;
+
+        setSageIssueStatuses((current) => ({
+          ...current,
+          [event.reference_id]: {
+            status: event.status,
+            message: event.message,
+            sage_response: event.sage_response,
+            error_details: event.error_details,
+            updated_at: event.updated_at,
+          },
+        }));
+
+        const notificationKey = `${event.status}:${event.updated_at || ''}`;
+        if (notifiedSageIssueRef.current[event.reference_id] === notificationKey) return;
+        notifiedSageIssueRef.current[event.reference_id] = notificationKey;
+
+        if (event.status === 'success') {
+          const reference = event.sage_response?.materialIssue?.reference || 'the production order';
+          toast.success(`Sage posted material issue: ${reference}`);
+        } else if (event.status === 'failed') {
+          toast.error(`Sage material issue failed: ${event.message || 'open the batch for details'}`);
+        } else if (event.status === 'processing') {
+          toast(`Sage is posting material issue`, { icon: '...' });
+        }
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
+
+  const renderSageIssueStatus = (order: ProductionOrder, compact = false) => {
+    const status = sageIssueStatuses[order.id];
+    const className = compact ? 'text-[11px]' : 'text-xs';
+    if (!status) {
+      if (['materials_issued', 'in_progress', 'completed'].includes(order.status)) {
+        return <span className={`${className} font-semibold text-slate-500`}>Awaiting status</span>;
+      }
+      return <span className={`${className} text-slate-400`}>Not issued</span>;
+    }
+    if (status.status === 'success') {
+      const reference = status.sage_response?.materialIssue?.reference;
+      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-emerald-700`} title={reference ? `Posted to Sage as ${reference} (MFDR)` : 'Posted to Sage'}><CheckCircle2 className="w-3.5 h-3.5" />Posted{reference ? ` ${reference}` : ''}</span>;
+    }
+    if (status.status === 'failed') {
+      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-red-700`} title={status.error_details?.message || status.message || 'Sage material issue failed'}><AlertCircle className="w-3.5 h-3.5" />Failed</span>;
+    }
+    if (status.status === 'processing') {
+      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-amber-700`}><RefreshCw className="w-3.5 h-3.5 animate-spin" />Posting</span>;
+    }
+    return <span className={`${className} inline-flex items-center gap-1 font-semibold text-amber-700`}><Clock className="w-3.5 h-3.5" />Queued</span>;
+  };
   useEffect(() => {
     Promise.all([
       supabase.from('formulations').select('*').eq('status', 'active'),
@@ -1363,6 +1450,7 @@ export default function ProductionOrdersPage() {
                     <th className="text-right px-4 py-3.5 font-bold text-slate-700">Planned Qty</th>
                     <th className="text-right px-4 py-3.5 font-bold text-slate-700">Actual Qty</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Status</th>
+                    <th className="text-left px-4 py-3.5 font-bold text-slate-700">Sage</th>
                     <th className="text-center px-4 py-3.5 font-bold text-slate-700">Action</th>
                   </tr>
                 </thead>
@@ -1392,6 +1480,9 @@ export default function ProductionOrdersPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <StatusBadge status={order.status} />
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {renderSageIssueStatus(order)}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-center">
@@ -1630,6 +1721,11 @@ export default function ProductionOrdersPage() {
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
                     bags
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Sage material issue</span>
+                    {renderSageIssueStatus(order, true)}
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-500">Sage stock quantity: {Number(form.planned_qty || 0).toLocaleString()} kg</p>

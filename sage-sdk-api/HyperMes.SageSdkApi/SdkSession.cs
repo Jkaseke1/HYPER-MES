@@ -35,6 +35,18 @@ namespace SDK_Test
             }
         }
 
+        // The Evolution SDK can drop its static database context while the local
+        // process remains alive. Read-only callers retry once through this path.
+        public static void Reconnect()
+        {
+            lock (ConnectionLock)
+            {
+                _connected = false;
+            }
+
+            EnsureConnected();
+        }
+
         private static string GetRequiredSetting(string name)
         {
             var value = Environment.GetEnvironmentVariable(name);

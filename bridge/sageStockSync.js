@@ -70,7 +70,7 @@ async function syncSageStock(itemCodes) {
     const itemCode = (material.sage_code || material.code).trim().toUpperCase();
     for (const warehouse of WAREHOUSES) {
       try {
-        const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock/${encodeURIComponent(itemCode)}?warehouse=${encodeURIComponent(warehouse.code)}`);
+        const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock?itemCode=${encodeURIComponent(itemCode)}&warehouse=${encodeURIComponent(warehouse.code)}`);
         const { error } = await supabase.from('sage_stock_balances').upsert({
           raw_material_id: material.id,
           sage_code: itemCode,

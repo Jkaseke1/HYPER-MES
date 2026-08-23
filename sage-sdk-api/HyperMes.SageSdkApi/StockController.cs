@@ -10,8 +10,8 @@ namespace SDK_Test
     {
         // Read-only SDK endpoint used by the MES bridge to maintain its Sage stock cache.
         [HttpGet]
-        [Route("{itemCode}")]
-        public IHttpActionResult GetWarehouseStock(string itemCode, [FromUri] string warehouse)
+        [Route("")]
+        public IHttpActionResult GetWarehouseStock([FromUri] string itemCode, [FromUri] string warehouse)
         {
             if (string.IsNullOrWhiteSpace(itemCode))
                 return BadRequest("Item code is required.");
@@ -20,40 +20,50 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-
-                var item = new InventoryItem(itemCode.Trim().ToUpperInvariant());
-                var sageWarehouse = new Warehouse(warehouse.Trim().ToUpperInvariant());
-                var context = item.WarehouseContexts[sageWarehouse];
-                if (context == null)
-                {
-                    return Content(HttpStatusCode.NotFound, new
-                    {
-                        status = "not-found",
-                        message = "Sage has no warehouse context for " + item.Code + " in " + sageWarehouse.Code + "."
-                    });
-                }
-
-                return Ok(new
-                {
-                    status = "ok",
-                    environment = "UAT",
-                    itemCode = item.Code,
-                    warehouse = sageWarehouse.Code,
-                    quantity = context.QtyOnHand,
-                    averageUnitCost = context.AverageUnitCost,
-                    readAtUtc = DateTime.UtcNow
-                });
+                return Ok(ReadStock(itemCode, warehouse));
             }
             catch (Exception ex)
             {
-                return Content(HttpStatusCode.BadRequest, new
+                try
                 {
-                    status = "failed",
-                    message = "Sage stock lookup failed.",
-                    exceptionMessage = ex.Message
-                });
+                    // A stale SDK context is recoverable. Retry once before
+                    // reporting an invalid item or warehouse to the bridge.
+                    SdkSession.Reconnect();
+                    return Ok(ReadStock(itemCode, warehouse));
+                }
+                catch (Exception retryException)
+                {
+                    return Content(HttpStatusCode.BadRequest, new
+                    {
+                        status = "failed",
+                        message = "Sage stock lookup failed.",
+                        exceptionMessage = retryException.Message,
+                        initialExceptionMessage = ex.Message
+                    });
+                }
             }
+        }
+
+        private static object ReadStock(string itemCode, string warehouse)
+        {
+            SdkSession.EnsureConnected();
+
+            var item = new InventoryItem(itemCode.Trim().ToUpperInvariant());
+            var sageWarehouse = new Warehouse(warehouse.Trim().ToUpperInvariant());
+            var context = item.WarehouseContexts[sageWarehouse];
+            if (context == null)
+                throw new InvalidOperationException("Sage has no warehouse context for " + item.Code + " in " + sageWarehouse.Code + ".");
+
+            return new
+            {
+                status = "ok",
+                environment = "UAT",
+                itemCode = item.Code,
+                warehouse = sageWarehouse.Code,
+                quantity = context.QtyOnHand,
+                averageUnitCost = context.AverageUnitCost,
+                readAtUtc = DateTime.UtcNow
+            };
         }
     }
 }
