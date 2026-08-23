@@ -47,6 +47,17 @@ interface SageIssueStatus {
 
 type SageIssueStatusByOrder = Record<string, SageIssueStatus>;
 
+interface FinishedGoodsTransferStatus {
+  transfer_number: string;
+  production_order_id: string;
+  quantity: number;
+  status: 'pending' | 'posted' | 'failed' | 'cancelled';
+  sage_response?: any;
+  updated_at?: string | null;
+}
+
+type FinishedGoodsTransferStatusByOrder = Record<string, FinishedGoodsTransferStatus>;
+
 // Helper to normalize raw_materials from array to object
 const normalizeRawMaterials = (materials: any[]): OrderMaterial[] => {
   return materials.map(m => ({
@@ -159,6 +170,7 @@ export default function ProductionOrdersPage() {
   const [confirmingAction, setConfirmingAction] = useState(false);
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
+  const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
@@ -322,12 +334,38 @@ export default function ProductionOrdersPage() {
     setSageIssueStatuses(nextStatuses);
   }, []);
 
+  const loadFinishedGoodsTransferStatuses = useCallback(async (orderIds: string[]) => {
+    if (!orderIds.length) {
+      setFinishedGoodsTransferStatuses({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from('finished_goods_transfers')
+      .select('transfer_number, production_order_id, quantity, status, sage_response, updated_at')
+      .in('production_order_id', orderIds)
+      .order('updated_at', { ascending: false });
+    if (error) {
+      console.error('Error loading finished-goods transfer statuses:', error);
+      return;
+    }
+    const nextStatuses: FinishedGoodsTransferStatusByOrder = {};
+    for (const row of data || []) {
+      const orderId = (row as any).production_order_id;
+      if (orderId && !nextStatuses[orderId]) nextStatuses[orderId] = row as FinishedGoodsTransferStatus;
+    }
+    setFinishedGoodsTransferStatuses(nextStatuses);
+  }, []);
+
   useEffect(() => {
     const orderIds = orders.map((order) => order.id).filter(Boolean);
     loadSageIssueStatuses(orderIds);
-    const interval = window.setInterval(() => loadSageIssueStatuses(orderIds), 10000);
+    loadFinishedGoodsTransferStatuses(orderIds);
+    const interval = window.setInterval(() => {
+      loadSageIssueStatuses(orderIds);
+      loadFinishedGoodsTransferStatuses(orderIds);
+    }, 10000);
     return () => window.clearInterval(interval);
-  }, [orders, loadSageIssueStatuses]);
+  }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
@@ -384,6 +422,16 @@ export default function ProductionOrdersPage() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => {
         fetchOrders();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'finished_goods_transfers' }, (payload) => {
+        const transfer = payload.new as FinishedGoodsTransferStatus;
+        if (!transfer?.production_order_id) return;
+        setFinishedGoodsTransferStatuses((current) => ({ ...current, [transfer.production_order_id]: transfer }));
+        if (transfer.status === 'posted') {
+          toast.success(`Sage posted finished-goods transfer ${transfer.transfer_number}: PD to DEB.`);
+        } else if (transfer.status === 'failed') {
+          toast.error(`Sage finished-goods transfer failed: ${transfer.transfer_number}.`);
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sync_log' }, (payload) => {
         const event = payload.new as any;
@@ -1418,6 +1466,7 @@ export default function ProductionOrdersPage() {
   const pendingCount = orders.filter(o => o.status === 'pending').length;
   const inProgressCount = orders.filter(o => o.status === 'in_progress').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
+  const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -2194,6 +2243,22 @@ export default function ProductionOrdersPage() {
                 </div>
               )}
 
+              {selectedFinishedGoodsTransfer && (
+                <div className={`mx-4 mt-3 p-3 border rounded-xl flex items-start gap-3 ${
+                  selectedFinishedGoodsTransfer.status === 'posted'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : selectedFinishedGoodsTransfer.status === 'failed'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  {selectedFinishedGoodsTransfer.status === 'posted' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Transfer: {selectedFinishedGoodsTransfer.status === 'posted' ? 'Posted to DEB' : selectedFinishedGoodsTransfer.status}</div>
+                    <div className="text-xs mt-0.5 break-words">{selectedFinishedGoodsTransfer.transfer_number} - {Number(selectedFinishedGoodsTransfer.quantity).toLocaleString()} kg from Production to DEB.</div>
+                  </div>
+                </div>
+              )}
+
               {/* Quick Stats Row */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-white border-b border-slate-200 shadow-sm">
                 <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-center">
@@ -2256,10 +2321,12 @@ export default function ProductionOrdersPage() {
                   {selected.status === 'completed' && (
                     <button
                       onClick={openFinishedGoodsTransfer}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all disabled:opacity-50"
+                      disabled={saving || selectedFinishedGoodsTransfer?.status === 'posted' || selectedFinishedGoodsTransfer?.status === 'pending'}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={selectedFinishedGoodsTransfer?.status === 'posted' ? 'Finished goods have already been transferred to DEB.' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'This finished-goods transfer is queued for Sage.' : 'Transfer finished goods from Production to DEB'}
                     >
-                      <ArrowRight className="w-4 h-4" /> Transfer Finished Goods to DEB
+                      {selectedFinishedGoodsTransfer?.status === 'posted' ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                      {selectedFinishedGoodsTransfer?.status === 'posted' ? 'Transferred to DEB' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'Sage Transfer Queued' : 'Transfer Finished Goods to DEB'}
                     </button>
                   )}
                   <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
