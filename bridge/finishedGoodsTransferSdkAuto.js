@@ -24,7 +24,8 @@ function postJson(urlString, body) {
         let parsed = {};
         try { parsed = responseBody ? JSON.parse(responseBody) : {}; } catch (_) { parsed = { message: responseBody }; }
         if (response.statusCode >= 200 && response.statusCode < 300) return resolve(parsed);
-        const error = new Error(`Sage finished-goods transfer API failed: ${parsed.Message || parsed.message || `HTTP ${response.statusCode}`}`);
+        const message = parsed?.exceptionMessage || parsed?.Message || parsed?.message || responseBody || `HTTP ${response.statusCode}`;
+        const error = new Error(`Sage finished-goods transfer API failed: ${message}`);
         error.statusCode = response.statusCode;
         error.response = parsed;
         reject(error);
