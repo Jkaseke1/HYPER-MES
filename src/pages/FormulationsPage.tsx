@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, GitCompare, X, CheckCircle2, FileText, Archive } from 'lucide-react';
+import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck } from 'lucide-react';
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -48,6 +48,12 @@ const emptyForm: FormState = {
 
 type IngRow = { raw_material_id: string; quantity: number; unit: string; percentage: number; is_critical: boolean };
 const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', percentage: 0, is_critical: false });
+
+type FormulaReadiness = {
+  ingredientTotalKg: number;
+  varianceKg: number;
+  isBalanced: boolean;
+};
 
 export function getFormulationCategory(name: string, existingCategory?: string | null): string {
   if (existingCategory && existingCategory.trim() !== '' && existingCategory.toLowerCase() !== 'null' && existingCategory.toLowerCase() !== 'other') {
@@ -130,6 +136,7 @@ export default function FormulationsPage() {
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
   const [categories, setCategories] = useState<{ code: string; name: string }[]>(DEFAULT_CATEGORIES);
   const [formulationIngredientCounts, setFormulationIngredientCounts] = useState<Record<string, number>>({});
+  const [formulaReadiness, setFormulaReadiness] = useState<Record<string, FormulaReadiness>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
   const [search, setSearch] = useState('');
@@ -176,13 +183,29 @@ export default function FormulationsPage() {
     if (data && data.length > 0) {
       const { data: ingredientData } = await supabase
         .from('formulation_ingredients')
-        .select('formulation_id');
+        .select('formulation_id, quantity, is_active');
       
       const counts: Record<string, number> = {};
+      const totals: Record<string, number> = {};
       ingredientData?.forEach(ing => {
         counts[ing.formulation_id] = (counts[ing.formulation_id] || 0) + 1;
+        if (ing.is_active) totals[ing.formulation_id] = (totals[ing.formulation_id] || 0) + (Number(ing.quantity) || 0);
       });
       setFormulationIngredientCounts(counts);
+      const readiness: Record<string, FormulaReadiness> = {};
+      data.forEach((formula) => {
+        const ingredientTotalKg = totals[formula.id] || 0;
+        const varianceKg = ingredientTotalKg - Number(formula.batch_size || 0);
+        readiness[formula.id] = {
+          ingredientTotalKg,
+          varianceKg,
+          isBalanced: ingredientTotalKg > 0 && Math.abs(varianceKg) <= 0.01,
+        };
+      });
+      setFormulaReadiness(readiness);
+    } else {
+      setFormulationIngredientCounts({});
+      setFormulaReadiness({});
     }
     
     setLoading(false);
@@ -350,7 +373,7 @@ export default function FormulationsPage() {
       .filter((ingredient) => ingredient.raw_material_id)
       .reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
     if (Math.abs(ingredientTotal - resolvedBatchSize) > 0.01) {
-      alert(`Formula mass balance must equal the standard batch size. Ingredients total ${ingredientTotal.toFixed(4)} kg; standard batch is ${resolvedBatchSize.toFixed(4)} kg.`);
+      alert(`Formula mass balance must equal the reference batch size. Ingredients total ${ingredientTotal.toFixed(4)} kg; reference batch is ${resolvedBatchSize.toFixed(4)} kg.`);
       return;
     }
 
@@ -539,6 +562,10 @@ export default function FormulationsPage() {
   const activeCount = formulations.filter(f => f.status === 'active').length;
   const draftCount = formulations.filter(f => f.status === 'draft').length;
   const archivedCount = formulations.filter(f => f.status === 'archived').length;
+  const financeReviewQueue = formulations.filter((formula) => {
+    const readiness = formulaReadiness[formula.id];
+    return !readiness?.isBalanced || formula.status !== 'active';
+  });
 
   const { profile } = useAuth();
   const userRole = (profile?.role || '').toLowerCase();
@@ -608,6 +635,70 @@ export default function FormulationsPage() {
         <StatCard title="Draft" value={draftCount} icon={FileText} color="amber" />
         <StatCard title="Archived" value={archivedCount} icon={Archive} color="slate" />
       </div>
+
+      {isFinanceUser && !loading && (
+        <section className="border border-amber-200 bg-amber-50/60 rounded-lg overflow-hidden">
+          <div className="flex flex-col gap-3 px-5 py-4 border-b border-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-slate-800">Finance Formula Review</h2>
+                <p className="text-sm text-slate-600">A formula can be used in production only when its active BOM totals its reference batch quantity.</p>
+              </div>
+            </div>
+            <span className={`self-start rounded-md px-3 py-1 text-sm font-semibold sm:self-auto ${financeReviewQueue.length ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+              {financeReviewQueue.length} requiring review
+            </span>
+          </div>
+          {financeReviewQueue.length > 0 ? (
+            <div className="max-h-80 overflow-auto bg-white">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Formula</th>
+                    <th className="px-4 py-3 text-right">Reference kg</th>
+                    <th className="px-4 py-3 text-right">BOM kg</th>
+                    <th className="px-4 py-3 text-right">Variance</th>
+                    <th className="px-4 py-3">Readiness</th>
+                    <th className="px-5 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {financeReviewQueue.map((formula) => {
+                    const readiness = formulaReadiness[formula.id];
+                    const balanced = readiness?.isBalanced;
+                    return (
+                      <tr key={formula.id}>
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-slate-800">{formula.name}</p>
+                          <p className="font-mono text-xs text-slate-500">{formula.code} | Sage: {formula.sage_code || 'Not mapped'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">{Number(formula.batch_size || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{Number(readiness?.ingredientTotalKg || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                        <td className={`px-4 py-3 text-right font-medium tabular-nums ${balanced ? 'text-emerald-700' : 'text-red-700'}`}>{Number(readiness?.varianceKg || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                        <td className="px-4 py-3">
+                          {balanced ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Balanced; awaiting activation</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5" /> BOM review required</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <button onClick={() => openEdit(formula)} className="rounded-md border border-teal-300 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50">Review formula</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="bg-white px-5 py-4 text-sm text-emerald-700">All formulas are balanced and active.</div>
+          )}
+        </section>
+      )}
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -768,7 +859,7 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              {(() => {
+                              {isFinanceUser && (() => {
                                 const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
                                 const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
 
@@ -804,6 +895,16 @@ export default function FormulationsPage() {
                                   <button
                                     onClick={async () => {
                                       try {
+                                        if (!isFinanceUser) {
+                                          alert('Only Finance can approve a formula for production.');
+                                          return;
+                                        }
+                                        const readiness = formulaReadiness[f.id];
+                                        if (!readiness?.isBalanced) {
+                                          alert(`Cannot activate this formula. Active BOM total is ${(readiness?.ingredientTotalKg || 0).toFixed(4)} kg; reference batch is ${Number(f.batch_size || 0).toFixed(4)} kg.`);
+                                          await openEdit(f);
+                                          return;
+                                        }
                                         const { data: { user } } = await supabase.auth.getUser();
 
                                         // Update status and approved_by in Supabase
