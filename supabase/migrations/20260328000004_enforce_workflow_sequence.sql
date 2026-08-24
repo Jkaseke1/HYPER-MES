@@ -17,12 +17,16 @@ BEGIN
     FROM production_order_materials
     WHERE production_order_id = COALESCE(NEW.id, OLD.id);
     
-    -- Check if there are any outputs for completion check
-    SELECT EXISTS(
+    -- Current MES records output on production_orders. Retain the legacy
+    -- production_outputs check for historical orders that still use it.
+    has_outputs := COALESCE(NEW.actual_qty, 0) > 0;
+    IF NOT has_outputs THEN
+      SELECT EXISTS(
         SELECT 1 FROM production_outputs 
         WHERE production_order_id = COALESCE(NEW.id, OLD.id)
         AND quantity_produced IS NOT NULL AND quantity_produced > 0
-    ) INTO has_outputs;
+      ) INTO has_outputs;
+    END IF;
     
     -- ENFORCEMENT RULES
     

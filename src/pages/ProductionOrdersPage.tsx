@@ -1374,6 +1374,18 @@ export default function ProductionOrdersPage() {
       setWorkflowError('Cannot complete — production must be in progress.');
       return;
     }
+    if (sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing') {
+      setWorkflowError('Sage finished-goods posting is already in progress. Please wait for Sage confirmation.');
+      return;
+    }
+    if (sageCompletionStatus?.status === 'success') {
+      setWorkflowError('Sage has already posted this finished-goods receipt. MES is finalizing the batch.');
+      return;
+    }
+    if (sageCompletionStatus?.status === 'failed') {
+      setWorkflowError('The previous Sage completion attempt needs review before it can be retried.');
+      return;
+    }
     const currentActual = output.actual_qty || selected.actual_qty || 0;
     if (currentActual <= 0) {
       setWorkflowError('Cannot complete — enter actual output quantity in Output tab first.');
@@ -1566,6 +1578,9 @@ export default function ProductionOrdersPage() {
   const inProgressCount = orders.filter(o => o.status === 'in_progress').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
   const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
+  const sageCompletionInFlight = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
+  const sageCompletionPosted = sageCompletionStatus?.status === 'success';
+  const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -2433,11 +2448,11 @@ export default function ProductionOrdersPage() {
                   {selected.status === 'in_progress' && (
                     <button
                       onClick={handleCompletionRequest}
-                      disabled={saving || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
+                      disabled={saving || sageCompletionInFlight || sageCompletionPosted || sageCompletionFailed || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Complete Production
+                      {sageCompletionInFlight ? <Clock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                      {sageCompletionInFlight ? 'Waiting for Sage Receipt' : sageCompletionPosted ? 'Sage Receipt Posted' : sageCompletionFailed ? 'Sage Completion Failed' : 'Complete Production'}
                     </button>
                   )}
                   {selected.status === 'completed' && (
