@@ -593,6 +593,24 @@ export default function ProductionOrdersPage() {
     return <span className={`${className} inline-flex items-center gap-1 font-semibold text-amber-700`}><Clock className="w-3.5 h-3.5" />Queued</span>;
   };
 
+  const renderOrderStage = (order: ProductionOrder, compact = false) => {
+    const transfer = finishedGoodsTransferStatuses[order.id];
+    const className = compact ? 'text-[11px]' : 'text-xs';
+    if (order.status === 'completed' && transfer?.status === 'posted') {
+      return <span className={`${className} inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700`}><CheckCircle2 className="h-3.5 w-3.5" />Transferred to Dispatch</span>;
+    }
+    if (order.status === 'completed' && transfer?.status === 'pending_finance') {
+      return <span className={`${className} inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700`}><Clock className="h-3.5 w-3.5" />Finance Review Required</span>;
+    }
+    if (order.status === 'completed' && transfer?.status === 'pending') {
+      return <span className={`${className} inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-semibold text-blue-700`}><Clock className="h-3.5 w-3.5" />Dispatch Transfer Queued</span>;
+    }
+    if (order.status === 'completed') {
+      return <span className={`${className} inline-flex rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 font-semibold text-teal-700`}>Completed - In Production</span>;
+    }
+    return <StatusBadge status={order.status} />;
+  };
+
   const selectedSageIssue = selected ? (sageIssueStatus || sageIssueStatuses[selected.id]) : null;
   const canStartProduction = selectedSageIssue?.status === 'success';
   useEffect(() => {
@@ -1727,7 +1745,7 @@ export default function ProductionOrdersPage() {
                         {order.actual_qty ? <>{formatBags(order.actual_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty.toLocaleString()} kg)</span></> : '-'}
                       </td>
                       <td className="px-4 py-3.5">
-                        <StatusBadge status={order.status} />
+                        {renderOrderStage(order)}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         {renderSageIssueStatus(order)}
@@ -1758,7 +1776,7 @@ export default function ProductionOrdersPage() {
                     <span className="font-mono text-xs font-extrabold bg-slate-900 text-white px-2.5 py-1 rounded">
                       {order.batch_number}
                     </span>
-                    <StatusBadge status={order.status} />
+                    {renderOrderStage(order, true)}
                   </div>
 
                   <div>
@@ -2351,7 +2369,7 @@ export default function ProductionOrdersPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-extrabold tracking-tight font-mono">{selected?.batch_number}</h2>
-                  {selected && <StatusBadge status={selected.status} />}
+                  {selected && renderOrderStage(selected)}
                   {downtimeEntries.length > 0 && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
                       <Clock className="w-3 h-3" />
