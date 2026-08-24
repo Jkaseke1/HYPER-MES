@@ -130,7 +130,10 @@ export default function ProductionOrdersPage() {
   const [showEditQty, setShowEditQty] = useState(false);
   const [showFinishedGoodsTransfer, setShowFinishedGoodsTransfer] = useState(false);
   const [finishedGoodsTransferQty, setFinishedGoodsTransferQty] = useState('');
+  const [finishedGoodsVerifiedBags, setFinishedGoodsVerifiedBags] = useState('');
   const [finishedGoodsTransferNotes, setFinishedGoodsTransferNotes] = useState('');
+  const [productionTransferVerified, setProductionTransferVerified] = useState(false);
+  const [financeTransferVerified, setFinanceTransferVerified] = useState(false);
   const [finishedGoodsTransferSaving, setFinishedGoodsTransferSaving] = useState(false);
   const [selected, setSelected] = useState<ProductionOrder | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -190,7 +193,10 @@ export default function ProductionOrdersPage() {
   const openFinishedGoodsTransfer = () => {
     if (!selected || selected.status !== 'completed') return;
     setFinishedGoodsTransferQty(String(selected.actual_qty || 0));
+    setFinishedGoodsVerifiedBags(String(selected.actual_bags || bagsFromKg(selected.actual_qty || 0, selected.unit_size)));
     setFinishedGoodsTransferNotes('');
+    setProductionTransferVerified(false);
+    setFinanceTransferVerified(false);
     setWorkflowError(null);
     setShowFinishedGoodsTransfer(true);
   };
@@ -206,6 +212,20 @@ export default function ProductionOrdersPage() {
       setWorkflowError('Enter a finished-goods transfer quantity greater than zero.');
       return;
     }
+    const verifiedBags = Number(finishedGoodsVerifiedBags);
+    const expectedBags = bagsFromKg(quantity, selected.unit_size);
+    if (quantity > Number(selected.actual_qty || 0) + 0.001) {
+      setWorkflowError('The physical quantity cannot exceed the completed batch output.');
+      return;
+    }
+    if (!Number.isFinite(verifiedBags) || verifiedBags <= 0 || Math.abs(verifiedBags - expectedBags) > 0.001) {
+      setWorkflowError(`Physical bag count must match the transfer quantity (${expectedBags.toLocaleString()} bags).`);
+      return;
+    }
+    if (!productionTransferVerified || !financeTransferVerified) {
+      setWorkflowError('Production and Finance must both confirm the physical finished-goods count before transfer to DEB.');
+      return;
+    }
     setFinishedGoodsTransferSaving(true);
     try {
       const transferNumber = await generateBatchNumber('FGT');
@@ -218,6 +238,12 @@ export default function ProductionOrdersPage() {
         transfer_date: format(new Date(), 'yyyy-MM-dd'),
         notes: finishedGoodsTransferNotes.trim() || null,
         initiated_by: profile?.id || null,
+        verified_quantity: quantity,
+        verified_bags: verifiedBags,
+        production_verified_by: profile?.id || null,
+        production_verified_at: new Date().toISOString(),
+        finance_verified_by: profile?.id || null,
+        finance_verified_at: new Date().toISOString(),
         status: 'pending',
       });
       if (error) throw error;
@@ -2261,21 +2287,40 @@ export default function ProductionOrdersPage() {
           </div>
           <div className="p-5 space-y-4">
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-              {selected?.formulations?.name || 'Finished goods'} from batch <span className="font-mono font-bold">{selected?.batch_number}</span>. Sage receives a warehouse transfer only after this clerk action.
+              {selected?.formulations?.name || 'Finished goods'} from batch <span className="font-mono font-bold">{selected?.batch_number}</span>. Reconcile the physical handover before Sage receives the PD-to-DEB transfer.
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Completed output</span><strong>{Number(selected?.actual_qty || 0).toLocaleString()} kg</strong></div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Completed bags</span><strong>{Number(selected?.actual_bags || bagsFromKg(selected?.actual_qty || 0, selected?.unit_size)).toLocaleString()}</strong></div>
             </div>
             <div>
-              <label className={labelCls}>Quantity to transfer (kg)</label>
+              <label className={labelCls}>Physical quantity verified for transfer (kg)</label>
               <input type="number" min="0.001" step="0.001" value={finishedGoodsTransferQty} onChange={(event) => setFinishedGoodsTransferQty(event.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Notes</label>
-              <textarea value={finishedGoodsTransferNotes} onChange={(event) => setFinishedGoodsTransferNotes(event.target.value)} rows={3} className={inputCls} placeholder="Optional handover or pallet reference" />
+              <label className={labelCls}>Physical bags verified</label>
+              <input type="number" min="0.001" step="0.001" value={finishedGoodsVerifiedBags} onChange={(event) => setFinishedGoodsVerifiedBags(event.target.value)} className={inputCls} />
+              <p className="mt-1 text-[11px] text-slate-500">Expected for this quantity: {formatBags(bagsFromKg(Number(finishedGoodsTransferQty || 0), selected?.unit_size))}.</p>
+            </div>
+            <div>
+              <label className={labelCls}>Handover notes</label>
+              <textarea value={finishedGoodsTransferNotes} onChange={(event) => setFinishedGoodsTransferNotes(event.target.value)} rows={3} className={inputCls} placeholder="Pallet, count sheet, or variance reference" />
+            </div>
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <label className="flex items-start gap-2 text-xs font-semibold text-amber-950 cursor-pointer">
+                <input type="checkbox" checked={productionTransferVerified} onChange={(event) => setProductionTransferVerified(event.target.checked)} className="mt-0.5" />
+                <span>Production confirms the physical finished-goods quantity and bag count are ready for handover.</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs font-semibold text-amber-950 cursor-pointer">
+                <input type="checkbox" checked={financeTransferVerified} onChange={(event) => setFinanceTransferVerified(event.target.checked)} className="mt-0.5" />
+                <span>Finance confirms the quantity agrees with the completed batch and production record.</span>
+              </label>
             </div>
           </div>
           <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
             <button onClick={() => setShowFinishedGoodsTransfer(false)} disabled={finishedGoodsTransferSaving} className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg">Cancel</button>
-            <button onClick={createFinishedGoodsTransfer} disabled={finishedGoodsTransferSaving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
-              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Queuing...' : 'Queue Sage Transfer'}
+            <button onClick={createFinishedGoodsTransfer} disabled={finishedGoodsTransferSaving || !productionTransferVerified || !financeTransferVerified} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Queuing...' : 'Confirm & Queue Sage Transfer'}
             </button>
           </div>
         </DialogContent>
