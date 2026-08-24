@@ -256,7 +256,7 @@ export default function ProductionOrdersPage() {
   const openFinishedGoodsTransfer = () => {
     if (!selected || selected.status !== 'completed') return;
     const existing = finishedGoodsTransferStatuses[selected.id];
-    if (existing?.status === 'pending_finance') {
+    if (existing?.status === 'pending_finance' || existing?.status === 'failed') {
       setFinishedGoodsTransferQty(String(existing.verified_quantity || existing.quantity));
       setFinishedGoodsVerifiedBags(String(existing.verified_bags || bagsFromKg(existing.quantity, selected.unit_size)));
       setFinishedGoodsTransferNotes(existing.notes || '');
@@ -339,18 +339,22 @@ export default function ProductionOrdersPage() {
     }
     setFinishedGoodsTransferSaving(true);
     try {
+      const retryingFailedTransfer = financeTransferReview.status === 'failed';
       const { error } = await supabase
         .from('finished_goods_transfers')
         .update({
           finance_verified_by: profile?.id || null,
           finance_verified_at: new Date().toISOString(),
           status: 'pending',
+          sage_response: {},
           updated_at: new Date().toISOString(),
         })
         .eq('id', financeTransferReview.id)
-        .eq('status', 'pending_finance');
+        .in('status', ['pending_finance', 'failed']);
       if (error) throw error;
-      toast.success(`Finance approved ${financeTransferReview.transfer_number}. Sage transfer is queued.`);
+      toast.success(retryingFailedTransfer
+        ? `${financeTransferReview.transfer_number} has been re-queued for Sage posting.`
+        : `Finance approved ${financeTransferReview.transfer_number}. Sage transfer is queued.`);
       setShowFinishedGoodsTransfer(false);
     } catch (error: any) {
       console.error('Error approving finished-goods transfer:', error);
@@ -712,6 +716,10 @@ export default function ProductionOrdersPage() {
     }
     if (order.status === 'completed' && transfer?.status === 'pending') {
       return <span className={`${className} inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-semibold text-blue-700`}><Clock className="h-3.5 w-3.5" />Dispatch Transfer Queued</span>;
+    }
+    if (order.status === 'completed' && transfer?.status === 'failed') {
+      const errorMessage = transfer.sage_response?.message || 'Sage did not post the PD to DEB transfer.';
+      return <span className={`${className} inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-semibold text-red-700`} title={errorMessage}><AlertTriangle className="h-3.5 w-3.5" />Dispatch Transfer Failed</span>;
     }
     if (order.status === 'completed') {
       return <span className={`${className} inline-flex rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 font-semibold text-teal-700`}>Completed - In Production</span>;
@@ -2448,7 +2456,7 @@ export default function ProductionOrdersPage() {
           </div>
           <div className="p-5 space-y-4">
             <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs text-teal-950">
-              <div className="font-bold">{financeTransferReview ? 'Finance release review' : 'Production stock handover'}</div>
+              <div className="font-bold">{financeTransferReview?.status === 'failed' ? 'Finance retry review' : financeTransferReview ? 'Finance release review' : 'Production stock handover'}</div>
               <p className="mt-1">{selected?.formulations?.name || 'Finished goods'} from <span className="font-mono font-bold">{selected?.batch_number}</span> moves only after the physical count is reconciled and Finance releases it.</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -2463,7 +2471,7 @@ export default function ProductionOrdersPage() {
             {financeTransferReview ? (
               <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-950 cursor-pointer">
                 <input type="checkbox" checked={financeTransferVerified} onChange={(event) => setFinanceTransferVerified(event.target.checked)} className="mt-0.5" />
-                <span>Finance confirms this physical handover agrees with the completed production quantity and authorizes Sage posting from PD to DEB.</span>
+                <span>{financeTransferReview?.status === 'failed' ? 'Finance confirms the physical handover remains correct and authorizes a retry of the same Sage PD to DEB transfer.' : 'Finance confirms this physical handover agrees with the completed production quantity and authorizes Sage posting from PD to DEB.'}</span>
               </label>
             ) : (
               <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-950 cursor-pointer">
@@ -2475,7 +2483,7 @@ export default function ProductionOrdersPage() {
           <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
             <button onClick={() => setShowFinishedGoodsTransfer(false)} disabled={finishedGoodsTransferSaving} className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg">Cancel</button>
             <button onClick={financeTransferReview ? approveFinishedGoodsTransfer : finalizeProductionHandover} disabled={finishedGoodsTransferSaving || (financeTransferReview ? !financeTransferVerified : !productionTransferVerified)} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
-              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Saving...' : financeTransferReview ? 'Finance Approve & Queue Sage' : 'Finalize Production Handover'}
+              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Saving...' : financeTransferReview?.status === 'failed' ? 'Finance Approve & Retry Sage' : financeTransferReview ? 'Finance Approve & Queue Sage' : 'Finalize Production Handover'}
             </button>
           </div>
         </DialogContent>
@@ -2587,10 +2595,13 @@ export default function ProductionOrdersPage() {
                       ? 'bg-red-50 border-red-200 text-red-900'
                       : 'bg-amber-50 border-amber-200 text-amber-900'
                 }`}>
-                  {selectedFinishedGoodsTransfer.status === 'posted' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                  {selectedFinishedGoodsTransfer.status === 'posted' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : selectedFinishedGoodsTransfer.status === 'failed' ? <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" /> : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
                   <div className="min-w-0">
-                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Transfer: {selectedFinishedGoodsTransfer.status === 'posted' ? 'Posted to DEB' : selectedFinishedGoodsTransfer.status}</div>
+                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Transfer: {selectedFinishedGoodsTransfer.status === 'posted' ? 'Posted to DEB' : selectedFinishedGoodsTransfer.status === 'failed' ? 'Failed at PD to DEB posting' : selectedFinishedGoodsTransfer.status}</div>
                     <div className="text-xs mt-0.5 break-words">{selectedFinishedGoodsTransfer.transfer_number} - {Number(selectedFinishedGoodsTransfer.quantity).toLocaleString()} kg from Production to DEB.</div>
+                    {selectedFinishedGoodsTransfer.status === 'failed' && (
+                      <div className="mt-1 text-[11px] text-red-700 break-words">{selectedFinishedGoodsTransfer.sage_response?.message || 'Sage did not post this PD to DEB transfer. Finance can review and re-queue the same verified transfer.'}</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2660,10 +2671,10 @@ export default function ProductionOrdersPage() {
                       onClick={openFinishedGoodsTransfer}
                       disabled={saving || selectedFinishedGoodsTransfer?.status === 'posted' || selectedFinishedGoodsTransfer?.status === 'pending'}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={selectedFinishedGoodsTransfer?.status === 'posted' ? 'Finished goods have already been transferred to DEB.' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'This finished-goods transfer is queued for Sage.' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Production handover is awaiting Finance verification.' : 'Transfer finished goods from Production to DEB'}
+                      title={selectedFinishedGoodsTransfer?.status === 'posted' ? 'Finished goods have already been transferred to DEB.' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'This finished-goods transfer is queued for Sage.' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Production handover is awaiting Finance verification.' : selectedFinishedGoodsTransfer?.status === 'failed' ? 'The PD to DEB Sage transfer failed. Review and re-queue the same verified transfer.' : 'Transfer finished goods from Production to DEB'}
                     >
                       {selectedFinishedGoodsTransfer?.status === 'posted' ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                      {selectedFinishedGoodsTransfer?.status === 'posted' ? 'Transferred to DEB' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'Sage Transfer Queued' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Finance Review Required' : 'Verify Finished Goods'}
+                      {selectedFinishedGoodsTransfer?.status === 'posted' ? 'Transferred to DEB' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'Sage Transfer Queued' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Finance Review Required' : selectedFinishedGoodsTransfer?.status === 'failed' ? 'Review & Retry Sage Transfer' : 'Verify Finished Goods'}
                     </button>
                   )}
                   <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">

@@ -230,6 +230,25 @@ async function processPendingEvents() {
     } catch (err) {
       console.error(`  ❌ Failed: ${err.message}`);
 
+      if (event.event_type === 'finished_goods_transfer_to_dispatch') {
+        const { error: transferUpdateError } = await supabase
+          .from('finished_goods_transfers')
+          .update({
+            status: 'failed',
+            sage_response: {
+              status: 'failed',
+              message: err.message,
+              statusCode: err.statusCode || null,
+              response: err.response || null,
+              failed_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', event.reference_id)
+          .eq('status', 'pending');
+        if (transferUpdateError) console.error(`  Failed to mark finished-goods transfer as failed in MES: ${transferUpdateError.message}`);
+      }
+
       await supabase
         .from('sync_log')
         .update({
