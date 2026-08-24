@@ -182,6 +182,7 @@ export default function ProductionOrdersPage() {
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
   const notifiedSageCompletionRef = useRef<Record<string, string>>({});
+  const notifiedFinishedGoodsTransferRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
   const showSageNotification = useCallback((
@@ -240,6 +241,23 @@ export default function ProductionOrdersPage() {
       </div>
     ), { duration: presentation.duration });
   }, []);
+
+  const notifyFinishedGoodsTransferResult = useCallback((transfer: FinishedGoodsTransferStatus) => {
+    const key = `${transfer.status}:${transfer.updated_at || ''}`;
+    if (notifiedFinishedGoodsTransferRef.current[transfer.id] === key) return;
+    notifiedFinishedGoodsTransferRef.current[transfer.id] = key;
+
+    if (transfer.status === 'posted') {
+      showSageNotification('success', 'Dispatch transfer posted', `${transfer.transfer_number} has moved from Production to DEB in Sage.`);
+    } else if (transfer.status === 'failed') {
+      showSageNotification('error', 'Dispatch transfer needs attention', transfer.sage_response?.message || `${transfer.transfer_number} was not posted to Sage. Review the transfer before retrying.`);
+    }
+
+    if (typeof window !== 'undefined' && ['posted', 'failed'].includes(transfer.status)) {
+      const watchKey = 'sage-finished-goods-transfer-watch';
+      if (window.sessionStorage.getItem(watchKey) === transfer.id) window.sessionStorage.removeItem(watchKey);
+    }
+  }, [showSageNotification]);
 
   const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
     setConfirmDialog({
@@ -352,6 +370,10 @@ export default function ProductionOrdersPage() {
         .eq('id', financeTransferReview.id)
         .in('status', ['pending_finance', 'failed']);
       if (error) throw error;
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('sage-finished-goods-transfer-watch', financeTransferReview.id);
+      }
+      showSageNotification('processing', retryingFailedTransfer ? 'Retrying dispatch transfer' : 'Dispatch transfer queued', `${financeTransferReview.transfer_number} is queued for Sage PD to DEB posting. MES will confirm the result when the bridge finishes.`);
       toast.success(retryingFailedTransfer
         ? `${financeTransferReview.transfer_number} has been re-queued for Sage posting.`
         : `Finance approved ${financeTransferReview.transfer_number}. Sage transfer is queued.`);
@@ -488,7 +510,12 @@ export default function ProductionOrdersPage() {
       if (orderId && !nextStatuses[orderId]) nextStatuses[orderId] = row as FinishedGoodsTransferStatus;
     }
     setFinishedGoodsTransferStatuses(nextStatuses);
-  }, []);
+    if (typeof window !== 'undefined') {
+      const watchedId = window.sessionStorage.getItem('sage-finished-goods-transfer-watch');
+      const watchedTransfer = Object.values(nextStatuses).find((transfer) => transfer.id === watchedId);
+      if (watchedTransfer && ['posted', 'failed'].includes(watchedTransfer.status)) notifyFinishedGoodsTransferResult(watchedTransfer);
+    }
+  }, [notifyFinishedGoodsTransferResult]);
 
   useEffect(() => {
     const orderIds = orders.map((order) => order.id).filter(Boolean);
@@ -618,11 +645,7 @@ export default function ProductionOrdersPage() {
         const transfer = payload.new as FinishedGoodsTransferStatus;
         if (!transfer?.production_order_id) return;
         setFinishedGoodsTransferStatuses((current) => ({ ...current, [transfer.production_order_id]: transfer }));
-        if (transfer.status === 'posted') {
-          showSageNotification('success', 'Dispatch transfer posted', `${transfer.transfer_number} has moved from Production to DEB in Sage.`);
-        } else if (transfer.status === 'failed') {
-          showSageNotification('error', 'Dispatch transfer needs attention', `${transfer.transfer_number} was not posted to Sage. Review the transfer before retrying.`);
-        }
+        notifyFinishedGoodsTransferResult(transfer);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
         const event = payload.new as any;
@@ -681,7 +704,7 @@ export default function ProductionOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, selected?.id, showSageNotification]);
+  }, [fetchOrders, selected?.id, showSageNotification, notifyFinishedGoodsTransferResult]);
 
   const renderSageIssueStatus = (order: ProductionOrder, compact = false) => {
     const status = sageIssueStatuses[order.id];
