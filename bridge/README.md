@@ -13,7 +13,7 @@ This bridge connects the HYPER MES system with Sage Pastel accounting software, 
 - **materialTransferSdkAuto.js** - Handles received RM → Production warehouse transfers through the protected Sage SDK API
 
 ### ✅ **Priority 3: Bridge Worker (COMPLETE)**
-- **bridgeWorker.js** - Main worker that polls sync_log every 30 seconds
+- **bridgeWorker.js** - Main worker that polls `sync_log` every 5 seconds by default
 - Coordinates all event handlers
 - Handles retries and error management
 - Provides statistics and health monitoring
@@ -98,7 +98,8 @@ SAGE_USERNAME=Manager
 SAGE_PASSWORD=
 
 # Bridge Settings
-POLL_INTERVAL=30000  # 30 seconds
+# Optional. Defaults to 5000 ms and is never allowed below 2000 ms.
+BRIDGE_POLL_INTERVAL_MS=5000
 BATCH_SIZE=10
 MAX_RETRIES=3
 

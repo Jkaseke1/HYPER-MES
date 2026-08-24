@@ -12,9 +12,15 @@ const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto'
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
 
-const POLL_INTERVAL_MS = 30000;
+const DEFAULT_POLL_INTERVAL_MS = 5000;
+const MINIMUM_POLL_INTERVAL_MS = 2000;
+const configuredPollInterval = Number(process.env.BRIDGE_POLL_INTERVAL_MS);
+const POLL_INTERVAL_MS = Number.isFinite(configuredPollInterval)
+  ? Math.max(configuredPollInterval, MINIMUM_POLL_INTERVAL_MS)
+  : DEFAULT_POLL_INTERVAL_MS;
 const STOCK_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 let stockSyncInProgress = false;
+let eventProcessingInProgress = false;
 
 async function verifySdkConnection() {
   const baseUrl = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
@@ -61,6 +67,12 @@ function postedStockCodes(eventType, details) {
 }
 
 async function processPendingEvents() {
+  // Do not let a timer tick overlap a slow Sage post; the atomic claim remains
+  // the safeguard when another worker instance is ever started accidentally.
+  if (eventProcessingInProgress) return;
+  eventProcessingInProgress = true;
+
+  try {
   const { data: pending, error } = await supabase
     .from('sync_log')
     .select('*')
@@ -203,6 +215,9 @@ async function processPendingEvents() {
         })
         .eq('id', event.id);
     }
+  }
+  } finally {
+    eventProcessingInProgress = false;
   }
 }
 
