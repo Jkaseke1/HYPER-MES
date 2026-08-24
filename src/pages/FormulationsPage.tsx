@@ -346,8 +346,11 @@ export default function FormulationsPage() {
       return;
     }
 
-    if (Math.abs(totalPct - 100) > 0.1) {
-      alert('Ingredient percentages must total 100%.');
+    const ingredientTotal = ings
+      .filter((ingredient) => ingredient.raw_material_id)
+      .reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
+    if (Math.abs(ingredientTotal - resolvedBatchSize) > 0.01) {
+      alert(`Formula mass balance must equal the standard batch size. Ingredients total ${ingredientTotal.toFixed(4)} kg; standard batch is ${resolvedBatchSize.toFixed(4)} kg.`);
       return;
     }
 
@@ -502,16 +505,18 @@ export default function FormulationsPage() {
     }
   }
 
-  const recalculatePercentages = (updatedIngs: IngRow[]) => {
-    const total = updatedIngs.filter(i => i.raw_material_id).reduce((s, i) => s + (Number(i.quantity) || 0), 0);
-    if (total === 0) return updatedIngs;
+  const recalculatePercentages = (updatedIngs: IngRow[], batchSize = Number(form.batch_size) || 0) => {
+    if (batchSize <= 0) return updatedIngs;
     return updatedIngs.map(i => ({
       ...i,
-      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / total) * 100 * 100) / 100 : 0,
+      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100 * 100) / 100 : 0,
     }));
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
+  const formulaIngredientTotal = ings.filter((ingredient) => ingredient.raw_material_id).reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
+  const formulaBatchSize = Number(form.batch_size) || Number(form.unit_size_variants?.[0]?.batch_size) || 0;
+  const formulaBalanceDifference = formulaIngredientTotal - formulaBatchSize;
 
   const catColor: Record<string, string> = {
     'Broiler': 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold',
@@ -1437,7 +1442,7 @@ export default function FormulationsPage() {
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Standard Formula Batch Size (kg) *</label>
-              <input type="number" min="0.0001" step="0.0001" value={form.batch_size} onChange={e => { const batchSize = e.target.value; const v = [...form.unit_size_variants]; v[0] = { ...(v[0] || { size: '', batch_size: 0 }), batch_size: Number(batchSize) || 0 }; setForm({ ...form, batch_size: batchSize, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
+              <input type="number" min="0.0001" step="0.0001" value={form.batch_size} onChange={e => { const batchSize = e.target.value; const v = [...form.unit_size_variants]; v[0] = { ...(v[0] || { size: '', batch_size: 0 }), batch_size: Number(batchSize) || 0 }; setForm({ ...form, batch_size: batchSize, unit_size_variants: v }); setIngs(recalculatePercentages(ings, Number(batchSize) || 0)); }} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
@@ -1470,7 +1475,8 @@ export default function FormulationsPage() {
             <div className="flex items-center justify-between mb-2">
               <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Each quantity is for the approved {form.batch_size || '—'} kg formula batch and will scale proportionally on production orders.</p></div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : totalPct > 100 ? 'text-red-600' : 'text-amber-600'}`}>Total: {totalPct.toFixed(1)}%</span>
+                <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(4)} / {formulaBatchSize.toFixed(4)} kg</span>
+                <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Total: {totalPct.toFixed(1)}%</span>
                 <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>
               </div>
             </div>
@@ -1502,7 +1508,7 @@ export default function FormulationsPage() {
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" min="0" step="0.0001" value={ing.quantity} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantities" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantity divided by the standard batch size" /></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
                   <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>

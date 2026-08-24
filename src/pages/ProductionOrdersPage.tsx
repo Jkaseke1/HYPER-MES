@@ -837,8 +837,32 @@ export default function ProductionOrdersPage() {
       return;
     }
 
+    if (!form.formulation_id) {
+      setWorkflowError('Select an approved formulation before creating a production order.');
+      return;
+    }
+
     setSaving(true);
     try {
+      // Finance control: a work order must be based on an approved formula whose
+      // standard ingredient quantities reconcile to its declared batch size.
+      const [{ data: formulation, error: formulationError }, { data: ingredients, error: ingredientsError }] = await Promise.all([
+        supabase.from('formulations').select('batch_size, status').eq('id', form.formulation_id).single(),
+        supabase.from('formulation_ingredients').select('quantity, is_active').eq('formulation_id', form.formulation_id),
+      ]);
+      if (formulationError) throw formulationError;
+      if (ingredientsError) throw ingredientsError;
+      if (formulation.status !== 'active') {
+        throw new Error('This formulation is awaiting Finance approval and cannot be used for a work order yet.');
+      }
+      const ingredientTotal = (ingredients || [])
+        .filter((ingredient) => ingredient.is_active !== false)
+        .reduce((sum, ingredient) => sum + Number(ingredient.quantity || 0), 0);
+      const batchSize = Number(formulation.batch_size || 0);
+      if (ingredientTotal <= 0 || Math.abs(ingredientTotal - batchSize) > 0.01) {
+        throw new Error(`Formula mass balance is invalid: BOM ingredients total ${ingredientTotal.toFixed(4)} kg but the approved batch is ${batchSize.toFixed(4)} kg. Ask Finance to review the formula before creating this order.`);
+      }
+
       // Ensure planned_qty is a valid number and not multiplied
       const plannedQty = parseFloat(String(form.planned_qty));
       
