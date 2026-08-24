@@ -32,7 +32,7 @@ function postJson(urlString, apiKey, body) {
         let parsed = responseBody;
         try { parsed = responseBody ? JSON.parse(responseBody) : {}; } catch (_) { /* Preserve plain text diagnostics. */ }
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(parsed);
-        const message = parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
+        const message = parsed?.exceptionMessage || parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
         const error = new Error(`Sage material-issue API failed: ${message}`);
         error.statusCode = res.statusCode;
         error.response = parsed;

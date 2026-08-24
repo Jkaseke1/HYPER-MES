@@ -8,48 +8,17 @@ namespace SDK_Test
     [RoutePrefix("api/v1/sdk")]
     public class SdkConnectionController : ApiController
     {
-        private static readonly object ConnectionLock = new object();
-        private static bool _sdkConnected;
-
         [HttpGet]
         [Route("connection")]
         public IHttpActionResult CheckConnection()
         {
             try
             {
-                lock (ConnectionLock)
+                // Evolution keeps its connection in global process state. Health checks
+                // must use the same gate as stock reads and posting operations.
+                lock (SdkSession.OperationLock)
                 {
-                    if (!_sdkConnected)
-                    {
-                        var commonServer = GetServerSetting("HYPER_SAGE_COMMON_SERVER");
-                        var companyServer = GetServerSetting("HYPER_SAGE_COMPANY_SERVER");
-                        var commonDatabase = GetRequiredSetting("HYPER_SAGE_COMMON_DATABASE");
-                        var companyDatabase = GetRequiredSetting("HYPER_SAGE_COMPANY_DATABASE");
-                        var sqlUsername = GetRequiredSetting("HYPER_SAGE_SQL_USERNAME");
-                        var sqlPassword = GetRequiredSetting("HYPER_SAGE_SQL_PASSWORD");
-                        var sdkSerial = GetRequiredSetting("HYPER_SAGE_SDK_SERIAL");
-                        var sdkAuthCode = GetRequiredSetting("HYPER_SAGE_SDK_AUTH_CODE");
-
-                        DatabaseContext.CreateCommonDBConnection(
-                            commonServer,
-                            commonDatabase,
-                            sqlUsername,
-                            sqlPassword,
-                            false
-                        );
-
-                        DatabaseContext.SetLicense(sdkSerial, sdkAuthCode);
-
-                        DatabaseContext.CreateConnection(
-                            companyServer,
-                            companyDatabase,
-                            sqlUsername,
-                            sqlPassword,
-                            false
-                        );
-
-                        _sdkConnected = true;
-                    }
+                    SdkSession.EnsureConnected();
                 }
 
                 return Ok(new
