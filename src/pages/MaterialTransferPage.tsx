@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -112,6 +112,7 @@ export default function MaterialTransferPage() {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [selectedTransferIds, setSelectedTransferIds] = useState<string[]>([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const fetchRequestId = useRef(0);
 
   // Multi-line transfer state
   const [transferLines, setTransferLines] = useState<Array<{
@@ -151,7 +152,7 @@ export default function MaterialTransferPage() {
 
     const intervalId = window.setInterval(() => {
       fetchData(true);
-    }, 10000);
+    }, 3000);
 
     return () => {
       window.clearInterval(intervalId);
@@ -175,6 +176,7 @@ export default function MaterialTransferPage() {
   };
 
   async function fetchData(silent = false) {
+    const requestId = ++fetchRequestId.current;
     if (!silent) setLoading(true);
     const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
       supabase
@@ -198,10 +200,10 @@ export default function MaterialTransferPage() {
         .eq('warehouses.code', 'BUFFER'),
     ]);
 
+    if (requestId !== fetchRequestId.current) return;
+
     if (transfersRes.data) {
       const nextTransfers = transfersRes.data as any;
-      setTransfers(nextTransfers);
-
       const transferIds = nextTransfers.map((transfer: MaterialTransfer) => transfer.id);
       if (transferIds.length > 0) {
         const { data: syncRows, error: syncError } = await supabase
@@ -210,6 +212,8 @@ export default function MaterialTransferPage() {
           .eq('event_type', 'material_transfer_to_production')
           .in('reference_id', transferIds)
           .order('created_at', { ascending: false });
+
+        if (requestId !== fetchRequestId.current) return;
 
         if (syncError) {
           console.warn('Failed to load material transfer Sage sync logs:', syncError);
@@ -223,7 +227,9 @@ export default function MaterialTransferPage() {
       } else {
         setSageSyncLogs({});
       }
+      setTransfers(nextTransfers);
     }
+    if (requestId !== fetchRequestId.current) return;
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);
@@ -344,6 +350,10 @@ export default function MaterialTransferPage() {
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
+  const activeSagePosts = transfers.filter((transfer) => {
+    const status = sageSyncLogs[transfer.id]?.status;
+    return status === 'pending' || status === 'processing' || status === 'retry';
+  });
 
   const toggleSelectAll = () => {
     const inBufferFiltered = filteredTransfers.filter(t => t.status === 'in_buffer');
@@ -468,6 +478,20 @@ export default function MaterialTransferPage() {
           </button>
         </div>
       </div>
+
+      {activeSagePosts.length > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center gap-3 text-blue-900">
+          <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
+          </div>
+          <div>
+            <p className="text-sm font-bold">Sage transfer posting in progress</p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              {activeSagePosts.length} transfer{activeSagePosts.length === 1 ? '' : 's'} queued or posting. The Sage status updates automatically when the bridge finishes.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
