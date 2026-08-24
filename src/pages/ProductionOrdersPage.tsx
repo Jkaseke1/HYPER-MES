@@ -48,10 +48,14 @@ interface SageIssueStatus {
 type SageIssueStatusByOrder = Record<string, SageIssueStatus>;
 
 interface FinishedGoodsTransferStatus {
+  id: string;
   transfer_number: string;
   production_order_id: string;
   quantity: number;
-  status: 'pending' | 'posted' | 'failed' | 'cancelled';
+  verified_quantity?: number | null;
+  verified_bags?: number | null;
+  notes?: string | null;
+  status: 'pending_finance' | 'pending' | 'posted' | 'failed' | 'cancelled';
   sage_response?: any;
   updated_at?: string | null;
 }
@@ -134,6 +138,7 @@ export default function ProductionOrdersPage() {
   const [finishedGoodsTransferNotes, setFinishedGoodsTransferNotes] = useState('');
   const [productionTransferVerified, setProductionTransferVerified] = useState(false);
   const [financeTransferVerified, setFinanceTransferVerified] = useState(false);
+  const [financeTransferReview, setFinanceTransferReview] = useState<FinishedGoodsTransferStatus | null>(null);
   const [finishedGoodsTransferSaving, setFinishedGoodsTransferSaving] = useState(false);
   const [selected, setSelected] = useState<ProductionOrder | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -192,16 +197,29 @@ export default function ProductionOrdersPage() {
 
   const openFinishedGoodsTransfer = () => {
     if (!selected || selected.status !== 'completed') return;
+    const existing = finishedGoodsTransferStatuses[selected.id];
+    if (existing?.status === 'pending_finance') {
+      setFinishedGoodsTransferQty(String(existing.verified_quantity || existing.quantity));
+      setFinishedGoodsVerifiedBags(String(existing.verified_bags || bagsFromKg(existing.quantity, selected.unit_size)));
+      setFinishedGoodsTransferNotes(existing.notes || '');
+      setProductionTransferVerified(true);
+      setFinanceTransferVerified(false);
+      setFinanceTransferReview(existing);
+      setWorkflowError(null);
+      setShowFinishedGoodsTransfer(true);
+      return;
+    }
     setFinishedGoodsTransferQty(String(selected.actual_qty || 0));
     setFinishedGoodsVerifiedBags(String(selected.actual_bags || bagsFromKg(selected.actual_qty || 0, selected.unit_size)));
     setFinishedGoodsTransferNotes('');
     setProductionTransferVerified(false);
     setFinanceTransferVerified(false);
+    setFinanceTransferReview(null);
     setWorkflowError(null);
     setShowFinishedGoodsTransfer(true);
   };
 
-  const createFinishedGoodsTransfer = async () => {
+  const finalizeProductionHandover = async () => {
     if (!selected) return;
     const quantity = Number(finishedGoodsTransferQty);
     if (!selected.formulation_id) {
@@ -222,8 +240,8 @@ export default function ProductionOrdersPage() {
       setWorkflowError(`Physical bag count must match the transfer quantity (${expectedBags.toLocaleString()} bags).`);
       return;
     }
-    if (!productionTransferVerified || !financeTransferVerified) {
-      setWorkflowError('Production and Finance must both confirm the physical finished-goods count before transfer to DEB.');
+    if (!productionTransferVerified) {
+      setWorkflowError('Production must confirm the physical finished-goods count before Finance review.');
       return;
     }
     setFinishedGoodsTransferSaving(true);
@@ -242,16 +260,43 @@ export default function ProductionOrdersPage() {
         verified_bags: verifiedBags,
         production_verified_by: profile?.id || null,
         production_verified_at: new Date().toISOString(),
-        finance_verified_by: profile?.id || null,
-        finance_verified_at: new Date().toISOString(),
-        status: 'pending',
+        status: 'pending_finance',
       });
       if (error) throw error;
-      toast.success(`Transfer ${transferNumber} queued: Production to DEB.`);
+      toast.success(`Production handover ${transferNumber} recorded. Finance review is required before Sage posting.`);
       setShowFinishedGoodsTransfer(false);
     } catch (error: any) {
       console.error('Error creating finished-goods transfer:', error);
       setWorkflowError(error?.message || 'Could not queue the finished-goods transfer.');
+    } finally {
+      setFinishedGoodsTransferSaving(false);
+    }
+  };
+
+  const approveFinishedGoodsTransfer = async () => {
+    if (!financeTransferReview) return;
+    if (!financeTransferVerified) {
+      setWorkflowError('Finance must confirm the reconciled production handover before Sage posting.');
+      return;
+    }
+    setFinishedGoodsTransferSaving(true);
+    try {
+      const { error } = await supabase
+        .from('finished_goods_transfers')
+        .update({
+          finance_verified_by: profile?.id || null,
+          finance_verified_at: new Date().toISOString(),
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', financeTransferReview.id)
+        .eq('status', 'pending_finance');
+      if (error) throw error;
+      toast.success(`Finance approved ${financeTransferReview.transfer_number}. Sage transfer is queued.`);
+      setShowFinishedGoodsTransfer(false);
+    } catch (error: any) {
+      console.error('Error approving finished-goods transfer:', error);
+      setWorkflowError(error?.message || 'Could not approve the finished-goods transfer.');
     } finally {
       setFinishedGoodsTransferSaving(false);
     }
@@ -368,7 +413,7 @@ export default function ProductionOrdersPage() {
     }
     const { data, error } = await supabase
       .from('finished_goods_transfers')
-      .select('transfer_number, production_order_id, quantity, status, sage_response, updated_at')
+      .select('id, transfer_number, production_order_id, quantity, verified_quantity, verified_bags, notes, status, sage_response, updated_at')
       .in('production_order_id', orderIds)
       .order('updated_at', { ascending: false });
     if (error) {
@@ -2252,41 +2297,35 @@ export default function ProductionOrdersPage() {
             </button>
           </div>
           <div className="p-5 space-y-4">
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-              {selected?.formulations?.name || 'Finished goods'} from batch <span className="font-mono font-bold">{selected?.batch_number}</span>. Reconcile the physical handover before Sage receives the PD-to-DEB transfer.
+            <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs text-teal-950">
+              <div className="font-bold">{financeTransferReview ? 'Finance release review' : 'Production stock handover'}</div>
+              <p className="mt-1">{selected?.formulations?.name || 'Finished goods'} from <span className="font-mono font-bold">{selected?.batch_number}</span> moves only after the physical count is reconciled and Finance releases it.</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Completed output</span><strong>{Number(selected?.actual_qty || 0).toLocaleString()} kg</strong></div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Completed bags</span><strong>{Number(selected?.actual_bags || bagsFromKg(selected?.actual_qty || 0, selected?.unit_size)).toLocaleString()}</strong></div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Production stock</span><strong>{Number(selected?.actual_qty || 0).toLocaleString()} kg</strong></div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-slate-500">Packed stock</span><strong>{Number(selected?.actual_bags || bagsFromKg(selected?.actual_qty || 0, selected?.unit_size)).toLocaleString()} bags</strong></div>
             </div>
-            <div>
-              <label className={labelCls}>Physical quantity verified for transfer (kg)</label>
-              <input type="number" min="0.001" step="0.001" value={finishedGoodsTransferQty} onChange={(event) => setFinishedGoodsTransferQty(event.target.value)} className={inputCls} />
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={labelCls}>Physical kg for handover</label><input type="number" min="0.001" step="0.001" value={finishedGoodsTransferQty} onChange={(event) => setFinishedGoodsTransferQty(event.target.value)} className={inputCls} disabled={Boolean(financeTransferReview)} /></div>
+              <div><label className={labelCls}>Physical bag count</label><input type="number" min="0.001" step="0.001" value={finishedGoodsVerifiedBags} onChange={(event) => setFinishedGoodsVerifiedBags(event.target.value)} className={inputCls} disabled={Boolean(financeTransferReview)} /><p className="mt-1 text-[11px] text-slate-500">Expected: {bagsFromKg(Number(finishedGoodsTransferQty || 0), selected?.unit_size).toLocaleString()} bags</p></div>
             </div>
-            <div>
-              <label className={labelCls}>Physical bags verified</label>
-              <input type="number" min="0.001" step="0.001" value={finishedGoodsVerifiedBags} onChange={(event) => setFinishedGoodsVerifiedBags(event.target.value)} className={inputCls} />
-              <p className="mt-1 text-[11px] text-slate-500">Expected for this quantity: {formatBags(bagsFromKg(Number(finishedGoodsTransferQty || 0), selected?.unit_size))}.</p>
-            </div>
-            <div>
-              <label className={labelCls}>Handover notes</label>
-              <textarea value={finishedGoodsTransferNotes} onChange={(event) => setFinishedGoodsTransferNotes(event.target.value)} rows={3} className={inputCls} placeholder="Pallet, count sheet, or variance reference" />
-            </div>
-            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <label className="flex items-start gap-2 text-xs font-semibold text-amber-950 cursor-pointer">
-                <input type="checkbox" checked={productionTransferVerified} onChange={(event) => setProductionTransferVerified(event.target.checked)} className="mt-0.5" />
-                <span>Production confirms the physical finished-goods quantity and bag count are ready for handover.</span>
-              </label>
-              <label className="flex items-start gap-2 text-xs font-semibold text-amber-950 cursor-pointer">
+            <div><label className={labelCls}>Count-sheet, pallet, or variance reference</label><textarea value={finishedGoodsTransferNotes} onChange={(event) => setFinishedGoodsTransferNotes(event.target.value)} rows={2} className={inputCls} placeholder="Optional traceability note" disabled={Boolean(financeTransferReview)} /></div>
+            {financeTransferReview ? (
+              <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-950 cursor-pointer">
                 <input type="checkbox" checked={financeTransferVerified} onChange={(event) => setFinanceTransferVerified(event.target.checked)} className="mt-0.5" />
-                <span>Finance confirms the quantity agrees with the completed batch and production record.</span>
+                <span>Finance confirms this physical handover agrees with the completed production quantity and authorizes Sage posting from PD to DEB.</span>
               </label>
-            </div>
+            ) : (
+              <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-950 cursor-pointer">
+                <input type="checkbox" checked={productionTransferVerified} onChange={(event) => setProductionTransferVerified(event.target.checked)} className="mt-0.5" />
+                <span>Production confirms the physical stock above is on hand in PD and ready for Finance verification.</span>
+              </label>
+            )}
           </div>
           <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
             <button onClick={() => setShowFinishedGoodsTransfer(false)} disabled={finishedGoodsTransferSaving} className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg">Cancel</button>
-            <button onClick={createFinishedGoodsTransfer} disabled={finishedGoodsTransferSaving || !productionTransferVerified || !financeTransferVerified} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
-              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Queuing...' : 'Confirm & Queue Sage Transfer'}
+            <button onClick={financeTransferReview ? approveFinishedGoodsTransfer : finalizeProductionHandover} disabled={finishedGoodsTransferSaving || (financeTransferReview ? !financeTransferVerified : !productionTransferVerified)} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+              <ArrowRight className="w-4 h-4" /> {finishedGoodsTransferSaving ? 'Saving...' : financeTransferReview ? 'Finance Approve & Queue Sage' : 'Finalize Production Handover'}
             </button>
           </div>
         </DialogContent>
@@ -2471,10 +2510,10 @@ export default function ProductionOrdersPage() {
                       onClick={openFinishedGoodsTransfer}
                       disabled={saving || selectedFinishedGoodsTransfer?.status === 'posted' || selectedFinishedGoodsTransfer?.status === 'pending'}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={selectedFinishedGoodsTransfer?.status === 'posted' ? 'Finished goods have already been transferred to DEB.' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'This finished-goods transfer is queued for Sage.' : 'Transfer finished goods from Production to DEB'}
+                      title={selectedFinishedGoodsTransfer?.status === 'posted' ? 'Finished goods have already been transferred to DEB.' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'This finished-goods transfer is queued for Sage.' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Production handover is awaiting Finance verification.' : 'Transfer finished goods from Production to DEB'}
                     >
                       {selectedFinishedGoodsTransfer?.status === 'posted' ? <CheckCircle2 className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                      {selectedFinishedGoodsTransfer?.status === 'posted' ? 'Transferred to DEB' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'Sage Transfer Queued' : 'Transfer Finished Goods to DEB'}
+                      {selectedFinishedGoodsTransfer?.status === 'posted' ? 'Transferred to DEB' : selectedFinishedGoodsTransfer?.status === 'pending' ? 'Sage Transfer Queued' : selectedFinishedGoodsTransfer?.status === 'pending_finance' ? 'Finance Review Required' : 'Verify Finished Goods'}
                     </button>
                   )}
                   <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
