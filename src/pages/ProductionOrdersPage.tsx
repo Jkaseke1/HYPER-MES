@@ -489,6 +489,9 @@ export default function ProductionOrdersPage() {
     }
     return <span className={`${className} inline-flex items-center gap-1 font-semibold text-amber-700`}><Clock className="w-3.5 h-3.5" />Queued</span>;
   };
+
+  const selectedSageIssue = selected ? (sageIssueStatus || sageIssueStatuses[selected.id]) : null;
+  const canStartProduction = selectedSageIssue?.status === 'success';
   useEffect(() => {
     Promise.all([
       supabase.from('formulations').select('*').eq('status', 'active'),
@@ -1376,6 +1379,25 @@ export default function ProductionOrdersPage() {
       if (status === 'in_progress') {
         if (selected.status !== 'materials_issued') {
           throw new Error('Cannot start production — materials must be issued first. Please issue all ingredients before starting production.');
+        }
+        const { data: latestSageIssue, error: sageIssueError } = await supabase
+          .from('sync_log')
+          .select('status, message, updated_at')
+          .eq('event_type', 'materials_issued')
+          .eq('reference_type', 'production_orders')
+          .eq('reference_id', selected.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (sageIssueError) {
+          throw new Error(`Cannot start production — unable to confirm Sage material issue: ${sageIssueError.message}`);
+        }
+        if (latestSageIssue?.status !== 'success') {
+          const reason = latestSageIssue?.status === 'failed'
+            ? `Sage material issue failed: ${latestSageIssue.message || 'resolve the Sage error and retry the issue.'}`
+            : 'Sage material issue is still queued or posting.';
+          throw new Error(`Cannot start production — ${reason}`);
         }
         updates.actual_start = new Date().toISOString();
       }
@@ -2327,11 +2349,12 @@ export default function ProductionOrdersPage() {
                   {selected.status === 'materials_issued' && (
                     <button
                       onClick={() => updateStatus('in_progress')}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all"
+                      disabled={saving || !canStartProduction}
+                      title={canStartProduction ? 'Sage material issue posted. Start production.' : 'Production unlocks after Sage posts the material issue successfully.'}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Play className="w-4 h-4" />
-                      Start Production
+                      {canStartProduction ? <Play className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      {canStartProduction ? 'Start Production' : 'Waiting for Sage Issue'}
                     </button>
                   )}
                   {selected.status === 'in_progress' && (
