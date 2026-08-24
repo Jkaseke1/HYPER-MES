@@ -193,8 +193,18 @@ namespace SDK_Test
 
         private static void BeginSdkTransaction()
         {
-            if (!DatabaseContext.BeginTran())
-                throw new InvalidOperationException("Sage could not start the material issue transaction.");
+            try
+            {
+                if (!DatabaseContext.BeginTran())
+                    throw new InvalidOperationException("Sage could not start the material issue transaction.");
+            }
+            catch (EvolutionException ex) when (ex.Message.IndexOf("CreateConnection first", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // The transaction has not started, so one reconnect/retry is safe.
+                SdkSession.Reconnect();
+                if (!DatabaseContext.BeginTran())
+                    throw new InvalidOperationException("Sage could not start the material issue transaction after reconnecting.");
+            }
         }
 
         private static void RollbackPendingSdkTransaction()

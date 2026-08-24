@@ -22,25 +22,28 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-                lock (ReceiptTransactionLock)
+                lock (SdkSession.OperationLock)
                 {
-                    BeginSdkTransaction();
-                    try
+                    SdkSession.EnsureConnected();
+                    lock (ReceiptTransactionLock)
                     {
-                        var transaction = PrepareTransaction(request);
-                        DatabaseContext.RollbackTran();
-                        return Ok(new
+                        BeginSdkTransaction();
+                        try
                         {
-                            status = "validated",
-                            environment = "UAT",
-                            action = "finished-goods-receipt",
-                            sagePosting = "not performed",
-                            message = "Validated against Sage UAT. No finished-goods receipt was created.",
-                            receipt = ReceiptSummary(request, transaction)
-                        });
+                            var transaction = PrepareTransaction(request);
+                            DatabaseContext.RollbackTran();
+                            return Ok(new
+                            {
+                                status = "validated",
+                                environment = "UAT",
+                                action = "finished-goods-receipt",
+                                sagePosting = "not performed",
+                                message = "Validated against Sage UAT. No finished-goods receipt was created.",
+                                receipt = ReceiptSummary(request, transaction)
+                            });
+                        }
+                        finally { RollbackPendingSdkTransaction(); }
                     }
-                    finally { RollbackPendingSdkTransaction(); }
                 }
             }
             catch (Exception ex)
@@ -62,28 +65,31 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-                lock (ReceiptTransactionLock)
+                lock (SdkSession.OperationLock)
                 {
-                    BeginSdkTransaction();
-                    try
+                    SdkSession.EnsureConnected();
+                    lock (ReceiptTransactionLock)
                     {
-                        var transaction = PrepareTransaction(request);
-                        if (!transaction.Post()) throw new InvalidOperationException("Sage could not post the finished-goods receipt.");
-                        if (!DatabaseContext.CommitTran()) throw new InvalidOperationException("Sage could not commit the finished-goods receipt.");
-
-                        return Ok(new
+                        BeginSdkTransaction();
+                        try
                         {
-                            status = "posted",
-                            environment = "UAT",
-                            action = "finished-goods-receipt",
-                            postingMode = "sdk-inventory-transaction",
-                            sagePosting = "completed",
-                            message = "Finished-goods receipt posted to Sage UAT through the Evolution SDK.",
-                            receipt = ReceiptSummary(request, transaction)
-                        });
+                            var transaction = PrepareTransaction(request);
+                            if (!transaction.Post()) throw new InvalidOperationException("Sage could not post the finished-goods receipt.");
+                            if (!DatabaseContext.CommitTran()) throw new InvalidOperationException("Sage could not commit the finished-goods receipt.");
+
+                            return Ok(new
+                            {
+                                status = "posted",
+                                environment = "UAT",
+                                action = "finished-goods-receipt",
+                                postingMode = "sdk-inventory-transaction",
+                                sagePosting = "completed",
+                                message = "Finished-goods receipt posted to Sage UAT through the Evolution SDK.",
+                                receipt = ReceiptSummary(request, transaction)
+                            });
+                        }
+                        finally { RollbackPendingSdkTransaction(); }
                     }
-                    finally { RollbackPendingSdkTransaction(); }
                 }
             }
             catch (Exception ex)
@@ -129,7 +135,16 @@ namespace SDK_Test
 
         private static void BeginSdkTransaction()
         {
-            if (!DatabaseContext.BeginTran()) throw new InvalidOperationException("Sage could not start the finished-goods receipt transaction.");
+            try
+            {
+                if (!DatabaseContext.BeginTran()) throw new InvalidOperationException("Sage could not start the finished-goods receipt transaction.");
+            }
+            catch (EvolutionException ex) when (ex.Message.IndexOf("CreateConnection first", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // The transaction has not started, so one reconnect/retry is safe.
+                SdkSession.Reconnect();
+                if (!DatabaseContext.BeginTran()) throw new InvalidOperationException("Sage could not start the finished-goods receipt transaction after reconnecting.");
+            }
         }
 
         private static void RollbackPendingSdkTransaction()

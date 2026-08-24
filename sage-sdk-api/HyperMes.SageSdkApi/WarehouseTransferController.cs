@@ -21,11 +21,13 @@ namespace SDK_Test
             if (error != null)
                 return BadRequest(error);
 
-            SdkSession.EnsureConnected();
-
-            new InventoryItem(request.ItemCode.Trim().ToUpperInvariant());
-            new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
-            new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
+            lock (SdkSession.OperationLock)
+            {
+                SdkSession.EnsureConnected();
+                new InventoryItem(request.ItemCode.Trim().ToUpperInvariant());
+                new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
+                new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
+            }
 
             return Ok(new
             {
@@ -61,26 +63,20 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-
-                var transfer = new WarehouseTransfer
+                lock (SdkSession.OperationLock)
                 {
-                    Account = new InventoryItem(
-                        request.ItemCode.Trim().ToUpperInvariant()),
-
-                    FromWarehouse = new Warehouse(
-                        request.FromWarehouse.Trim().ToUpperInvariant()),
-
-                    ToWarehouse = new Warehouse(
-                        request.ToWarehouse.Trim().ToUpperInvariant()),
-
-                    Quantity = (double)request.Quantity,
-                    Reference = reference,
-                    Reference2 = request.Reference2 ?? ""
-                };
-
-                // The only Sage-posting line in this endpoint:
-                transfer.Post();
+                    SdkSession.EnsureConnected();
+                    var transfer = new WarehouseTransfer
+                    {
+                        Account = new InventoryItem(request.ItemCode.Trim().ToUpperInvariant()),
+                        FromWarehouse = new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant()),
+                        ToWarehouse = new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant()),
+                        Quantity = (double)request.Quantity,
+                        Reference = reference,
+                        Reference2 = request.Reference2 ?? ""
+                    };
+                    transfer.Post();
+                }
 
                 return Ok(new
                 {

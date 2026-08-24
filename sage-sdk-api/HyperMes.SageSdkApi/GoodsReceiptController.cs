@@ -24,8 +24,11 @@ namespace SDK_Test
             if (error != null)
                 return BadRequest(error);
 
-            SdkSession.EnsureConnected();
-            ValidateSageMasters(request);
+            lock (SdkSession.OperationLock)
+            {
+                SdkSession.EnsureConnected();
+                ValidateSageMasters(request);
+            }
 
             return Ok(new
             {
@@ -69,18 +72,21 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-                ValidateSageMasters(request);
-
-                string grvNumber;
-                lock (GrvNumberLock)
+                lock (SdkSession.OperationLock)
                 {
-                    grvNumber = GetNextSageGrvNumber();
-                    PostStandaloneGoodsReceivedVoucher(request, grvNumber);
-                    AdvanceSageGrvSequence(grvNumber);
-                }
+                    SdkSession.EnsureConnected();
+                    ValidateSageMasters(request);
 
-                return Ok(PostedGoodsReceiptResponse(request, grvNumber, "posted"));
+                    string grvNumber;
+                    lock (GrvNumberLock)
+                    {
+                        grvNumber = GetNextSageGrvNumber();
+                        PostStandaloneGoodsReceivedVoucher(request, grvNumber);
+                        AdvanceSageGrvSequence(grvNumber);
+                    }
+
+                    return Ok(PostedGoodsReceiptResponse(request, grvNumber, "posted"));
+                }
             }
             catch (Exception ex)
             {
