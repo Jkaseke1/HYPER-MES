@@ -62,7 +62,22 @@ async function loadMaterials(itemCodes) {
       ? 0
       : nextFullSyncOffset + FULL_SYNC_BATCH_SIZE;
   }
-  return (data || []).filter((material) => (material.sage_code || material.code || '').trim());
+  const materials = (data || []).filter((material) => (material.sage_code || material.code || '').trim());
+  if (!materials.length) return materials;
+
+  // Finished goods can exist in the legacy raw_materials catalogue as well as
+  // formulations. Their PD/DEB balance belongs to the formulation record; do
+  // not overwrite it with a raw-material source during rolling reconciliation.
+  const codes = [...new Set(materials.map((material) => (material.sage_code || material.code).trim().toUpperCase()))];
+  const { data: formulations, error: formulationError } = await supabase
+    .from('formulations')
+    .select('sage_code')
+    .eq('status', 'active')
+    .in('sage_code', codes);
+  if (formulationError) throw new Error(`Could not identify finished-good Sage codes: ${formulationError.message}`);
+
+  const finishedGoodCodes = new Set((formulations || []).map((formulation) => (formulation.sage_code || '').trim().toUpperCase()));
+  return materials.filter((material) => !finishedGoodCodes.has((material.sage_code || material.code).trim().toUpperCase()));
 }
 
 async function syncSageStock(itemCodes) {

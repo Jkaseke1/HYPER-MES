@@ -1974,13 +1974,16 @@ export default function ProductionOrdersPage() {
                         <th className="px-3 py-2 text-left font-medium text-slate-700">Code</th>
                         <th className="px-3 py-2 text-left font-medium text-slate-700">Ingredient Name</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">BOM %</th>
-                        <th className="px-3 py-2 text-right font-medium text-slate-700">Qty (kg)</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Per Bag (kg)</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Batch Qty (kg)</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Unit Cost</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Line Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {bomPreview.map((ing: any) => {
+                        const bagSize = bagSizeKg(form.unit_size, 50);
+                        const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSize;
                         const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
                         const lineTotal = qtyRequired * ing.unitCost;
                         const isPremix = /premix/i.test(`${ing.code || ''} ${ing.name || ''}`);
@@ -1995,6 +1998,7 @@ export default function ProductionOrdersPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
+                            <td className="px-3 py-2 text-right font-medium text-teal-700">{qtyPerBag.toFixed(4)}</td>
                             <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(4)}</td>
                             <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(4)}</td>
                             <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(4)}</td>
@@ -2003,6 +2007,7 @@ export default function ProductionOrdersPage() {
                       })}
                       <tr className="bg-teal-50 font-medium">
                         <td colSpan={4} className="px-3 py-2 text-right text-slate-700">Total:</td>
+                        <td className="px-3 py-2 text-right text-teal-800">{bagSizeKg(form.unit_size, 50).toFixed(2)}</td>
                         <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
                           ${bomPreview.reduce((sum: number, ing: any) => {

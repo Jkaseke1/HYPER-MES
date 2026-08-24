@@ -15,7 +15,8 @@ namespace SDK_Test
                 if (_connected)
                     return;
 
-                var server = GetRequiredSetting("HYPER_SAGE_SERVER");
+                var commonServer = GetServerSetting("HYPER_SAGE_COMMON_SERVER");
+                var companyServer = GetServerSetting("HYPER_SAGE_COMPANY_SERVER");
                 var commonDatabase = GetRequiredSetting("HYPER_SAGE_COMMON_DATABASE");
                 var companyDatabase = GetRequiredSetting("HYPER_SAGE_COMPANY_DATABASE");
                 var sqlUsername = GetRequiredSetting("HYPER_SAGE_SQL_USERNAME");
@@ -24,12 +25,12 @@ namespace SDK_Test
                 var sdkAuthCode = GetRequiredSetting("HYPER_SAGE_SDK_AUTH_CODE");
 
                 DatabaseContext.CreateCommonDBConnection(
-                    server, commonDatabase, sqlUsername, sqlPassword, false);
+                    commonServer, commonDatabase, sqlUsername, sqlPassword, false);
 
                 DatabaseContext.SetLicense(sdkSerial, sdkAuthCode);
 
                 DatabaseContext.CreateConnection(
-                    server, companyDatabase, sqlUsername, sqlPassword, false);
+                    companyServer, companyDatabase, sqlUsername, sqlPassword, false);
 
                 _connected = true;
             }
@@ -56,6 +57,13 @@ namespace SDK_Test
                     "Missing Windows environment variable: " + name);
 
             return value;
+        }
+
+        private static string GetServerSetting(string specificName)
+        {
+            var value = Environment.GetEnvironmentVariable(specificName);
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+            return GetRequiredSetting("HYPER_SAGE_SERVER");
         }
     }
 }

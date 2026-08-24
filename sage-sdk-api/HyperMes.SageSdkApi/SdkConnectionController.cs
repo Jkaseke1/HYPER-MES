@@ -21,7 +21,8 @@ namespace SDK_Test
                 {
                     if (!_sdkConnected)
                     {
-                        var server = GetRequiredSetting("HYPER_SAGE_SERVER");
+                        var commonServer = GetServerSetting("HYPER_SAGE_COMMON_SERVER");
+                        var companyServer = GetServerSetting("HYPER_SAGE_COMPANY_SERVER");
                         var commonDatabase = GetRequiredSetting("HYPER_SAGE_COMMON_DATABASE");
                         var companyDatabase = GetRequiredSetting("HYPER_SAGE_COMPANY_DATABASE");
                         var sqlUsername = GetRequiredSetting("HYPER_SAGE_SQL_USERNAME");
@@ -30,7 +31,7 @@ namespace SDK_Test
                         var sdkAuthCode = GetRequiredSetting("HYPER_SAGE_SDK_AUTH_CODE");
 
                         DatabaseContext.CreateCommonDBConnection(
-                            server,
+                            commonServer,
                             commonDatabase,
                             sqlUsername,
                             sqlPassword,
@@ -40,7 +41,7 @@ namespace SDK_Test
                         DatabaseContext.SetLicense(sdkSerial, sdkAuthCode);
 
                         DatabaseContext.CreateConnection(
-                            server,
+                            companyServer,
                             companyDatabase,
                             sqlUsername,
                             sqlPassword,
@@ -85,6 +86,13 @@ namespace SDK_Test
             }
 
             return value;
+        }
+
+        private static string GetServerSetting(string specificName)
+        {
+            var value = Environment.GetEnvironmentVariable(specificName);
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+            return GetRequiredSetting("HYPER_SAGE_SERVER");
         }
     }
 }

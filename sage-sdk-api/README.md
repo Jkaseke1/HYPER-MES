@@ -22,7 +22,9 @@ Do not commit secrets. Set these on the machine that runs the API:
 
 ```text
 HYPER_SAGE_API_KEY
-HYPER_SAGE_SERVER
+HYPER_SAGE_SERVER                   # fallback when Common and company share a SQL server
+HYPER_SAGE_COMMON_SERVER            # optional: SageCommon SQL server, e.g. 192.168.203.130\HYPERFEEDSSQL
+HYPER_SAGE_COMPANY_SERVER           # optional: company SQL server, e.g. localhost\SQLEXPRESS
 HYPER_SAGE_COMMON_DATABASE
 HYPER_SAGE_COMPANY_DATABASE
 HYPER_SAGE_SQL_USERNAME
@@ -30,6 +32,8 @@ HYPER_SAGE_SQL_PASSWORD
 HYPER_SAGE_SDK_SERIAL
 HYPER_SAGE_SDK_AUTH_CODE
 ```
+
+When the registration/Common database and the UAT company database are on different servers, set both of the optional server variables. The API uses `HYPER_SAGE_SERVER` only as a backward-compatible fallback.
 
 The MES bridge `.env` must point to the same local API:
 
