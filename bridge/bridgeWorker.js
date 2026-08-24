@@ -18,7 +18,10 @@ const configuredPollInterval = Number(process.env.BRIDGE_POLL_INTERVAL_MS);
 const POLL_INTERVAL_MS = Number.isFinite(configuredPollInterval)
   ? Math.max(configuredPollInterval, MINIMUM_POLL_INTERVAL_MS)
   : DEFAULT_POLL_INTERVAL_MS;
-const STOCK_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const configuredStockSyncInterval = Number(process.env.SAGE_STOCK_SYNC_INTERVAL_MS);
+const STOCK_SYNC_INTERVAL_MS = Number.isFinite(configuredStockSyncInterval)
+  ? Math.max(configuredStockSyncInterval, 10 * 1000)
+  : 60 * 1000;
 let stockSyncInProgress = false;
 let eventProcessingInProgress = false;
 

@@ -1,6 +1,7 @@
 ﻿using Pastel.Evolution;
 using System;
 using System.Collections.Concurrent;
+using System.Net;
 using System.Web.Http;
 
 namespace SDK_Test
@@ -88,14 +89,20 @@ namespace SDK_Test
                     transfer = TransferSummary(request)
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 bool removed;
                 PostedReferences.TryRemove(reference, out removed);
 
-                return InternalServerError(
-                    new InvalidOperationException(
-                        "Sage UAT could not post this warehouse transfer."));
+                return Content(HttpStatusCode.InternalServerError, new
+                {
+                    status = "failed",
+                    environment = "UAT",
+                    action = "warehouse-transfer",
+                    message = "Sage UAT could not post this warehouse transfer.",
+                    exception = ex.GetType().FullName,
+                    exceptionMessage = ex.Message
+                });
             }
         }
 

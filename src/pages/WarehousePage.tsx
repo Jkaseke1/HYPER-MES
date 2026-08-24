@@ -83,11 +83,13 @@ export default function WarehousePage() {
 
     const [
       { data: m },
+      { data: formulations },
       { data: sageRmBalances },
       { data: prodBalances },
       { data: transferOutMovements }
     ] = await Promise.all([
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
+      supabase.from('formulations').select('sage_code').eq('status', 'active'),
       supabase
         .from('sage_stock_balances')
         .select('raw_material_id, quantity')
@@ -106,7 +108,13 @@ export default function WarehousePage() {
         .limit(5000),
     ]);
 
-    setMaterials(m || []);
+    const finishedGoodCodes = new Set(
+      (formulations || []).map((formulation) => String(formulation.sage_code || '').trim().toUpperCase())
+    );
+    setMaterials((m || []).filter((material) => {
+      const sageCode = String(material.sage_code || '').trim().toUpperCase();
+      return sageCode && !finishedGoodCodes.has(sageCode);
+    }));
 
     const rmMap: Record<string, number> = {};
     (sageRmBalances || []).forEach((b: any) => {

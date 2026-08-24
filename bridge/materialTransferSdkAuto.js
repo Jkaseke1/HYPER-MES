@@ -44,8 +44,11 @@ function postJson(urlString, apiKey, body) {
             return;
           }
 
-          const message = parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
-          reject(new Error(`Sage SDK API failed: ${message}`));
+          const message = parsed?.exceptionMessage || parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
+          const error = new Error(`Sage SDK API failed: ${message}`);
+          error.statusCode = res.statusCode;
+          error.response = parsed;
+          reject(error);
         });
       }
     );

@@ -15,7 +15,7 @@ const FINISHED_GOODS_WAREHOUSES = [
   { code: 'DEB', id: 17 },
   { code: 'DSP', id: 20 }, // retained for historical receipts only
 ];
-const FULL_SYNC_BATCH_SIZE = Math.max(1, Number(process.env.SAGE_STOCK_SYNC_BATCH_SIZE || 25));
+const FULL_SYNC_BATCH_SIZE = Math.max(1, Number(process.env.SAGE_STOCK_SYNC_BATCH_SIZE || 50));
 let nextFullSyncOffset = 0;
 
 function getJson(urlString) {
@@ -50,9 +50,7 @@ async function loadMaterials(itemCodes) {
     .select('id, code, sage_code')
     .eq('is_active', true)
     .order('id');
-  if (itemCodes?.length) {
-    query = query.in('sage_code', itemCodes);
-  } else {
+  if (!itemCodes?.length) {
     query = query.range(nextFullSyncOffset, nextFullSyncOffset + FULL_SYNC_BATCH_SIZE - 1);
   }
   const { data, error } = await query;
@@ -62,7 +60,13 @@ async function loadMaterials(itemCodes) {
       ? 0
       : nextFullSyncOffset + FULL_SYNC_BATCH_SIZE;
   }
-  const materials = (data || []).filter((material) => (material.sage_code || material.code || '').trim());
+  const requestedCodes = itemCodes?.length
+    ? new Set(itemCodes.map((itemCode) => String(itemCode).trim().toUpperCase()))
+    : null;
+  const materials = (data || []).filter((material) => {
+    const itemCode = (material.sage_code || material.code || '').trim().toUpperCase();
+    return itemCode && (!requestedCodes || requestedCodes.has(itemCode));
+  });
   if (!materials.length) return materials;
 
   // Finished goods can exist in the legacy raw_materials catalogue as well as
