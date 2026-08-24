@@ -51,11 +51,11 @@ CREATE TRIGGER before_production_order_formula_validation
   FOR EACH ROW
   EXECUTE FUNCTION public.validate_formula_for_production_order();
 
--- BSG50's standard manufacturing run is 5,000 kg. The imported ingredients
--- were entered per 50 kg bag, so convert them to the standard run without
--- changing the formula's approved batch-size convention.
+-- BSG50's Finance-approved reference formula is 1,000 kg. The imported
+-- ingredients were entered per 50 kg bag, so convert them to the 1,000 kg
+-- standard formula. Work orders remain flexible and scale from this reference.
 UPDATE public.formulation_ingredients fi
-   SET quantity = ROUND((fi.quantity * 100)::numeric, 4),
+   SET quantity = ROUND((fi.quantity * 20)::numeric, 4),
        percentage = ROUND((fi.percentage)::numeric, 4)
   FROM public.formulations f
  WHERE fi.formulation_id = f.id
@@ -65,7 +65,8 @@ UPDATE public.formulation_ingredients fi
    AND f.version = 1;
 
 UPDATE public.formulations
-   SET version = version + 1,
+   SET batch_size = 1000,
+       version = version + 1,
        status = 'draft',
        updated_at = now()
  WHERE code = 'BSG50'
