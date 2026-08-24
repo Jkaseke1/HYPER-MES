@@ -1304,13 +1304,34 @@ export default function ProductionOrdersPage() {
     }
   }, [selected?.id, detailMaterials.length]);
 
-  // Auto-refresh Sage stock every 30 seconds
+  // The bridge publishes a balance update after each Sage post. Keep an open
+  // production order aligned with it instead of leaving a stale stock warning
+  // on screen after a material transfer completes.
+  useEffect(() => {
+    if (!selected || detailMaterials.length === 0) return;
+
+    const materialIds = new Set(detailMaterials.map((material) => material.raw_material_id).filter(Boolean));
+    const channel = supabase
+      .channel(`production-order-sage-stock-${selected.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, (payload) => {
+        const balance = payload.new as { raw_material_id?: string; warehouse_id?: number };
+        if (balance?.warehouse_id !== 19 || !balance.raw_material_id || !materialIds.has(balance.raw_material_id)) return;
+        loadSageStockBalances([...materialIds]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selected?.id, detailMaterials]);
+
+  // Keep the detail current even when a Realtime connection is unavailable.
   useEffect(() => {
     if (!selected || detailMaterials.length === 0) return;
     
     const interval = setInterval(() => {
       refreshSageStock(false);
-    }, 30000); // 30 seconds
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [selected?.id, detailMaterials.length]);
