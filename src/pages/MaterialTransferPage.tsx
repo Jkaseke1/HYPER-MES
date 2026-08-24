@@ -112,7 +112,7 @@ export default function MaterialTransferPage() {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [selectedTransferIds, setSelectedTransferIds] = useState<string[]>([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
-  const fetchRequestId = useRef(0);
+  const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
   const [transferLines, setTransferLines] = useState<Array<{
@@ -176,8 +176,10 @@ export default function MaterialTransferPage() {
   };
 
   async function fetchData(silent = false) {
-    const requestId = ++fetchRequestId.current;
+    if (fetchInProgress.current) return;
+    fetchInProgress.current = true;
     if (!silent) setLoading(true);
+    try {
     const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
       supabase
         .from('material_transfers')
@@ -200,8 +202,6 @@ export default function MaterialTransferPage() {
         .eq('warehouses.code', 'BUFFER'),
     ]);
 
-    if (requestId !== fetchRequestId.current) return;
-
     if (transfersRes.data) {
       const nextTransfers = transfersRes.data as any;
       const transferIds = nextTransfers.map((transfer: MaterialTransfer) => transfer.id);
@@ -212,8 +212,6 @@ export default function MaterialTransferPage() {
           .eq('event_type', 'material_transfer_to_production')
           .in('reference_id', transferIds)
           .order('created_at', { ascending: false });
-
-        if (requestId !== fetchRequestId.current) return;
 
         if (syncError) {
           console.warn('Failed to load material transfer Sage sync logs:', syncError);
@@ -229,7 +227,6 @@ export default function MaterialTransferPage() {
       }
       setTransfers(nextTransfers);
     }
-    if (requestId !== fetchRequestId.current) return;
     if (materialsRes.data) setRawMaterials(materialsRes.data);
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);
@@ -247,7 +244,12 @@ export default function MaterialTransferPage() {
       });
       setBufferWarehouseBalances(balances);
     }
-    if (!silent) setLoading(false);
+    } catch (error) {
+      console.error('Failed to refresh material transfers:', error);
+    } finally {
+      fetchInProgress.current = false;
+      if (!silent) setLoading(false);
+    }
   }
 
   async function createTransfers() {
