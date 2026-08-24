@@ -3,6 +3,7 @@
 const http = require('http');
 const https = require('https');
 const { supabase, DRY_RUN } = require('./lib/db');
+const { getSageProductUnitSettings, toSageUnits } = require('./lib/sageProductUnits');
 
 const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
 const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
@@ -61,6 +62,13 @@ async function handleBatchComplete(syncEvent) {
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`Invalid finished-goods quantity: ${quantity}`);
   if (!Number.isFinite(unitCost) || unitCost < 0) throw new Error(`Invalid finished-goods unit cost: ${unitCost}`);
 
+  const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
+    supabase,
+    order.formulations?.id,
+    itemCode
+  );
+  const sageUnits = toSageUnits(quantity, kgPerSageUnit, itemCode);
+
   const body = {
     reference: `WO-${order.batch_number}`.substring(0, 50),
     reference2: `MES production order ${order.id}`.substring(0, 50),
@@ -68,15 +76,15 @@ async function handleBatchComplete(syncEvent) {
     description: `${order.formulations?.name || itemCode} manufacture`.substring(0, 255),
     warehouse: FINISHED_GOODS_WAREHOUSE,
     transactionCode: 'MFMF',
-    quantity,
+    quantity: sageUnits,
     unitCost,
     receiptDate: localDateValue(),
     confirmPost: true,
   };
 
   console.log(`  Batch: ${order.batch_number}`);
-  console.log(`  Product: ${itemCode} - ${quantity}kg to ${FINISHED_GOODS_WAREHOUSE}`);
-  console.log(`  Cost: ${unitCost} per kg, reference ${body.reference}`);
+  console.log(`  Product: ${itemCode} - ${quantity}kg (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) to ${FINISHED_GOODS_WAREHOUSE}`);
+  console.log(`  MES cost: ${unitCost} per kg; Sage valuation mode: ${postingCostMode}; reference ${body.reference}`);
 
   if (DRY_RUN) {
     return { dryRun: true, message: `DRY RUN: ${body.reference} would post finished goods through Sage SDK`, details: { sdkFinishedGoodsReceipt: { ...body, confirmPost: false } } };
@@ -85,9 +93,9 @@ async function handleBatchComplete(syncEvent) {
   const result = await postJson(`${SDK_BASE_URL}/api/v1/finished-goods-receipts/post`, body);
   console.log(`  Sage SDK response: ${result.status || 'ok'} - ${result.message || 'posted'}`);
   return {
-    message: `Posted ${quantity}kg of ${itemCode} to Sage finished goods for ${order.batch_number}`,
+    message: `Posted ${quantity}kg (${sageUnits} Sage unit(s)) of ${itemCode} to Sage finished goods for ${order.batch_number}`,
     sage_response: result,
-    details: { sdkFinishedGoodsReceipt: body, sageStatus: result.status || 'posted', sageMessage: result.message || null },
+    details: { sdkFinishedGoodsReceipt: body, quantityKg: quantity, kgPerSageUnit, sageStatus: result.status || 'posted', sageMessage: result.message || null },
   };
 }
 

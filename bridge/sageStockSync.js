@@ -120,6 +120,16 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
     .in('sage_code', itemCodes);
   if (formulationError) throw new Error(`Could not load MES finished goods: ${formulationError.message}`);
 
+  const { data: unitSettings, error: unitSettingsError } = await supabase
+    .from('sage_product_integration_settings')
+    .select('sage_code, kg_per_sage_unit')
+    .in('sage_code', itemCodes);
+  if (unitSettingsError) throw new Error(`Could not load Sage finished-good unit settings: ${unitSettingsError.message}`);
+  const kgPerUnitByCode = new Map((unitSettings || []).map((setting) => [
+    String(setting.sage_code || '').trim().toUpperCase(),
+    Number(setting.kg_per_sage_unit || 1),
+  ]));
+
   const warehouses = (warehouseCodes?.length
     ? FINISHED_GOODS_WAREHOUSES.filter((warehouse) => warehouseCodes.includes(warehouse.code))
     : FINISHED_GOODS_WAREHOUSES);
@@ -128,6 +138,7 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
   for (const formulation of formulations || []) {
     const itemCode = (formulation.sage_code || '').trim().toUpperCase();
     if (!itemCode) continue;
+    const kgPerSageUnit = kgPerUnitByCode.get(itemCode) || 1;
     for (const warehouse of warehouses) {
       try {
         const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock?itemCode=${encodeURIComponent(itemCode)}&warehouse=${warehouse.code}`);
@@ -138,7 +149,8 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
           macropack_bom_id: null,
           sage_code: itemCode,
           warehouse_id: warehouse.id,
-          quantity: Number(stock.quantity || 0),
+          // Sage reports the stocked finished-good unit; MES records operational kg.
+          quantity: Number(stock.quantity || 0) * kgPerSageUnit,
           last_synced_at: now,
           updated_at: now,
         }, { onConflict: 'sage_code,warehouse_id' });

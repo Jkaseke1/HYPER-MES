@@ -3,6 +3,7 @@
 const http = require('http');
 const https = require('https');
 const { supabase, DRY_RUN } = require('./lib/db');
+const { getSageProductUnitSettings, toSageUnits } = require('./lib/sageProductUnits');
 
 const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
 const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
@@ -41,7 +42,7 @@ async function handleFinishedGoodsTransfer(event) {
 
   const { data: transfer, error } = await supabase
     .from('finished_goods_transfers')
-    .select('id, transfer_number, quantity, unit, transfer_date, notes, status, formulations(name, sage_code), production_orders(batch_number)')
+    .select('id, transfer_number, quantity, unit, transfer_date, notes, status, formulations(id, name, sage_code), production_orders(batch_number)')
     .eq('id', event.reference_id)
     .single();
   if (error || !transfer) throw new Error(`Finished-goods transfer not found: ${event.reference_id}`);
@@ -51,17 +52,19 @@ async function handleFinishedGoodsTransfer(event) {
   const quantity = Number(transfer.quantity || 0);
   if (!itemCode) throw new Error(`No Sage code for finished good ${transfer.formulations?.name || transfer.id}`);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`Invalid finished-goods transfer quantity: ${transfer.quantity}`);
+  const { kgPerSageUnit } = await getSageProductUnitSettings(supabase, transfer.formulations?.id, itemCode);
+  const sageUnits = toSageUnits(quantity, kgPerSageUnit, itemCode);
 
   const body = {
     itemCode,
     fromWarehouse: 'PD',
     toWarehouse: 'DEB',
-    quantity,
+    quantity: sageUnits,
     reference: transfer.transfer_number,
     reference2: `MES FG transfer ${transfer.production_orders?.batch_number || transfer.id}`.substring(0, 50),
     confirmPost: true,
   };
-  console.log(`  Finished good: ${itemCode} - ${quantity}${transfer.unit || 'kg'} PD -> DEB`);
+  console.log(`  Finished good: ${itemCode} - ${quantity}${transfer.unit || 'kg'} (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) PD -> DEB`);
 
   if (DRY_RUN) return { dryRun: true, message: `DRY RUN: ${body.reference} would move ${itemCode} from PD to DEB`, details: { sdkFinishedGoodsTransfer: { ...body, confirmPost: false } } };
 
@@ -69,7 +72,7 @@ async function handleFinishedGoodsTransfer(event) {
   const { error: updateError } = await supabase.from('finished_goods_transfers').update({ status: 'posted', sage_response: result, posted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', transfer.id);
   if (updateError) throw new Error(`Sage posted but MES could not mark the finished-goods transfer: ${updateError.message}`);
 
-  return { message: `Posted ${quantity}${transfer.unit || 'kg'} of ${itemCode} from Production to DEB`, sage_response: result, details: { sdkFinishedGoodsTransfer: body, sageStatus: result.status || 'posted' } };
+  return { message: `Posted ${quantity}${transfer.unit || 'kg'} (${sageUnits} Sage unit(s)) of ${itemCode} from Production to DEB`, sage_response: result, details: { sdkFinishedGoodsTransfer: body, quantityKg: quantity, kgPerSageUnit, sageStatus: result.status || 'posted' } };
 }
 
 module.exports = { handleFinishedGoodsTransfer };
