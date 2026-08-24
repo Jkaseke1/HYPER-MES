@@ -471,7 +471,11 @@ export default function ProductionOrdersPage() {
   useEffect(() => {
     const channel = supabase
       .channel('production-orders-live-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, (payload) => {
+        const updatedOrder = payload.new as ProductionOrder;
+        if (updatedOrder?.id) {
+          setSelected((current) => current?.id === updatedOrder.id ? { ...current, ...updatedOrder } : current);
+        }
         fetchOrders();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => {
@@ -901,7 +905,7 @@ export default function ProductionOrdersPage() {
       actual_hours: order.actual_hours != null ? String(order.actual_hours) : '',
       average_throughput: order.average_throughput != null ? String(order.average_throughput) : '',
     });
-    setDetailTab('materials');
+    setDetailTab(order.status === 'completed' ? 'output' : 'materials');
 
     // Fire all independent queries in parallel instead of sequentially awaiting each one
     const [
@@ -980,78 +984,36 @@ export default function ProductionOrdersPage() {
     setShowDetail(true);
   };
 
-  // Save production output
-  const saveProductionOutput = async () => {
-    if (!selected) return;
-    
-    setSaving(true);
-    try {
-      // Update production order with output quantities
-      // Auto-derive average throughput (mt/hr) if hours provided but throughput left blank
-      const hoursNum = output.actual_hours === '' ? null : Number(output.actual_hours);
-      let throughputNum: number | null = output.average_throughput === '' ? null : Number(output.average_throughput);
-      if (throughputNum === null && hoursNum && hoursNum > 0 && output.actual_qty > 0) {
-        throughputNum = Math.round(((output.actual_qty / 1000) / hoursNum) * 1000) / 1000;
-      }
+  // The completion action owns output persistence, so the Sage receipt always
+  // uses the exact quantities currently shown to the production clerk.
+  const recordCompletionOutput = async (order: ProductionOrder) => {
+    const { data: existing, error: existingError } = await supabase
+      .from('production_outputs')
+      .select('id')
+      .eq('production_order_id', order.id)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) throw existingError;
 
-      const { error: orderError } = await supabase
-        .from('production_orders')
-        .update({
-          actual_qty: output.actual_qty,
-          actual_bags: output.actual_bags,
-          rejected_qty: output.rejected_qty,
-          rejected_bags: output.rejected_bags,
-          wastage_qty: output.wastage_qty,
-          wastage_bags: output.wastage_bags,
-          actual_hours: hoursNum,
-          average_throughput: throughputNum,
-        })
-        .eq('id', selected.id);
+    const payload = {
+      production_order_id: order.id,
+      quantity_produced: output.actual_qty,
+      quantity_bags: output.actual_bags,
+      rejected_quantity: output.rejected_qty,
+      rejected_bags: output.rejected_bags,
+      wastage_quantity: output.wastage_qty,
+      wastage_bags: output.wastage_bags,
+      bag_size_kg: bagSizeKg(order.unit_size),
+      unit: order.unit,
+      recorded_at: new Date().toISOString(),
+      recorded_by: profile?.id || null,
+    };
 
-      if (orderError) throw orderError;
-
-      // Create production output record
-      const { error: outputError } = await supabase
-        .from('production_outputs')
-        .insert({
-          production_order_id: selected.id,
-          quantity_produced: output.actual_qty,
-          quantity_bags: output.actual_bags,
-          rejected_quantity: output.rejected_qty,
-          rejected_bags: output.rejected_bags,
-          wastage_quantity: output.wastage_qty,
-          wastage_bags: output.wastage_bags,
-          bag_size_kg: bagSizeKg(selected.unit_size),
-          unit: selected.unit,
-          recorded_at: new Date().toISOString(),
-          recorded_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
-        });
-
-      if (outputError) throw outputError;
-
-      // Refresh the selected order data
-      const { data: refreshedOrder } = await supabase
-        .from('production_orders')
-        .select('*, formulations(name, code, batch_size, nominal_speed), machines(name, code), profiles!operator_id(full_name, email)')
-        .eq('id', selected.id)
-        .single();
-
-      if (refreshedOrder) {
-        setSelected(refreshedOrder);
-      }
-
-      setWorkflowError(null);
-      setSaving(false);
-      
-      // Show success message
-      setWorkflowError('Production output saved successfully!');
-      setTimeout(() => setWorkflowError(null), 3000);
-      
-    } catch (error: any) {
-      console.error('Error saving production output:', error);
-      setWorkflowError(`Failed to save production output: ${error.message}`);
-      setSaving(false);
-    }
+    const result = existing
+      ? await supabase.from('production_outputs').update(payload).eq('id', existing.id)
+      : await supabase.from('production_outputs').insert(payload);
+    if (result.error) throw result.error;
   };
 
   // Issue individual ingredient (Issue 4)
@@ -1518,6 +1480,10 @@ export default function ProductionOrdersPage() {
 
       const { error } = await supabase.from('production_orders').update(updates).eq('id', selected.id);
       if (error) throw error;
+
+      if (status === 'completed') {
+        await recordCompletionOutput(selected);
+      }
 
       if (status === 'materials_issued') {
         setSageIssueStatus({
@@ -3043,28 +3009,14 @@ export default function ProductionOrdersPage() {
                   </div>
                 )}
 
-                {/* Save Output Button */}
-                {selected.status === 'in_progress' && (
-                  <div className="flex justify-end pt-4 border-t border-slate-200">
-                    <button
-                      onClick={saveProductionOutput}
-                      disabled={saving || output.actual_qty <= 0}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                    >
-                      <Check className="w-4 h-4" />
-                      Save Output
-                    </button>
-                  </div>
-                )}
-
                 {/* Output Status */}
                 {selected.actual_qty > 0 && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div className="text-sm font-medium text-green-800">
-                      Production output saved: {selected.actual_qty} {selected.unit}
+                      Production output recorded: {selected.actual_qty} {selected.unit}
                     </div>
                     <div className="text-xs text-green-600 mt-1">
-                      You can now complete the production order
+                      {selected.status === 'completed' ? 'Finished goods are ready for the Production and Finance dispatch handover.' : 'Output will be saved automatically when you complete production.'}
                     </div>
                   </div>
                 )}
