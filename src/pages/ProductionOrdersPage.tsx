@@ -184,6 +184,63 @@ export default function ProductionOrdersPage() {
   const notifiedSageCompletionRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
+  const showSageNotification = useCallback((
+    kind: 'processing' | 'success' | 'error',
+    title: string,
+    detail: string,
+  ) => {
+    const presentation = {
+      processing: {
+        icon: <RefreshCw className="h-5 w-5 animate-spin text-blue-600" />,
+        iconClass: 'bg-blue-50 border-blue-100',
+        labelClass: 'text-blue-700 bg-blue-50 border-blue-100',
+        label: 'Sage processing',
+        duration: 6000,
+      },
+      success: {
+        icon: <CheckCircle2 className="h-5 w-5 text-emerald-600" />,
+        iconClass: 'bg-emerald-50 border-emerald-100',
+        labelClass: 'text-emerald-700 bg-emerald-50 border-emerald-100',
+        label: 'Sage confirmed',
+        duration: 5000,
+      },
+      error: {
+        icon: <AlertTriangle className="h-5 w-5 text-red-600" />,
+        iconClass: 'bg-red-50 border-red-100',
+        labelClass: 'text-red-700 bg-red-50 border-red-100',
+        label: 'Sage attention',
+        duration: 9000,
+      },
+    }[kind];
+
+    toast.custom((notification) => (
+      <div className={`w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl transition-all duration-200 ${notification.visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'}`}>
+        <div className="flex items-start gap-3 p-3.5">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${presentation.iconClass}`}>
+            {presentation.icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2">
+              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${presentation.labelClass}`}>{presentation.label}</span>
+            </div>
+            <p className="text-sm font-bold text-slate-900">{title}</p>
+            <p className="mt-0.5 text-xs leading-5 text-slate-600">{detail}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => toast.dismiss(notification.id)}
+            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            title="Dismiss notification"
+            aria-label="Dismiss notification"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className={`h-1 ${kind === 'success' ? 'bg-emerald-500' : kind === 'error' ? 'bg-red-500' : 'bg-blue-500'}`} />
+      </div>
+    ), { duration: presentation.duration });
+  }, []);
+
   const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
     setConfirmDialog({
       open: true,
@@ -465,13 +522,13 @@ export default function ProductionOrdersPage() {
 
     if (data.status === 'success') {
       const reference = data.sage_response?.materialIssue?.reference || 'Sage';
-      toast.success(`Material issue posted to Sage: ${reference}`);
+      showSageNotification('success', 'Material issue posted', `${reference} is confirmed in Sage and production can start.`);
     } else if (data.status === 'failed') {
-      toast.error(`Sage material issue failed: ${data.message || 'review the production order'}`);
+      showSageNotification('error', 'Material issue needs attention', data.message || 'Open the production order to review the Sage response.');
     } else if (data.status === 'pending' || data.status === 'processing') {
-      toast(`Material issue ${data.status === 'pending' ? 'queued' : 'processing'} in Sage`, { icon: '...' });
+      showSageNotification('processing', data.status === 'pending' ? 'Material issue queued' : 'Posting material issue', data.message || 'Sage is processing this production order.');
     }
-  }, []);
+  }, [showSageNotification]);
 
   useEffect(() => {
     if (!selected?.id) {
@@ -558,9 +615,9 @@ export default function ProductionOrdersPage() {
         if (!transfer?.production_order_id) return;
         setFinishedGoodsTransferStatuses((current) => ({ ...current, [transfer.production_order_id]: transfer }));
         if (transfer.status === 'posted') {
-          toast.success(`Sage posted finished-goods transfer ${transfer.transfer_number}: PD to DEB.`);
+          showSageNotification('success', 'Dispatch transfer posted', `${transfer.transfer_number} has moved from Production to DEB in Sage.`);
         } else if (transfer.status === 'failed') {
-          toast.error(`Sage finished-goods transfer failed: ${transfer.transfer_number}.`);
+          showSageNotification('error', 'Dispatch transfer needs attention', `${transfer.transfer_number} was not posted to Sage. Review the transfer before retrying.`);
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
@@ -582,9 +639,9 @@ export default function ProductionOrdersPage() {
           notifiedSageCompletionRef.current[event.reference_id] = notificationKey;
 
           if (event.status === 'success') {
-            toast.success('Sage posted the finished-goods receipt. Finalizing this batch in MES.');
+            showSageNotification('success', 'Finished goods posted', 'Sage confirmed the finished-goods receipt. MES is finalizing the batch now.');
           } else if (event.status === 'failed') {
-            toast.error(`Sage finished-goods receipt failed: ${event.message || 'open the batch for details'}`);
+            showSageNotification('error', 'Finished-goods receipt needs attention', event.message || 'Open the batch to review the Sage response.');
           }
           return;
         }
@@ -608,11 +665,11 @@ export default function ProductionOrdersPage() {
 
         if (event.status === 'success') {
           const reference = event.sage_response?.materialIssue?.reference || 'the production order';
-          toast.success(`Sage posted material issue: ${reference}`);
+          showSageNotification('success', 'Material issue posted', `${reference} is confirmed in Sage and production can start.`);
         } else if (event.status === 'failed') {
-          toast.error(`Sage material issue failed: ${event.message || 'open the batch for details'}`);
+          showSageNotification('error', 'Material issue needs attention', event.message || 'Open the production order to review the Sage response.');
         } else if (event.status === 'processing') {
-          toast(`Sage is posting material issue`, { icon: '...' });
+          showSageNotification('processing', 'Posting material issue', event.message || 'Sage is processing this production order.');
         }
       })
       .subscribe();
@@ -620,7 +677,7 @@ export default function ProductionOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, selected?.id]);
+  }, [fetchOrders, selected?.id, showSageNotification]);
 
   const renderSageIssueStatus = (order: ProductionOrder, compact = false) => {
     const status = sageIssueStatuses[order.id];
@@ -1604,7 +1661,7 @@ export default function ProductionOrdersPage() {
           status: 'pending',
           message: 'Materials issued in MES. The Sage material issue has been queued.',
         });
-        toast('Materials issued in MES. Sage posting has been queued.', { icon: '...' });
+        showSageNotification('processing', 'Material issue queued', 'Materials are issued in MES. Sage will confirm the issue before production can start.');
         window.setTimeout(() => loadSageIssueStatus(selected.id, true), 1500);
       }
 
@@ -1662,7 +1719,7 @@ export default function ProductionOrdersPage() {
           status: 'pending',
           message: 'Production completion queued. Please wait while Sage posts the finished-goods receipt; MES will complete this batch automatically once Sage confirms it.',
         });
-        toast('Production completion queued. Please wait while Sage posts; MES will complete the batch automatically soon.', { icon: '...' });
+        showSageNotification('processing', 'Finished goods queued', 'Sage is posting the finished-goods receipt. MES will complete this batch automatically once it is confirmed.');
       }
       setSaving(false); 
       if (status !== 'completed') setShowDetail(false);
