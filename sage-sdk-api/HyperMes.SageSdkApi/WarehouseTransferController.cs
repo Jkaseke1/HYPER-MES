@@ -22,12 +22,34 @@ namespace SDK_Test
             if (error != null)
                 return BadRequest(error);
 
-            lock (SdkSession.OperationLock)
+            try
             {
-                SdkSession.EnsureConnected();
-                new InventoryItem(request.ItemCode.Trim().ToUpperInvariant());
-                new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
-                new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
+                ValidateAgainstSage(request);
+            }
+            catch (Exception initialException)
+            {
+                try
+                {
+                    // Validation does not post, so reconnecting and retrying once is safe
+                    // when Evolution has discarded its static database context.
+                    lock (SdkSession.OperationLock)
+                    {
+                        SdkSession.Reconnect();
+                    }
+                    ValidateAgainstSage(request);
+                }
+                catch (Exception retryException)
+                {
+                    return Content(HttpStatusCode.BadRequest, new
+                    {
+                        status = "failed",
+                        environment = "UAT",
+                        action = "warehouse-transfer-validation",
+                        message = "Sage UAT could not validate this warehouse transfer.",
+                        exceptionMessage = retryException.Message,
+                        initialExceptionMessage = initialException.Message
+                    });
+                }
             }
 
             return Ok(new
@@ -134,6 +156,17 @@ namespace SDK_Test
                 return "Reference is required.";
 
             return null;
+        }
+
+        private static void ValidateAgainstSage(WarehouseTransferRequest request)
+        {
+            lock (SdkSession.OperationLock)
+            {
+                SdkSession.EnsureConnected();
+                new InventoryItem(request.ItemCode.Trim().ToUpperInvariant());
+                new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
+                new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
+            }
         }
 
         private static object TransferSummary(WarehouseTransferRequest request)
