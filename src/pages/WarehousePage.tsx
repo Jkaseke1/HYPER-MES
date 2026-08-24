@@ -95,9 +95,9 @@ export default function WarehousePage() {
         .select('raw_material_id, quantity')
         .eq('warehouse_id', 18),
       supabase
-        .from('warehouse_stock_balances')
-        .select('raw_material_id, quantity, warehouses!inner(code)')
-        .in('warehouses.code', ['PROD', 'PRODUCTION']),
+        .from('sage_stock_balances')
+        .select('raw_material_id, quantity')
+        .eq('warehouse_id', 19),
       supabase
         .from('stock_movements')
         .select('raw_material_id, quantity, movement_date, warehouses!inner(code)')
@@ -301,7 +301,7 @@ export default function WarehousePage() {
                       <span className="inline-flex items-center gap-1 justify-end">Deducted to Production (MTD) <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
                     <th className={`text-right ${thCls}`}>Deducted to Production (All Time)</th>
-                    <th className={`text-right ${thCls}`}>Production Warehouse</th>
+                    <th className={`text-right ${thCls}`}>Sage PD On Hand</th>
                     <th className={`text-right ${thCls}`}>Reorder Level</th>
                     <th className={`text-center ${thCls}`}>Stock Level</th>
                     <th className={`text-center ${thCls}`}>Status</th>
