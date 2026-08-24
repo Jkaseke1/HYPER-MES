@@ -216,6 +216,15 @@ async function processPendingEvents() {
         .update(successUpdate)
         .eq('id', event.id);
 
+      if (event.event_type === 'production_completed') {
+        const { error: completionError } = await supabase
+          .from('production_orders')
+          .update({ status: 'completed', actual_end: new Date().toISOString() })
+          .eq('id', event.reference_id)
+          .eq('status', 'in_progress');
+        if (completionError) throw new Error(`Sage posted finished goods, but MES could not finalize the batch: ${completionError.message}`);
+      }
+
       console.log(`  ✅ ${event.event_type} processed successfully`);
 
     } catch (err) {

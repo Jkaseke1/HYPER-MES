@@ -28,6 +28,24 @@ BEGIN
     END IF;
   END IF;
 
+  IF NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed' THEN
+    SELECT status, message
+      INTO v_sage_status, v_sage_message
+      FROM public.sync_log
+     WHERE event_type = 'production_completed'
+       AND reference_type = 'production_orders'
+       AND reference_id = NEW.id
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC
+     LIMIT 1;
+
+    IF COALESCE(v_sage_status, '') <> 'success' THEN
+      RAISE EXCEPTION
+        'Cannot complete production until Sage finished-goods posting succeeds. Current Sage status: %. %',
+        COALESCE(v_sage_status, 'not queued'),
+        COALESCE(v_sage_message, 'Queue the finished-goods receipt and wait for Sage posting.');
+    END IF;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -40,4 +58,4 @@ FOR EACH ROW
 EXECUTE FUNCTION public.enforce_sage_issue_before_production_start();
 
 COMMENT ON FUNCTION public.enforce_sage_issue_before_production_start()
-IS 'Blocks production start until the latest Sage materials_issued sync_log event succeeded.';
+IS 'Blocks production start and completion until their latest required Sage sync_log events succeeded.';

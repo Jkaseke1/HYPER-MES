@@ -169,6 +169,7 @@ export default function ProductionOrdersPage() {
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
+  const [sageCompletionStatus, setSageCompletionStatus] = useState<SageIssueStatus | null>(null);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
@@ -410,6 +411,33 @@ export default function ProductionOrdersPage() {
     const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageIssueStatus]);
+
+  const loadSageCompletionStatus = useCallback(async (orderId: string) => {
+    const { data, error } = await supabase
+      .from('sync_log')
+      .select('status, message, sage_response, error_details, updated_at')
+      .eq('event_type', 'production_completed')
+      .eq('reference_type', 'production_orders')
+      .eq('reference_id', orderId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error('Error loading Sage completion status:', error);
+      return;
+    }
+    setSageCompletionStatus((data as SageIssueStatus | null) || null);
+  }, []);
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setSageCompletionStatus(null);
+      return;
+    }
+    loadSageCompletionStatus(selected.id);
+    const interval = window.setInterval(() => loadSageCompletionStatus(selected.id), 5000);
+    return () => window.clearInterval(interval);
+  }, [selected?.id, loadSageCompletionStatus]);
 
   // Keep the production queue current when another MES user, the bridge, or a
   // database workflow changes an order. This removes the need to refresh the
@@ -1409,6 +1437,23 @@ export default function ProductionOrdersPage() {
         if (output.actual_qty <= 0) {
           throw new Error('Cannot complete production order — actual output quantities must be recorded first. Please enter production outputs in the Output tab.');
         }
+
+        const { data: latestCompletion, error: completionError } = await supabase
+          .from('sync_log')
+          .select('status, message')
+          .eq('event_type', 'production_completed')
+          .eq('reference_type', 'production_orders')
+          .eq('reference_id', selected.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (completionError) throw new Error(`Cannot check Sage completion status: ${completionError.message}`);
+        if (latestCompletion?.status === 'pending' || latestCompletion?.status === 'processing') {
+          throw new Error('Sage finished-goods posting is already queued or processing. Wait for its result before completing again.');
+        }
+        if (latestCompletion?.status === 'failed') {
+          throw new Error(`Sage finished-goods posting failed: ${latestCompletion.message || 'review the Sage error before retrying.'}`);
+        }
         
         // Production Line cost deprecated (double-counted labour). Labour card holds the authoritative per-tonne labour cost.
         const total = costing.raw_material_cost + costing.labour_cost + costing.overhead_cost;
@@ -1426,7 +1471,10 @@ export default function ProductionOrdersPage() {
           average_throughput: output.average_throughput === '' ? null : Number(output.average_throughput),
           total_cost: Math.round(total * 100) / 100,
           cost_per_unit: output.actual_qty > 0 ? Math.round((total / output.actual_qty) * 10000) / 10000 : 0,
-          actual_end: new Date().toISOString()
+          // Keep the batch In Progress until the bridge confirms its MFMF
+          // finished-goods receipt. The bridge is the only actor that marks it completed.
+          status: 'in_progress',
+          actual_end: null
         });
       }
 
@@ -1482,6 +1530,7 @@ export default function ProductionOrdersPage() {
             reference_id: selected.id,
             status: 'pending',
             description: `Batch completed — ${selected.batch_number}`,
+            message: `Finished goods for ${selected.batch_number} queued for Sage posting`,
             created_at: new Date().toISOString(),
           });
         if (syncError) {
@@ -1490,8 +1539,12 @@ export default function ProductionOrdersPage() {
         }
       }
 
+      if (status === 'completed') {
+        setSageCompletionStatus({ status: 'pending', message: `Finished goods for ${selected.batch_number} queued for Sage posting` });
+        toast('Finished goods queued for Sage. The batch remains In Progress until MFMF posts.', { icon: '...' });
+      }
       setSaving(false); 
-      setShowDetail(false); 
+      if (status !== 'completed') setShowDetail(false);
       fetchOrders();
     } catch (error: any) {
       console.error('Error updating status:', error);
@@ -2287,6 +2340,23 @@ export default function ProductionOrdersPage() {
                     {sageIssueStatus.status === 'failed' && sageIssueStatus.error_details?.message && (
                       <div className="text-[11px] mt-1 text-red-700 break-words">{sageIssueStatus.error_details.message}</div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {sageCompletionStatus && (
+                <div className={`mx-4 mt-3 p-3 border rounded-xl flex items-start gap-3 ${
+                  sageCompletionStatus.status === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : sageCompletionStatus.status === 'failed'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  {sageCompletionStatus.status === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : sageCompletionStatus.status === 'failed' ? <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" /> : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Receipt: {sageCompletionStatus.status === 'success' ? 'Posted' : sageCompletionStatus.status === 'processing' ? 'Posting' : sageCompletionStatus.status}</div>
+                    <div className="text-xs mt-0.5 break-words">{sageCompletionStatus.message || 'Waiting for Sage finished-goods posting.'}</div>
+                    {sageCompletionStatus.status === 'failed' && sageCompletionStatus.error_details?.message && <div className="text-[11px] mt-1 text-red-700 break-words">{sageCompletionStatus.error_details.message}</div>}
                   </div>
                 </div>
               )}
