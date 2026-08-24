@@ -51,6 +51,9 @@ export default function WarehousePage() {
         fetchData(true);
         if (tab === 'buffer') fetchBufferBalances();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
+        fetchData(true);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
         fetchData(true);
         if (tab === 'movements') fetchMovements();
@@ -80,15 +83,15 @@ export default function WarehousePage() {
 
     const [
       { data: m },
-      { data: rmBalances },
+      { data: sageRmBalances },
       { data: prodBalances },
       { data: transferOutMovements }
     ] = await Promise.all([
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase
-        .from('warehouse_stock_balances')
-        .select('raw_material_id, quantity, warehouses!inner(code)')
-        .eq('warehouses.code', 'RM'),
+        .from('sage_stock_balances')
+        .select('raw_material_id, quantity')
+        .eq('warehouse_id', 18),
       supabase
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
@@ -106,7 +109,7 @@ export default function WarehousePage() {
     setMaterials(m || []);
 
     const rmMap: Record<string, number> = {};
-    (rmBalances || []).forEach((b: any) => {
+    (sageRmBalances || []).forEach((b: any) => {
       rmMap[b.raw_material_id] = Number(b.quantity || 0);
     });
     setRmWarehouseBalances(rmMap);
@@ -258,7 +261,7 @@ export default function WarehousePage() {
       {tab === 'stock' && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="RM On Hand Value" value={`$ ${stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
+            <StatCard title="Sage RM On Hand Value" value={`$ ${stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
             <StatCard title="Sent to Production (MTD)" value={`${stats.sentMtd.toLocaleString()} kg`} icon={ArrowUpDown} color="amber" />
             <StatCard title="Low RM Stock Items" value={stats.lowCount} icon={AlertTriangle} color="red" />
             <StatCard title="Materials with RM Stock" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
@@ -284,7 +287,7 @@ export default function WarehousePage() {
                     <th className={`text-left ${thCls}`}>Code</th>
                     <th className={`text-left ${thCls}`}>Unit</th>
                     <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('rm_balance')}>
-                      <span className="inline-flex items-center gap-1 justify-end">RM On Hand <ArrowUpDown className="w-3 h-3" /></span>
+                      <span className="inline-flex items-center gap-1 justify-end">Sage RM On Hand <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
                     <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('sent_mtd')}>
                       <span className="inline-flex items-center gap-1 justify-end">Deducted to Production (MTD) <ArrowUpDown className="w-3 h-3" /></span>
