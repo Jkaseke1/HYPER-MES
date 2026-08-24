@@ -194,11 +194,10 @@ async function processPendingEvents() {
       if (handlerResult?.sage_response) successUpdate.sage_response = handlerResult.sage_response;
       if (handlerResult?.details) successUpdate.details = handlerResult.details;
 
-      await supabase
-        .from('sync_log')
-        .update(successUpdate)
-        .eq('id', event.id);
-
+      // A transaction is only ready for MES users once the related Sage stock
+      // balance is refreshed. Keep the visible status as "Posting to Sage"
+      // until that reconciliation finishes, so production never sees a stale
+      // balance immediately after a successful transfer.
       const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
       if (itemCodes.length) {
         await refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
@@ -211,6 +210,11 @@ async function processPendingEvents() {
         const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsTransfer?.itemCode;
         if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
       }
+
+      await supabase
+        .from('sync_log')
+        .update(successUpdate)
+        .eq('id', event.id);
 
       console.log(`  ✅ ${event.event_type} processed successfully`);
 
