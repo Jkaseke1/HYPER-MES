@@ -78,7 +78,7 @@ async function processPendingEvents() {
     .select('*')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
-    .limit(10);
+    .limit(100);
 
   if (error) {
     console.error('❌ Failed to read sync_log:', error.message);
@@ -89,12 +89,31 @@ async function processPendingEvents() {
 
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
 
+  // Give users a live FIFO position while another Sage transaction is being
+  // posted. The first row is claimed immediately; every later row remains
+  // pending and will be picked up as soon as its predecessor finishes.
+  const queuedAt = new Date().toISOString();
+  await Promise.all(pending.slice(1).map((event, index) =>
+    supabase
+      .from('sync_log')
+      .update({
+        message: `Queued for Sage (position ${index + 2} of ${pending.length})`,
+        updated_at: queuedAt,
+      })
+      .eq('id', event.id)
+      .eq('status', 'pending')
+  ));
+
   for (const event of pending) {
     // Claim the event atomically. A second bridge instance may have fetched the
     // same pending row, but only one instance is allowed to post it to Sage.
     const { data: claimed, error: claimError } = await supabase
       .from('sync_log')
-      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .update({
+        status: 'processing',
+        message: 'Posting to Sage now',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', event.id)
       .eq('status', 'pending')
       .select('id')

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info } from 'lucide-react';
+import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
@@ -15,6 +15,24 @@ interface NotificationItem {
   created_at: string;
 }
 
+interface SageQueueItem {
+  id: string;
+  event_type: string;
+  reference_id: string | null;
+  status: 'pending' | 'processing' | 'failed';
+  message: string | null;
+  updated_at: string;
+}
+
+const sageEventLabels: Record<string, string> = {
+  grn_confirmed: 'Goods receipt / GRV',
+  material_transfer_to_production: 'Material transfer to Production',
+  materials_issued: 'Material issue to Production',
+  production_completed: 'Production completion',
+  finished_goods_transfer_to_dispatch: 'Finished-goods transfer to Dispatch',
+  dispatch_delivered: 'Dispatch delivery',
+};
+
 interface HeaderProps {
   title: string;
   onMobileMenuToggle?: () => void;
@@ -24,6 +42,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [sageQueue, setSageQueue] = useState<SageQueueItem[]>([]);
+  const [loadingSageQueue, setLoadingSageQueue] = useState(true);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const updateRef = useRef<HTMLDivElement>(null);
@@ -119,6 +139,40 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       .subscribe();
 
     return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSageQueue() {
+      const { data, error } = await supabase
+        .from('sync_log')
+        .select('id, event_type, reference_id, status, message, updated_at')
+        .in('status', ['pending', 'processing', 'failed'])
+        .order('updated_at', { ascending: false })
+        .limit(8);
+
+      if (error) {
+        console.warn('Unable to load Sage posting queue:', error.message);
+        return;
+      }
+      if (!isMounted) return;
+      setSageQueue((data || []) as SageQueueItem[]);
+      setLoadingSageQueue(false);
+    }
+
+    loadSageQueue();
+    const channel = supabase
+      .channel('header-sage-posting-queue')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
+        loadSageQueue();
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
       supabase.removeChannel(channel);
     };
   }, []);
@@ -342,7 +396,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5 text-slate-500" />
-            {notifications.length > 0 && (
+            {(notifications.length > 0 || sageQueue.length > 0) && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
             )}
           </button>
@@ -350,15 +404,41 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">Recent Alerts</p>
-                <span className="text-xs text-slate-400">{notifications.length} items</span>
+                <span className="text-xs text-slate-400">{notifications.length + sageQueue.length} items</span>
               </div>
               <div className="max-h-64 overflow-y-auto space-y-2">
+                {loadingSageQueue && (
+                  <div className="flex items-center justify-center py-2 text-slate-400 text-xs">
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" /> Checking Sage queue...
+                  </div>
+                )}
+                {sageQueue.map((item) => {
+                  const isPosting = item.status === 'processing';
+                  const isFailed = item.status === 'failed';
+                  return (
+                    <div key={item.id} className={`rounded-lg border p-2 ${
+                      isFailed ? 'border-rose-200 bg-rose-50' : isPosting ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'
+                    }`}>
+                      <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          isFailed ? 'text-rose-700' : isPosting ? 'text-blue-700' : 'text-amber-700'
+                        }`}>
+                          {isPosting ? <Loader2 className="h-3 w-3 animate-spin" /> : isFailed ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                          {isPosting ? 'POSTING TO SAGE' : isFailed ? 'SAGE FAILED' : 'QUEUED FOR SAGE'}
+                        </span>
+                        <span className="text-slate-400">{formatDate(item.updated_at)}</span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-700">{sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-slate-600 line-clamp-2">{item.message || 'Waiting for Sage bridge.'}</p>
+                    </div>
+                  );
+                })}
                 {loadingNotifications && (
                   <div className="flex items-center justify-center py-6 text-slate-400 text-sm">
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading alerts...
                   </div>
                 )}
-                {!loadingNotifications && notifications.length === 0 && (
+                {!loadingNotifications && !loadingSageQueue && notifications.length === 0 && sageQueue.length === 0 && (
                   <p className="text-xs text-slate-400 text-center py-4">No alerts logged yet.</p>
                 )}
                 {notifications.map((notification) => (
