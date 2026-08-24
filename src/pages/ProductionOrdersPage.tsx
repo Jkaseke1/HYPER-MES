@@ -446,8 +446,8 @@ export default function ProductionOrdersPage() {
     return '';
   };
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     let q = supabase.from('production_orders').select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)').order('created_at', { ascending: false });
     if (tab !== 'all') q = q.eq('status', tab);
     if (search) q = q.ilike('batch_number', `%${search}%`);
@@ -458,10 +458,16 @@ export default function ProductionOrdersPage() {
     } else {
       setOrders((data as ProductionOrder[]) || []);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [tab, search]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  // Reconcile the list even when a browser misses a Supabase Realtime event.
+  useEffect(() => {
+    const interval = window.setInterval(() => { void fetchOrders(true); }, 3000);
+    return () => window.clearInterval(interval);
+  }, [fetchOrders]);
 
   const loadSageIssueStatuses = useCallback(async (orderIds: string[]) => {
     if (!orderIds.length) {
@@ -599,12 +605,12 @@ export default function ProductionOrdersPage() {
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageCompletionStatus]);
 
-  // The bridge marks the Sage event successful before it finalizes the MES batch.
-  // Keep an open batch reconciled during that short handoff even if Realtime is
-  // temporarily unavailable in the user's browser.
+  // Keep an open batch reconciled through the final Sage-to-MES handoff even if
+  // Realtime is temporarily unavailable in the user's browser.
   useEffect(() => {
-    const isPosting = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
-    if (!selected?.id || !isPosting) return;
+    const isFinalizing = selected?.status !== 'completed'
+      && ['pending', 'processing', 'success'].includes(sageCompletionStatus?.status || '');
+    if (!selected?.id || !isFinalizing) return;
 
     const refreshCompletion = async () => {
       const { data, error } = await supabase
@@ -623,7 +629,7 @@ export default function ProductionOrdersPage() {
     void refreshCompletion();
     const interval = window.setInterval(refreshCompletion, 1500);
     return () => window.clearInterval(interval);
-  }, [selected?.id, sageCompletionStatus?.status, loadSageCompletionStatus]);
+  }, [selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
   // Keep the production queue current when another MES user, the bridge, or a
   // database workflow changes an order. This removes the need to refresh the

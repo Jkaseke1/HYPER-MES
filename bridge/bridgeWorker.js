@@ -214,11 +214,6 @@ async function processPendingEvents() {
         if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
       }
 
-      await supabase
-        .from('sync_log')
-        .update(successUpdate)
-        .eq('id', event.id);
-
       if (event.event_type === 'production_completed') {
         const { error: completionError } = await supabase
           .from('production_orders')
@@ -227,6 +222,11 @@ async function processPendingEvents() {
           .eq('status', 'in_progress');
         if (completionError) throw new Error(`Sage posted finished goods, but MES could not finalize the batch: ${completionError.message}`);
       }
+
+      await supabase
+        .from('sync_log')
+        .update(successUpdate)
+        .eq('id', event.id);
 
       console.log(`  ✅ ${event.event_type} processed successfully`);
 
