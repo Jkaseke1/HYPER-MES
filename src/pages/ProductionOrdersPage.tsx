@@ -1530,7 +1530,7 @@ export default function ProductionOrdersPage() {
             reference_id: selected.id,
             status: 'pending',
             description: `Batch completed — ${selected.batch_number}`,
-            message: `Finished goods for ${selected.batch_number} queued for Sage posting`,
+            message: `Production completion queued. Please wait while Sage posts the finished-goods receipt; MES will complete this batch automatically once Sage confirms it.`,
             created_at: new Date().toISOString(),
           });
         if (syncError) {
@@ -1540,8 +1540,11 @@ export default function ProductionOrdersPage() {
       }
 
       if (status === 'completed') {
-        setSageCompletionStatus({ status: 'pending', message: `Finished goods for ${selected.batch_number} queued for Sage posting` });
-        toast('Finished goods queued for Sage. The batch remains In Progress until MFMF posts.', { icon: '...' });
+        setSageCompletionStatus({
+          status: 'pending',
+          message: 'Production completion queued. Please wait while Sage posts the finished-goods receipt; MES will complete this batch automatically once Sage confirms it.',
+        });
+        toast('Production completion queued. Please wait while Sage posts; MES will complete the batch automatically soon.', { icon: '...' });
       }
       setSaving(false); 
       if (status !== 'completed') setShowDetail(false);
