@@ -25,28 +25,31 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-                lock (IssueTransactionLock)
+                lock (SdkSession.OperationLock)
                 {
-                    BeginSdkTransaction();
-                    try
+                    SdkSession.EnsureConnected();
+                    lock (IssueTransactionLock)
                     {
-                        var preparedLines = PrepareTransactions(request);
-                        DatabaseContext.RollbackTran();
-                        return Ok(new
+                        BeginSdkTransaction();
+                        try
                         {
-                            status = "validated",
-                            environment = "UAT",
-                            action = "material-issue",
-                            sageConnection = "verified",
-                            sagePosting = "not performed",
-                            message = "Validated against Sage UAT. No material issue was posted.",
-                            materialIssue = IssueSummary(request, preparedLines)
-                        });
-                    }
-                    finally
-                    {
-                        RollbackPendingSdkTransaction();
+                            var preparedLines = PrepareTransactions(request);
+                            DatabaseContext.RollbackTran();
+                            return Ok(new
+                            {
+                                status = "validated",
+                                environment = "UAT",
+                                action = "material-issue",
+                                sageConnection = "verified",
+                                sagePosting = "not performed",
+                                message = "Validated against Sage UAT. No material issue was posted.",
+                                materialIssue = IssueSummary(request, preparedLines)
+                            });
+                        }
+                        finally
+                        {
+                            RollbackPendingSdkTransaction();
+                        }
                     }
                 }
             }
@@ -77,35 +80,38 @@ namespace SDK_Test
 
             try
             {
-                SdkSession.EnsureConnected();
-                lock (IssueTransactionLock)
+                lock (SdkSession.OperationLock)
                 {
-                    BeginSdkTransaction();
-                    try
+                    SdkSession.EnsureConnected();
+                    lock (IssueTransactionLock)
                     {
-                        var preparedLines = PrepareTransactions(request);
-                        foreach (var line in preparedLines)
+                        BeginSdkTransaction();
+                        try
                         {
-                            if (!line.Transaction.Post())
-                                throw new InvalidOperationException("Sage could not post material issue line " + line.ItemCode + ".");
-                        }
-                        if (!DatabaseContext.CommitTran())
-                            throw new InvalidOperationException("Sage could not commit the material issue transaction.");
+                            var preparedLines = PrepareTransactions(request);
+                            foreach (var line in preparedLines)
+                            {
+                                if (!line.Transaction.Post())
+                                    throw new InvalidOperationException("Sage could not post material issue line " + line.ItemCode + ".");
+                            }
+                            if (!DatabaseContext.CommitTran())
+                                throw new InvalidOperationException("Sage could not commit the material issue transaction.");
 
-                        return Ok(new
+                            return Ok(new
+                            {
+                                status = "posted",
+                                environment = "UAT",
+                                action = "material-issue",
+                                postingMode = "sdk-inventory-transaction",
+                                sagePosting = "completed",
+                                message = "Material issue posted to Sage UAT through the Evolution SDK.",
+                                materialIssue = IssueSummary(request, preparedLines)
+                            });
+                        }
+                        finally
                         {
-                            status = "posted",
-                            environment = "UAT",
-                            action = "material-issue",
-                            postingMode = "sdk-inventory-transaction",
-                            sagePosting = "completed",
-                            message = "Material issue posted to Sage UAT through the Evolution SDK.",
-                            materialIssue = IssueSummary(request, preparedLines)
-                        });
-                    }
-                    finally
-                    {
-                        RollbackPendingSdkTransaction();
+                            RollbackPendingSdkTransaction();
+                        }
                     }
                 }
             }

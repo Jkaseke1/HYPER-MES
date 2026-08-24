@@ -20,7 +20,10 @@ namespace SDK_Test
 
             try
             {
-                return Ok(ReadStock(itemCode, warehouse));
+                lock (SdkSession.OperationLock)
+                {
+                    return Ok(ReadStock(itemCode, warehouse));
+                }
             }
             catch (Exception ex)
             {
@@ -28,8 +31,11 @@ namespace SDK_Test
                 {
                     // A stale SDK context is recoverable. Retry once before
                     // reporting an invalid item or warehouse to the bridge.
-                    SdkSession.Reconnect();
-                    return Ok(ReadStock(itemCode, warehouse));
+                    lock (SdkSession.OperationLock)
+                    {
+                        SdkSession.Reconnect();
+                        return Ok(ReadStock(itemCode, warehouse));
+                    }
                 }
                 catch (Exception retryException)
                 {

@@ -8,6 +8,14 @@ namespace SDK_Test
         private static readonly object ConnectionLock = new object();
         private static bool _connected;
 
+        // Evolution keeps its database connection in static process state. Every
+        // SDK read and post must therefore use this one gate; otherwise a stock
+        // lookup can disrupt an in-flight inventory transaction on another HTTP thread.
+        public static object OperationLock
+        {
+            get { return ConnectionLock; }
+        }
+
         public static void EnsureConnected()
         {
             lock (ConnectionLock)
