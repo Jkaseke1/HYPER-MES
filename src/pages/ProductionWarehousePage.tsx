@@ -133,6 +133,12 @@ export default function ProductionWarehousePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
         fetchTransfers(true);
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
+        fetchTransfers(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
+        fetchTransfers(true);
+      })
       .subscribe();
 
     const intervalId = window.setInterval(() => {
@@ -191,6 +197,11 @@ export default function ProductionWarehousePage() {
   const totalMaterials = aggregated.length;
   const totalMesLedgerQty = aggregated.reduce((sum, material) => sum + Math.max(0, material.mes_ledger_quantity), 0);
   const totalSagePdQty = aggregated.reduce((sum, material) => sum + Math.max(0, material.sage_pd_quantity || 0), 0);
+  const lastSagePdSync = aggregated.reduce<string | null>((latest, material) => {
+    if (!material.sage_pd_synced_at) return latest;
+    if (!latest || new Date(material.sage_pd_synced_at) > new Date(latest)) return material.sage_pd_synced_at;
+    return latest;
+  }, null);
   const recentCount = aggregated.filter(m => {
     const d = new Date(m.last_transfer);
     const diff = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
@@ -273,18 +284,18 @@ export default function ProductionWarehousePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Materials on Floor" value={totalMaterials} icon={Boxes} color="teal" />
+        <StatCard title="Sage PD Available" value={`${totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`} icon={Package} color="emerald" />
         <StatCard title="MES Floor Ledger" value={`${totalMesLedgerQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
-        <StatCard title="Sage PD (cached)" value={`${totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`} icon={Package} color="emerald" />
         <StatCard title="Transfers (last 7 days)" value={recentCount} icon={TrendingDown} color="emerald" />
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
         <p className="text-xs text-amber-800">
-          <strong>MES Floor Ledger</strong> is an internal operational ledger, not Sage stock. <strong>Sage PD (cached)</strong>
-          is the Sage warehouse 19 balance at its last sync. Use Sage inventory enquiries as the source of truth when the cache is stale.
+          <strong>Sage PD Available</strong> is the primary Sage warehouse 19 total and updates when the bridge completes a stock sync.
+          <strong> MES Floor Ledger</strong> is an internal operational reconciliation total. Last Sage PD sync: {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM yyyy HH:mm:ss') : 'awaiting first sync'}.
         </p>
       </div>
 
@@ -300,7 +311,7 @@ export default function ProductionWarehousePage() {
               className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
             />
           </div>
-          <p className="text-xs text-slate-400 ml-4">Last refreshed: {format(lastRefresh, 'HH:mm:ss')}</p>
+          <p className="text-xs text-slate-400 ml-4">Live view refreshed: {format(lastRefresh, 'HH:mm:ss')}</p>
         </div>
 
         {loading ? (
@@ -334,12 +345,12 @@ export default function ProductionWarehousePage() {
                   </div>
                   <div className="flex items-center gap-6 text-sm mr-4">
                     <div className="text-right">
-                      <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
-                      <p className="text-xs text-slate-400">MES floor ledger</p>
+                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
+                      <p className="text-xs text-slate-400">Sage PD {m.sage_pd_synced_at ? format(new Date(m.sage_pd_synced_at), 'dd MMM HH:mm:ss') : ''}</p>
                     </div>
                     <div className="text-right hidden md:block">
-                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
-                      <p className="text-xs text-slate-400">Sage PD {m.sage_pd_synced_at ? format(new Date(m.sage_pd_synced_at), 'dd MMM HH:mm') : ''}</p>
+                      <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
+                      <p className="text-xs text-slate-400">MES floor ledger</p>
                     </div>
                     <div className="text-right hidden sm:block">
                       <p className="text-slate-600 flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(m.last_transfer), 'dd MMM yyyy')}</p>
