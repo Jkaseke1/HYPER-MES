@@ -181,6 +181,7 @@ export default function ProductionOrdersPage() {
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
+  const notifiedSageCompletionRef = useRef<Record<string, string>>({});
   const SAGE_STOCK_MAX_AGE_MINUTES = 120;
 
   const openConfirmDialog = (config: Omit<ConfirmDialogState, 'open'>) => {
@@ -510,6 +511,32 @@ export default function ProductionOrdersPage() {
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageCompletionStatus]);
 
+  // The bridge marks the Sage event successful before it finalizes the MES batch.
+  // Keep an open batch reconciled during that short handoff even if Realtime is
+  // temporarily unavailable in the user's browser.
+  useEffect(() => {
+    const isPosting = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
+    if (!selected?.id || !isPosting) return;
+
+    const refreshCompletion = async () => {
+      const { data, error } = await supabase
+        .from('production_orders')
+        .select('*')
+        .eq('id', selected.id)
+        .maybeSingle();
+      if (!error && data) {
+        const updatedOrder = data as ProductionOrder;
+        setSelected((current) => current?.id === updatedOrder.id ? { ...current, ...updatedOrder } : current);
+        setOrders((current) => current.map((order) => order.id === updatedOrder.id ? { ...order, ...updatedOrder } : order));
+      }
+      loadSageCompletionStatus(selected.id);
+    };
+
+    void refreshCompletion();
+    const interval = window.setInterval(refreshCompletion, 1500);
+    return () => window.clearInterval(interval);
+  }, [selected?.id, sageCompletionStatus?.status, loadSageCompletionStatus]);
+
   // Keep the production queue current when another MES user, the bridge, or a
   // database workflow changes an order. This removes the need to refresh the
   // browser repeatedly while a batch is being processed.
@@ -536,9 +563,33 @@ export default function ProductionOrdersPage() {
           toast.error(`Sage finished-goods transfer failed: ${transfer.transfer_number}.`);
         }
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sync_log' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
         const event = payload.new as any;
-        if (event?.event_type !== 'materials_issued' || event?.reference_type !== 'production_orders') return;
+        if (event?.reference_type !== 'production_orders') return;
+
+        if (event?.event_type === 'production_completed') {
+          const status = {
+            status: event.status,
+            message: event.message,
+            sage_response: event.sage_response,
+            error_details: event.error_details,
+            updated_at: event.updated_at,
+          };
+          setSageCompletionStatus((current) => selected?.id === event.reference_id ? status : current);
+
+          const notificationKey = `${event.status}:${event.updated_at || ''}`;
+          if (notifiedSageCompletionRef.current[event.reference_id] === notificationKey) return;
+          notifiedSageCompletionRef.current[event.reference_id] = notificationKey;
+
+          if (event.status === 'success') {
+            toast.success('Sage posted the finished-goods receipt. Finalizing this batch in MES.');
+          } else if (event.status === 'failed') {
+            toast.error(`Sage finished-goods receipt failed: ${event.message || 'open the batch for details'}`);
+          }
+          return;
+        }
+
+        if (event.event_type !== 'materials_issued') return;
 
         setSageIssueStatuses((current) => ({
           ...current,
@@ -569,7 +620,7 @@ export default function ProductionOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, selected?.id]);
 
   const renderSageIssueStatus = (order: ProductionOrder, compact = false) => {
     const status = sageIssueStatuses[order.id];
@@ -2438,7 +2489,7 @@ export default function ProductionOrdersPage() {
                       ? 'bg-red-50 border-red-200 text-red-900'
                       : 'bg-amber-50 border-amber-200 text-amber-900'
                 }`}>
-                  {sageCompletionStatus.status === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : sageCompletionStatus.status === 'failed' ? <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" /> : <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />}
+                  {sageCompletionStatus.status === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : sageCompletionStatus.status === 'failed' ? <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" /> : <RefreshCw className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-spin" />}
                   <div className="min-w-0">
                     <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Receipt: {sageCompletionStatus.status === 'success' ? 'Posted' : sageCompletionStatus.status === 'processing' ? 'Posting' : sageCompletionStatus.status}</div>
                     <div className="text-xs mt-0.5 break-words">{sageCompletionStatus.message || 'Waiting for Sage finished-goods posting.'}</div>
@@ -2519,7 +2570,7 @@ export default function ProductionOrdersPage() {
                       disabled={saving || sageCompletionInFlight || sageCompletionPosted || sageCompletionFailed || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
                     >
-                      {sageCompletionInFlight ? <Clock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                      {sageCompletionInFlight ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                       {sageCompletionInFlight ? 'Waiting for Sage Receipt' : sageCompletionPosted ? 'Sage Receipt Posted' : sageCompletionFailed ? 'Sage Completion Failed' : 'Complete Production'}
                     </button>
                   )}
