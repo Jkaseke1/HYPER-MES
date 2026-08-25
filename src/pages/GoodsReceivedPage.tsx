@@ -65,6 +65,7 @@ export default function GoodsReceivedPage() {
   const notifiedSyncRef = useRef<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [retryingSagePost, setRetryingSagePost] = useState(false);
+  const [showRetrySageDialog, setShowRetrySageDialog] = useState(false);
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
@@ -429,14 +430,9 @@ export default function GoodsReceivedPage() {
   const retryFailedSagePosting = async () => {
     if (!viewing || !selectedSync || selectedSync.status !== 'failed' || !canRetrySagePosting) return;
 
-    const confirmed = window.confirm(
-      `Requeue ${viewing.grn_number} for Sage GRV posting?\n\nThe bridge will first check Sage for this MES GRN reference before it posts, so an existing GRV will not be duplicated.`
-    );
-    if (!confirmed) return;
-
     setRetryingSagePost(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('sync_log')
         .update({
           status: 'pending',
@@ -445,11 +441,15 @@ export default function GoodsReceivedPage() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedSync.id)
-        .eq('status', 'failed');
+        .eq('status', 'failed')
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) throw new Error('This Sage posting is no longer failed and cannot be retried. Refresh the GRN status.');
 
       notifiedSyncRef.current[viewing.id] = '';
+      setShowRetrySageDialog(false);
       await fetchSageSyncStatuses(grns, false);
       toast.success(`${viewing.grn_number} requeued for Sage posting`);
     } catch (error: any) {
@@ -1278,6 +1278,52 @@ export default function GoodsReceivedPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showRetrySageDialog} onOpenChange={setShowRetrySageDialog}>
+        <DialogContent className="max-w-md overflow-hidden p-0">
+          <div className="border-b border-amber-200 bg-amber-50 px-6 py-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">Retry Sage GRV posting</DialogTitle>
+                <DialogDescription className="mt-1 text-sm text-slate-600">
+                  Requeue this approved GRN after reviewing the Sage error.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-4 px-6 py-5">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">GRN</p>
+              <p className="mt-1 font-mono text-sm font-bold text-slate-900">{viewing?.grn_number}</p>
+            </div>
+            <p className="text-sm leading-6 text-slate-700">
+              The bridge checks Sage for this MES GRN reference before posting. If a GRV already exists, it returns that document instead of creating another one.
+            </p>
+            <div className="flex justify-end gap-3 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowRetrySageDialog(false)}
+                disabled={retryingSagePost}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={retryFailedSagePosting}
+                disabled={retryingSagePost}
+                className="bg-rose-700 text-white hover:bg-rose-800"
+              >
+                {retryingSagePost ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                {retryingSagePost ? 'Requeuing...' : 'Confirm Retry'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* View GRN Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
         <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
@@ -1364,7 +1410,7 @@ export default function GoodsReceivedPage() {
                     <Button
                       type="button"
                       size="sm"
-                      onClick={retryFailedSagePosting}
+                      onClick={() => setShowRetrySageDialog(true)}
                       disabled={retryingSagePost}
                       className="bg-rose-700 text-white hover:bg-rose-800"
                     >

@@ -70,8 +70,15 @@ namespace SDK_Test
                 return StatusCode(System.Net.HttpStatusCode.Conflict);
             }
 
+            SqlConnection referenceLockConnection = null;
             try
             {
+                // This SQL application lock protects the MES GRN reference across API processes.
+                referenceLockConnection = AcquireGrvReferenceLock(reference);
+                existingGrvNumber = FindStandaloneGrvByMesReference(reference);
+                if (!string.IsNullOrWhiteSpace(existingGrvNumber))
+                    return Ok(PostedGoodsReceiptResponse(request, existingGrvNumber, "already-posted"));
+
                 lock (SdkSession.OperationLock)
                 {
                     SdkSession.EnsureConnected();
@@ -103,6 +110,10 @@ namespace SDK_Test
                     exceptionMessage = ex.Message,
                     detail = ex.ToString()
                 });
+            }
+            finally
+            {
+                ReleaseGrvReferenceLock(referenceLockConnection, reference);
             }
         }
 
@@ -140,6 +151,52 @@ namespace SDK_Test
                 command.Parameters.Add("@MesReference", SqlDbType.VarChar, 50).Value = mesReference;
                 connection.Open();
                 return command.ExecuteScalar() as string;
+            }
+        }
+
+        private static SqlConnection AcquireGrvReferenceLock(string mesReference)
+        {
+            var connection = new SqlConnection(GetCompanyConnectionString());
+            try
+            {
+                connection.Open();
+                using (var command = new SqlCommand(@"
+                    DECLARE @Result int;
+                    EXEC @Result = sys.sp_getapplock
+                        @Resource = @Resource,
+                        @LockMode = 'Exclusive',
+                        @LockOwner = 'Session',
+                        @LockTimeout = 0;
+                    SELECT @Result;", connection))
+                {
+                    command.Parameters.Add("@Resource", SqlDbType.NVarChar, 255).Value = "HYPER_MES_GRV:" + mesReference;
+                    var result = Convert.ToInt32(command.ExecuteScalar());
+                    if (result < 0)
+                        throw new InvalidOperationException("Another Sage GRV posting is already processing for MES reference " + mesReference + ".");
+                }
+                return connection;
+            }
+            catch
+            {
+                connection.Dispose();
+                throw;
+            }
+        }
+
+        private static void ReleaseGrvReferenceLock(SqlConnection connection, string mesReference)
+        {
+            if (connection == null) return;
+            try
+            {
+                using (var command = new SqlCommand("EXEC sys.sp_releaseapplock @Resource = @Resource, @LockOwner = 'Session';", connection))
+                {
+                    command.Parameters.Add("@Resource", SqlDbType.NVarChar, 255).Value = "HYPER_MES_GRV:" + mesReference;
+                    command.ExecuteNonQuery();
+                }
+            }
+            finally
+            {
+                connection.Dispose();
             }
         }
 
