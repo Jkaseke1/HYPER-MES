@@ -27,7 +27,7 @@ namespace SDK_Test
             lock (SdkSession.OperationLock)
             {
                 SdkSession.EnsureConnected();
-                ValidateSageMasters(request);
+                ValidateSageMastersWithReconnect(request);
             }
 
             return Ok(new
@@ -75,7 +75,7 @@ namespace SDK_Test
                 lock (SdkSession.OperationLock)
                 {
                     SdkSession.EnsureConnected();
-                    ValidateSageMasters(request);
+                    ValidateSageMastersWithReconnect(request);
 
                     string grvNumber;
                     lock (GrvNumberLock)
@@ -261,6 +261,20 @@ namespace SDK_Test
             {
                 new InventoryItem(line.ItemCode.Trim().ToUpperInvariant());
                 new Warehouse(FirstNonBlank(line.Warehouse, request.Warehouse, "RM").Trim().ToUpperInvariant());
+            }
+        }
+
+        private static void ValidateSageMastersWithReconnect(GoodsReceiptRequest request)
+        {
+            try
+            {
+                ValidateSageMasters(request);
+            }
+            catch (EvolutionDatabaseException ex) when (ex.Message.IndexOf("connection has not been initialised", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // No GRV transaction has started yet, so one reconnect/retry is safe.
+                SdkSession.Reconnect();
+                ValidateSageMasters(request);
             }
         }
 
