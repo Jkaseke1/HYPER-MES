@@ -84,10 +84,10 @@ async function peekMfpNumber(): Promise<string> {
       .eq('year', 0)
       .maybeSingle();
 
-    return `MFP${String(data?.next_sequence || 10380).padStart(6, '0')}`;
+    return `MFP${String(data?.next_sequence || 10403).padStart(6, '0')}`;
   } catch (err) {
     console.error('Error peeking Sage MFP number:', err);
-    return 'MFP010380';
+    return 'MFP010403';
   }
 }
 
