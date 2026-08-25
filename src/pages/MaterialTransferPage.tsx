@@ -142,6 +142,9 @@ export default function MaterialTransferPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
         fetchData(true);
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
+        fetchData(true);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
         fetchData(true);
       })
@@ -193,9 +196,9 @@ export default function MaterialTransferPage() {
         .in('status', ['pending', 'materials_issued', 'in_progress'])
         .order('created_at', { ascending: false }),
       supabase
-        .from('warehouse_stock_balances')
-        .select('raw_material_id, quantity, warehouses!inner(code)')
-        .eq('warehouses.code', 'RM'),
+        .from('sage_stock_balances')
+        .select('raw_material_id, quantity, last_synced_at')
+        .eq('warehouse_id', 18),
       supabase
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
@@ -279,12 +282,13 @@ export default function MaterialTransferPage() {
         return;
       }
 
-      // Check stock for all lines
+      // Sage is the stock authority for RM transfers. The bridge refreshes this
+      // balance from Sage UAT and the worker verifies it again when posting.
       for (const line of validLines) {
         const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
         const material = rawMaterials.find(m => m.id === line.raw_material_id);
         if (line.quantity > rmBalance) {
-          alert(`Insufficient stock for ${material?.name || 'material'}. Available: ${rmBalance.toLocaleString()} kg, Requested: ${line.quantity.toLocaleString()} kg`);
+          alert(`Insufficient Sage RM stock for ${material?.name || 'material'}. Available: ${rmBalance.toLocaleString()} kg, Requested: ${line.quantity.toLocaleString()} kg`);
           setSaving(false);
           return;
         }
@@ -847,7 +851,7 @@ export default function MaterialTransferPage() {
                             const bal = rmWarehouseBalances[mat.id] ?? 0;
                             return (
                               <option key={mat.id} value={mat.id}>
-                                {mat.name} ({mat.code}) — Stock: {bal.toLocaleString()} {mat.unit}
+                                {mat.name} ({mat.code}) — Sage RM: {bal.toLocaleString()} {mat.unit}
                               </option>
                             );
                           })}
