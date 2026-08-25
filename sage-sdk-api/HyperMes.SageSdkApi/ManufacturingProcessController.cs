@@ -60,6 +60,7 @@ namespace SDK_Test
                         command.Parameters.Add("@ProjectID", SqlDbType.Int).Value = 0;
                         connection.Open();
                         command.ExecuteNonQuery();
+                        StampProcessLineReference(connection, request.ProcessReference);
                 }
                 return Ok(Response(request, "posted", "Sage manufacturing process document recorded. Inventory was not posted by this logging step."));
             }
@@ -89,6 +90,20 @@ namespace SDK_Test
                 connection.Open();
                 var result = command.ExecuteScalar();
                 return result == null ? (int?)null : Convert.ToInt32(result);
+            }
+        }
+
+        private static void StampProcessLineReference(SqlConnection connection, string processReference)
+        {
+            using (var command = new SqlCommand(@"
+                UPDATE line
+                SET cReference = @ProcessReference
+                FROM dbo._etblManufProcessLine AS line
+                INNER JOIN dbo._etblManufProcess AS process ON process.idManufProcess = line.iManufProcessID
+                WHERE process.cProcessRefNumber = @ProcessReference;", connection))
+            {
+                command.Parameters.Add("@ProcessReference", SqlDbType.VarChar, 50).Value = processReference.Trim();
+                command.ExecuteNonQuery();
             }
         }
 

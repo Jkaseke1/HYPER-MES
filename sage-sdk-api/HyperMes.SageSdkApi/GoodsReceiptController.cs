@@ -275,9 +275,33 @@ namespace SDK_Test
                         command.ExecuteNonQuery();
                     }
                 }
+
+                StampStandaloneGrvDisplayTotals(connection, grvNumber);
             }
 
             ValidateStandaloneGrvDocument(grvNumber);
+        }
+
+        private static void StampStandaloneGrvDisplayTotals(SqlConnection connection, string grvNumber)
+        {
+            // Evolution's archived GRV view reads the last-processed fields, not just the posted fields.
+            using (var command = new SqlCommand(@"
+                UPDATE line
+                SET
+                    fQtyLastProcess = line.fQtyProcessed,
+                    fQtyLastProcessLineTotIncl = line.fQtyProcessedLineTotIncl,
+                    fQtyLastProcessLineTotExcl = line.fQtyProcessedLineTotExcl,
+                    fQtyLastProcessLineTotInclNoDisc = line.fQtyProcessedLineTotInclNoDisc,
+                    fQtyLastProcessLineTotExclNoDisc = line.fQtyProcessedLineTotExclNoDisc,
+                    fQtyLastProcessLineTaxAmount = line.fQtyProcessedLineTaxAmount,
+                    fQtyLastProcessLineTaxAmountNoDisc = line.fQtyProcessedLineTaxAmountNoDisc
+                FROM _btblInvoiceLines AS line
+                INNER JOIN InvNum AS header ON header.AutoIndex = line.iInvoiceID
+                WHERE header.InvNumber = @GrvNumber OR header.GrvNumber = @GrvNumber;", connection))
+            {
+                command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
+                command.ExecuteNonQuery();
+            }
         }
 
         private static void ValidateStandaloneGrvDocument(string grvNumber)
