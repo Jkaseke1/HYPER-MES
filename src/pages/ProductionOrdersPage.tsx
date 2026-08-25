@@ -935,6 +935,7 @@ export default function ProductionOrdersPage() {
         week_number: form.week_number === '' ? null : Number(form.week_number),
         notes: form.notes, 
         status: 'pending',
+        sage_mfp_reference: officialBatchNumber,
       });
 
       if (error) throw error;

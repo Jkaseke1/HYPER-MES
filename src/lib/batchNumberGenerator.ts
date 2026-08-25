@@ -68,11 +68,38 @@ export async function generateBatchNumber(prefix: string): Promise<string> {
 }
 
 export async function peekProductionBatchNumber(): Promise<string> {
-  return peekBatchNumber('BATCH');
+  return peekMfpNumber();
 }
 
 export async function generateProductionBatchNumber(): Promise<string> {
-  return generateBatchNumber('BATCH');
+  return generateMfpNumber();
+}
+
+async function peekMfpNumber(): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from('batch_sequences')
+      .select('next_sequence')
+      .eq('prefix', 'MFP')
+      .eq('year', 0)
+      .maybeSingle();
+
+    return `MFP${String(data?.next_sequence || 10380).padStart(6, '0')}`;
+  } catch (err) {
+    console.error('Error peeking Sage MFP number:', err);
+    return 'MFP010380';
+  }
+}
+
+async function generateMfpNumber(): Promise<string> {
+  try {
+    const { data, error } = await supabase.rpc('reserve_next_mfp_sequence');
+    if (error || !Number.isInteger(data)) throw error || new Error('MFP sequence did not return a number.');
+    return `MFP${String(data).padStart(6, '0')}`;
+  } catch (err) {
+    console.error('Sage MFP number generation failed:', err);
+    throw new Error('Could not reserve the next Sage MFP production number. Please try again.');
+  }
 }
 
 export async function peekDispatchNumber(): Promise<string> {
