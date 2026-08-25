@@ -10,6 +10,8 @@ const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_K
 // Production completion is a manufacture receipt into Production. A clerk moves
 // finished goods to Dispatch later through the separate PD -> DEB workflow.
 const FINISHED_GOODS_WAREHOUSE = (process.env.SAGE_FINISHED_GOODS_WAREHOUSE_CODE || 'PD').trim().toUpperCase();
+const PRODUCTION_WAREHOUSE_ID = Number(process.env.SAGE_PRODUCTION_WAREHOUSE_ID || 19);
+const RAW_MATERIAL_WAREHOUSE_ID = Number(process.env.SAGE_RAW_MATERIAL_WAREHOUSE_ID || 18);
 
 function postJson(urlString, body) {
   return new Promise((resolve, reject) => {
@@ -62,6 +64,14 @@ async function handleBatchComplete(syncEvent) {
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`Invalid finished-goods quantity: ${quantity}`);
   if (!Number.isFinite(unitCost) || unitCost < 0) throw new Error(`Invalid finished-goods unit cost: ${unitCost}`);
 
+  const { data: issuedMaterials, error: issuedMaterialsError } = await supabase
+    .from('production_order_materials')
+    .select('actual_qty, unit_cost, raw_materials(name, sage_code, code)')
+    .eq('production_order_id', order.id)
+    .eq('issued', true);
+  if (issuedMaterialsError) throw new Error(`Could not load issued production materials: ${issuedMaterialsError.message}`);
+  if (!issuedMaterials?.length) throw new Error(`No issued materials available for Sage manufacturing documentation on ${order.batch_number}.`);
+
   const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
     supabase,
     order.formulations?.id,
@@ -81,6 +91,32 @@ async function handleBatchComplete(syncEvent) {
     receiptDate: localDateValue(),
     confirmPost: true,
   };
+  const manufacturingProcessBody = {
+    processReference: `HYPER-${order.batch_number}`.substring(0, 50),
+    externalReference: order.batch_number.substring(0, 50),
+    finishedGoodCode: itemCode,
+    quantity,
+    warehouseId: PRODUCTION_WAREHOUSE_ID,
+    unitCost,
+    transactionDate: body.receiptDate,
+    description: `${order.formulations?.name || itemCode} manufacture`.substring(0, 255),
+    components: issuedMaterials.map((material) => {
+      const rawMaterial = Array.isArray(material.raw_materials) ? material.raw_materials[0] : material.raw_materials;
+      const sageCode = (rawMaterial?.sage_code || rawMaterial?.code || '').trim();
+      const componentQuantity = Number(material.actual_qty || 0);
+      if (!sageCode || !Number.isFinite(componentQuantity) || componentQuantity <= 0) {
+        throw new Error(`Invalid Sage manufacturing component for ${rawMaterial?.name || 'an issued material'}.`);
+      }
+      return {
+        sageCode,
+        quantity: componentQuantity,
+        unitCost: Number(material.unit_cost || 0),
+        warehouseId: RAW_MATERIAL_WAREHOUSE_ID,
+        description: rawMaterial?.name || sageCode,
+      };
+    }),
+    confirmPost: true,
+  };
 
   console.log(`  Batch: ${order.batch_number}`);
   console.log(`  Product: ${itemCode} - ${quantity}kg (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) to ${FINISHED_GOODS_WAREHOUSE}`);
@@ -92,10 +128,24 @@ async function handleBatchComplete(syncEvent) {
 
   const result = await postJson(`${SDK_BASE_URL}/api/v1/finished-goods-receipts/post`, body);
   console.log(`  Sage SDK response: ${result.status || 'ok'} - ${result.message || 'posted'}`);
+  let manufacturingProcessResult = null;
+  try {
+    manufacturingProcessResult = await postJson(`${SDK_BASE_URL}/api/v1/manufacturing-processes/post`, manufacturingProcessBody);
+    console.log(`  Sage manufacturing process: ${manufacturingProcessResult.status || 'ok'} - ${manufacturingProcessResult.message || 'recorded'}`);
+  } catch (manufacturingProcessError) {
+    // The inventory receipt is already committed. A missing Sage BOM must not
+    // turn that successful stock posting into a duplicate-retry risk.
+    manufacturingProcessResult = {
+      status: 'warning',
+      message: manufacturingProcessError.message,
+      response: manufacturingProcessError.response || null,
+    };
+    console.warn(`  Sage manufacturing-process log skipped: ${manufacturingProcessError.message}`);
+  }
   return {
     message: `Posted ${quantity}kg (${sageUnits} Sage unit(s)) of ${itemCode} to Sage finished goods for ${order.batch_number}`,
     sage_response: result,
-    details: { sdkFinishedGoodsReceipt: body, quantityKg: quantity, kgPerSageUnit, sageStatus: result.status || 'posted', sageMessage: result.message || null },
+    details: { sdkFinishedGoodsReceipt: body, manufacturingProcess: manufacturingProcessResult, quantityKg: quantity, kgPerSageUnit, sageStatus: result.status || 'posted', sageMessage: result.message || null },
   };
 }
 

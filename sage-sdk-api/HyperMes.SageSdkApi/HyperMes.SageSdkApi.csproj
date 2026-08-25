@@ -81,6 +81,8 @@
     <Compile Include="HealthController.cs" />
     <Compile Include="MaterialIssueController.cs" />
     <Compile Include="MaterialIssueRequest.cs" />
+    <Compile Include="ManufacturingProcessController.cs" />
+    <Compile Include="ManufacturingProcessRequest.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SdkConnectionController.cs" />
