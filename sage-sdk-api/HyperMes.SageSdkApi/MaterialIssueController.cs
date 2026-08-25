@@ -33,7 +33,7 @@ namespace SDK_Test
                         BeginSdkTransaction();
                         try
                         {
-                            var preparedLines = PrepareTransactions(request);
+                            var preparedLines = PrepareTransactionsWithReconnect(request);
                             DatabaseContext.RollbackTran();
                             return Ok(new
                             {
@@ -88,7 +88,7 @@ namespace SDK_Test
                         BeginSdkTransaction();
                         try
                         {
-                            var preparedLines = PrepareTransactions(request);
+                            var preparedLines = PrepareTransactionsWithReconnect(request);
                             foreach (var line in preparedLines)
                             {
                                 if (!line.Transaction.Post())
@@ -177,6 +177,23 @@ namespace SDK_Test
             return preparedLines;
         }
 
+        private static List<PreparedIssueLine> PrepareTransactionsWithReconnect(MaterialIssueRequest request)
+        {
+            try
+            {
+                return PrepareTransactions(request);
+            }
+            catch (Exception ex) when (SdkSession.IsRecoverableConnectionError(ex))
+            {
+                // Validation/setup has not posted any inventory transaction. Reset the
+                // abandoned SDK transaction, reconnect, then prepare once more.
+                RollbackPendingSdkTransaction();
+                SdkSession.Reconnect();
+                BeginSdkTransaction();
+                return PrepareTransactions(request);
+            }
+        }
+
         private static string ValidateRequest(MaterialIssueRequest request)
         {
             if (request == null) return "A JSON material-issue request is required.";
@@ -198,7 +215,7 @@ namespace SDK_Test
                 if (!DatabaseContext.BeginTran())
                     throw new InvalidOperationException("Sage could not start the material issue transaction.");
             }
-            catch (EvolutionException ex) when (ex.Message.IndexOf("CreateConnection first", StringComparison.OrdinalIgnoreCase) >= 0)
+            catch (EvolutionException ex) when (SdkSession.IsRecoverableConnectionError(ex))
             {
                 // The transaction has not started, so one reconnect/retry is safe.
                 SdkSession.Reconnect();

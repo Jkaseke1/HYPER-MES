@@ -56,6 +56,14 @@ namespace SDK_Test
             EnsureConnected();
         }
 
+        public static bool IsRecoverableConnectionError(Exception exception)
+        {
+            var message = exception == null ? "" : exception.Message ?? "";
+            return exception is EvolutionException && (
+                message.IndexOf("connection has not been initial", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("CreateConnection first", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
         private static string GetRequiredSetting(string name)
         {
             var value = Environment.GetEnvironmentVariable(name);

@@ -167,7 +167,7 @@ namespace SDK_Test
             {
                 return CreateTransfer(request, reference);
             }
-            catch (EvolutionException)
+            catch (EvolutionException ex) when (SdkSession.IsRecoverableConnectionError(ex))
             {
                 // Object construction only reads Sage master data. Reconnect and retrying
                 // here is safe because transfer.Post() has not been reached yet.

@@ -30,7 +30,7 @@ namespace SDK_Test
                         BeginSdkTransaction();
                         try
                         {
-                            var transaction = PrepareTransaction(request);
+                            var transaction = PrepareTransactionWithReconnect(request);
                             DatabaseContext.RollbackTran();
                             return Ok(new
                             {
@@ -73,7 +73,7 @@ namespace SDK_Test
                         BeginSdkTransaction();
                         try
                         {
-                            var transaction = PrepareTransaction(request);
+                            var transaction = PrepareTransactionWithReconnect(request);
                             if (!transaction.Post()) throw new InvalidOperationException("Sage could not post the finished-goods receipt.");
                             if (!DatabaseContext.CommitTran()) throw new InvalidOperationException("Sage could not commit the finished-goods receipt.");
 
@@ -122,6 +122,23 @@ namespace SDK_Test
             return transaction;
         }
 
+        private static InventoryTransaction PrepareTransactionWithReconnect(FinishedGoodsReceiptRequest request)
+        {
+            try
+            {
+                return PrepareTransaction(request);
+            }
+            catch (Exception ex) when (SdkSession.IsRecoverableConnectionError(ex))
+            {
+                // This occurs before InventoryTransaction.Post(), so a single reconnect
+                // and preparation retry cannot duplicate a finished-goods receipt.
+                RollbackPendingSdkTransaction();
+                SdkSession.Reconnect();
+                BeginSdkTransaction();
+                return PrepareTransaction(request);
+            }
+        }
+
         private static string ValidateRequest(FinishedGoodsReceiptRequest request)
         {
             if (request == null) return "A JSON finished-goods receipt request is required.";
@@ -139,7 +156,7 @@ namespace SDK_Test
             {
                 if (!DatabaseContext.BeginTran()) throw new InvalidOperationException("Sage could not start the finished-goods receipt transaction.");
             }
-            catch (EvolutionException ex) when (ex.Message.IndexOf("CreateConnection first", StringComparison.OrdinalIgnoreCase) >= 0)
+            catch (EvolutionException ex) when (SdkSession.IsRecoverableConnectionError(ex))
             {
                 // The transaction has not started, so one reconnect/retry is safe.
                 SdkSession.Reconnect();
