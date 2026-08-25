@@ -89,15 +89,7 @@ namespace SDK_Test
                 lock (SdkSession.OperationLock)
                 {
                     SdkSession.EnsureConnected();
-                    var transfer = new WarehouseTransfer
-                    {
-                        Account = new InventoryItem(request.ItemCode.Trim().ToUpperInvariant()),
-                        FromWarehouse = new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant()),
-                        ToWarehouse = new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant()),
-                        Quantity = (double)request.Quantity,
-                        Reference = reference,
-                        Reference2 = request.Reference2 ?? ""
-                    };
+                    var transfer = PrepareTransferWithReconnect(request, reference);
                     transfer.Post();
                 }
 
@@ -167,6 +159,34 @@ namespace SDK_Test
                 new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
                 new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
             }
+        }
+
+        private static WarehouseTransfer PrepareTransferWithReconnect(WarehouseTransferRequest request, string reference)
+        {
+            try
+            {
+                return CreateTransfer(request, reference);
+            }
+            catch (EvolutionException)
+            {
+                // Object construction only reads Sage master data. Reconnect and retrying
+                // here is safe because transfer.Post() has not been reached yet.
+                SdkSession.Reconnect();
+                return CreateTransfer(request, reference);
+            }
+        }
+
+        private static WarehouseTransfer CreateTransfer(WarehouseTransferRequest request, string reference)
+        {
+            return new WarehouseTransfer
+            {
+                Account = new InventoryItem(request.ItemCode.Trim().ToUpperInvariant()),
+                FromWarehouse = new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant()),
+                ToWarehouse = new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant()),
+                Quantity = (double)request.Quantity,
+                Reference = reference,
+                Reference2 = request.Reference2 ?? ""
+            };
         }
 
         private static object TransferSummary(WarehouseTransferRequest request)
