@@ -52,7 +52,7 @@ async function handleBatchComplete(syncEvent) {
 
   const { data: order, error } = await supabase
     .from('production_orders')
-    .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, formulations(id, name, sage_code)')
+    .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, sage_mfp_reference, formulations(id, name, sage_code)')
     .eq('id', syncEvent.reference_id)
     .single();
   if (error || !order) throw new Error(`Production order not found: ${syncEvent.reference_id}`);
@@ -92,7 +92,9 @@ async function handleBatchComplete(syncEvent) {
     confirmPost: true,
   };
   const manufacturingProcessBody = {
-    processReference: `HYPER-${order.batch_number}`.substring(0, 50),
+    // Sage allocates the next MFP###### reference for a new batch. Retain it
+    // in MES so retries use the same Sage manufacturing-process document.
+    processReference: (order.sage_mfp_reference || '').substring(0, 50),
     externalReference: order.batch_number.substring(0, 50),
     finishedGoodCode: itemCode,
     quantity,
@@ -131,6 +133,14 @@ async function handleBatchComplete(syncEvent) {
   let manufacturingProcessResult = null;
   try {
     manufacturingProcessResult = await postJson(`${SDK_BASE_URL}/api/v1/manufacturing-processes/post`, manufacturingProcessBody);
+    const processReference = (manufacturingProcessResult.processReference || '').trim();
+    if (processReference && processReference !== order.sage_mfp_reference) {
+      const { error: mfpReferenceError } = await supabase
+        .from('production_orders')
+        .update({ sage_mfp_reference: processReference })
+        .eq('id', order.id);
+      if (mfpReferenceError) throw new Error(`Sage manufacturing process ${processReference} was posted, but MES could not retain its reference: ${mfpReferenceError.message}`);
+    }
     console.log(`  Sage manufacturing process: ${manufacturingProcessResult.status || 'ok'} - ${manufacturingProcessResult.message || 'recorded'}`);
   } catch (manufacturingProcessError) {
     // The inventory receipt is already committed. A missing Sage BOM must not

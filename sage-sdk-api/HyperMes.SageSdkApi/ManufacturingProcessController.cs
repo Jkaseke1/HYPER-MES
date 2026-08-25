@@ -40,15 +40,30 @@ namespace SDK_Test
             try
             {
                 ValidateSageMasters(request);
-                var existing = FindProcess(request.ProcessReference);
-                if (existing.HasValue) return Ok(Response(request, "already-posted", "Sage already contains this manufacturing process document."));
+                var existing = FindProcess(request.ProcessReference, request.ExternalReference);
+                if (existing != null) return Ok(Response(request, "already-posted", "Sage already contains this manufacturing process document.", existing));
 
                 using (var connection = new SqlConnection(GetCompanyConnectionString()))
-                using (var command = new SqlCommand("dbo.PostManufacturingProcessDocumentV1", connection))
                 {
+                    connection.Open();
+                    using (var transaction = connection.BeginTransaction(IsolationLevel.Serializable))
+                    {
+                        var existingInTransaction = FindProcess(connection, transaction, request.ProcessReference, request.ExternalReference);
+                        if (existingInTransaction != null)
+                        {
+                            transaction.Commit();
+                            return Ok(Response(request, "already-posted", "Sage already contains this manufacturing process document.", existingInTransaction));
+                        }
+
+                        var processReference = string.IsNullOrWhiteSpace(request.ProcessReference)
+                            ? AllocateNextMfpReference(connection, transaction)
+                            : request.ProcessReference.Trim();
+
+                        using (var command = new SqlCommand("dbo.PostManufacturingProcessDocumentV1", connection, transaction))
+                        {
                         command.CommandType = CommandType.StoredProcedure;
                         command.CommandTimeout = 120;
-                        command.Parameters.Add("@ProcessReference", SqlDbType.VarChar, 50).Value = request.ProcessReference.Trim();
+                        command.Parameters.Add("@ProcessReference", SqlDbType.VarChar, 50).Value = processReference;
                         command.Parameters.Add("@ExternalReference", SqlDbType.VarChar, 50).Value = (request.ExternalReference ?? "").Trim();
                         command.Parameters.Add("@FinishedGoodCode", SqlDbType.VarChar, 50).Value = request.FinishedGoodCode.Trim().ToUpperInvariant();
                         command.Parameters.Add("@Quantity", SqlDbType.Float).Value = (double)request.Quantity;
@@ -58,11 +73,13 @@ namespace SDK_Test
                         command.Parameters.Add("@Description", SqlDbType.VarChar, 255).Value = request.Description ?? "";
                         command.Parameters.Add("@Components", SqlDbType.Xml).Value = ComponentsXml(request);
                         command.Parameters.Add("@ProjectID", SqlDbType.Int).Value = 0;
-                        connection.Open();
                         command.ExecuteNonQuery();
-                        StampProcessLineReference(connection, request.ProcessReference);
+                        }
+                        StampProcessLineReference(connection, transaction, processReference);
+                        transaction.Commit();
+                        return Ok(Response(request, "posted", "Sage manufacturing process document recorded. Inventory was not posted by this logging step.", processReference));
+                    }
                 }
-                return Ok(Response(request, "posted", "Sage manufacturing process document recorded. Inventory was not posted by this logging step."));
             }
             catch (Exception ex)
             {
@@ -81,26 +98,60 @@ namespace SDK_Test
             }
         }
 
-        private static int? FindProcess(string reference)
+        private static string FindProcess(string reference, string externalReference)
         {
             using (var connection = new SqlConnection(GetCompanyConnectionString()))
-            using (var command = new SqlCommand("SELECT TOP 1 idManufProcess FROM dbo._etblManufProcess WHERE cProcessRefNumber = @Reference", connection))
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 cProcessRefNumber
+                FROM dbo._etblManufProcess
+                WHERE (@Reference <> '' AND cProcessRefNumber = @Reference)
+                   OR (@ExternalReference <> '' AND cOtherRefNumber = @ExternalReference)
+                ORDER BY idManufProcess DESC;", connection))
             {
-                command.Parameters.Add("@Reference", SqlDbType.VarChar, 50).Value = reference.Trim();
+                command.Parameters.Add("@Reference", SqlDbType.VarChar, 50).Value = (reference ?? "").Trim();
+                command.Parameters.Add("@ExternalReference", SqlDbType.VarChar, 50).Value = (externalReference ?? "").Trim();
                 connection.Open();
                 var result = command.ExecuteScalar();
-                return result == null ? (int?)null : Convert.ToInt32(result);
+                return result == null ? null : Convert.ToString(result);
             }
         }
 
-        private static void StampProcessLineReference(SqlConnection connection, string processReference)
+        private static string FindProcess(SqlConnection connection, SqlTransaction transaction, string reference, string externalReference)
+        {
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 cProcessRefNumber
+                FROM dbo._etblManufProcess WITH (UPDLOCK, HOLDLOCK)
+                WHERE (@Reference <> '' AND cProcessRefNumber = @Reference)
+                   OR (@ExternalReference <> '' AND cOtherRefNumber = @ExternalReference)
+                ORDER BY idManufProcess DESC;", connection, transaction))
+            {
+                command.Parameters.Add("@Reference", SqlDbType.VarChar, 50).Value = (reference ?? "").Trim();
+                command.Parameters.Add("@ExternalReference", SqlDbType.VarChar, 50).Value = (externalReference ?? "").Trim();
+                var result = command.ExecuteScalar();
+                return result == null ? null : Convert.ToString(result);
+            }
+        }
+
+        private static string AllocateNextMfpReference(SqlConnection connection, SqlTransaction transaction)
+        {
+            using (var command = new SqlCommand(@"
+                SELECT ISNULL(MAX(TRY_CONVERT(int, SUBSTRING(cProcessRefNumber, 4, 50))), 0)
+                FROM dbo._etblManufProcess WITH (TABLOCKX, HOLDLOCK)
+                WHERE cProcessRefNumber LIKE 'MFP[0-9]%';", connection, transaction))
+            {
+                var highest = Convert.ToInt32(command.ExecuteScalar());
+                return "MFP" + (highest + 1).ToString("000000");
+            }
+        }
+
+        private static void StampProcessLineReference(SqlConnection connection, SqlTransaction transaction, string processReference)
         {
             using (var command = new SqlCommand(@"
                 UPDATE line
                 SET cReference = @ProcessReference
                 FROM dbo._etblManufProcessLine AS line
                 INNER JOIN dbo._etblManufProcess AS process ON process.idManufProcess = line.iManufProcessID
-                WHERE process.cProcessRefNumber = @ProcessReference;", connection))
+                WHERE process.cProcessRefNumber = @ProcessReference;", connection, transaction))
             {
                 command.Parameters.Add("@ProcessReference", SqlDbType.VarChar, 50).Value = processReference.Trim();
                 command.ExecuteNonQuery();
@@ -120,7 +171,7 @@ namespace SDK_Test
         private static string ValidateRequest(ManufacturingProcessRequest request)
         {
             if (request == null) return "A manufacturing-process request is required.";
-            if (string.IsNullOrWhiteSpace(request.ProcessReference)) return "ProcessReference is required.";
+            if (string.IsNullOrWhiteSpace(request.ProcessReference) && string.IsNullOrWhiteSpace(request.ExternalReference)) return "ExternalReference is required when ProcessReference is not supplied.";
             if (string.IsNullOrWhiteSpace(request.FinishedGoodCode)) return "FinishedGoodCode is required.";
             if (request.Quantity <= 0) return "Quantity must be greater than zero.";
             if (request.WarehouseId <= 0) return "WarehouseId is required.";
@@ -129,9 +180,9 @@ namespace SDK_Test
             return null;
         }
 
-        private static object Response(ManufacturingProcessRequest request, string status, string message)
+        private static object Response(ManufacturingProcessRequest request, string status, string message, string processReference = null)
         {
-            return new { status = status, environment = "UAT", action = "manufacturing-process", processReference = request.ProcessReference.Trim(), externalReference = request.ExternalReference, finishedGoodCode = request.FinishedGoodCode.Trim().ToUpperInvariant(), message = message };
+            return new { status = status, environment = "UAT", action = "manufacturing-process", processReference = (processReference ?? request.ProcessReference ?? "").Trim(), externalReference = request.ExternalReference, finishedGoodCode = request.FinishedGoodCode.Trim().ToUpperInvariant(), message = message };
         }
 
         private static string GetCompanyConnectionString()
