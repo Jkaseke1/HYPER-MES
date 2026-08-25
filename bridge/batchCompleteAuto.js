@@ -50,11 +50,19 @@ async function handleBatchComplete(syncEvent) {
   console.log('\n  -> Batch Complete / Finished Goods Receipt (SDK)');
   if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for protected Sage SDK API');
 
-  const { data: order, error } = await supabase
+  let { data: order, error } = await supabase
     .from('production_orders')
     .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, sage_mfp_reference, formulations(id, name, sage_code)')
     .eq('id', syncEvent.reference_id)
     .single();
+  if (error && /sage_mfp_reference/i.test(error.message || '')) {
+    // Keep live posting compatible until the MES reference-column migration is applied.
+    ({ data: order, error } = await supabase
+      .from('production_orders')
+      .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, formulations(id, name, sage_code)')
+      .eq('id', syncEvent.reference_id)
+      .single());
+  }
   if (error || !order) throw new Error(`Production order not found: ${syncEvent.reference_id}`);
 
   const itemCode = (order.formulations?.sage_code || '').trim();
@@ -94,7 +102,7 @@ async function handleBatchComplete(syncEvent) {
   const manufacturingProcessBody = {
     // Sage allocates the next MFP###### reference for a new batch. Retain it
     // in MES so retries use the same Sage manufacturing-process document.
-    processReference: (order.sage_mfp_reference || '').substring(0, 50),
+    processReference: (order.sage_mfp_reference || order.batch_number || '').substring(0, 50),
     externalReference: order.batch_number.substring(0, 50),
     finishedGoodCode: itemCode,
     quantity,
@@ -134,7 +142,7 @@ async function handleBatchComplete(syncEvent) {
   try {
     manufacturingProcessResult = await postJson(`${SDK_BASE_URL}/api/v1/manufacturing-processes/post`, manufacturingProcessBody);
     const processReference = (manufacturingProcessResult.processReference || '').trim();
-    if (processReference && processReference !== order.sage_mfp_reference) {
+    if (processReference && processReference !== order.sage_mfp_reference && Object.prototype.hasOwnProperty.call(order, 'sage_mfp_reference')) {
       const { error: mfpReferenceError } = await supabase
         .from('production_orders')
         .update({ sage_mfp_reference: processReference })

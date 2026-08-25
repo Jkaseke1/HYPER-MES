@@ -93,9 +93,13 @@ async function peekMfpNumber(): Promise<string> {
 
 async function generateMfpNumber(): Promise<string> {
   try {
-    const { data, error } = await supabase.rpc('reserve_next_mfp_sequence');
+    // Reuse the existing atomic sequence RPC so this works before the optional
+    // Sage-reference migration has been deployed.
+    const { data, error } = await supabase.rpc('get_next_batch_sequence', { p_prefix: 'MFP', p_year: 0 });
     if (error || !Number.isInteger(data)) throw error || new Error('MFP sequence did not return a number.');
-    return `MFP${String(data).padStart(6, '0')}`;
+    const reservedSequence = data - 1;
+    if (reservedSequence < 10403) throw new Error('Sage MFP sequence is below the verified UAT starting point.');
+    return `MFP${String(reservedSequence).padStart(6, '0')}`;
   } catch (err) {
     console.error('Sage MFP number generation failed:', err);
     throw new Error('Could not reserve the next Sage MFP production number. Please try again.');
