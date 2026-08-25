@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -31,6 +31,7 @@ interface GRNItem {
 }
 
 interface SageSyncStatus {
+  id: string;
   status: string;
   message?: string | null;
   sage_response?: any;
@@ -63,6 +64,7 @@ export default function GoodsReceivedPage() {
   const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
   const notifiedSyncRef = useRef<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [retryingSagePost, setRetryingSagePost] = useState(false);
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
@@ -177,7 +179,7 @@ export default function GoodsReceivedPage() {
 
     const { data, error } = await supabase
       .from('sync_log')
-      .select('reference_id, status, message, sage_response, error_details, updated_at')
+      .select('id, reference_id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'grn_confirmed')
       .in('reference_id', grnIds)
       .order('updated_at', { ascending: false });
@@ -420,6 +422,42 @@ export default function GoodsReceivedPage() {
       sync?.error_details?.message ||
       sync?.message ||
       'Sage posting failed';
+  };
+
+  const canRetrySagePosting = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
+
+  const retryFailedSagePosting = async () => {
+    if (!viewing || !selectedSync || selectedSync.status !== 'failed' || !canRetrySagePosting) return;
+
+    const confirmed = window.confirm(
+      `Requeue ${viewing.grn_number} for Sage GRV posting?\n\nThe bridge will first check Sage for this MES GRN reference before it posts, so an existing GRV will not be duplicated.`
+    );
+    if (!confirmed) return;
+
+    setRetryingSagePost(true);
+    try {
+      const { error } = await supabase
+        .from('sync_log')
+        .update({
+          status: 'pending',
+          message: `Manual retry requested for GRN ${viewing.grn_number}`,
+          error_details: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedSync.id)
+        .eq('status', 'failed');
+
+      if (error) throw error;
+
+      notifiedSyncRef.current[viewing.id] = '';
+      await fetchSageSyncStatuses(grns, false);
+      toast.success(`${viewing.grn_number} requeued for Sage posting`);
+    } catch (error: any) {
+      console.error('Failed to retry Sage GRV posting:', error);
+      toast.error(`Could not requeue ${viewing.grn_number}: ${error.message}`);
+    } finally {
+      setRetryingSagePost(false);
+    }
   };
 
   const getSageBadge = (grnId: string) => {
@@ -1320,7 +1358,21 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
               {selectedSync?.status === 'failed' && (
-                <p className="text-xs text-rose-700 mt-1">{getSageErrorMessage(selectedSync)}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-rose-700">{getSageErrorMessage(selectedSync)}</p>
+                  {canRetrySagePosting && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={retryFailedSagePosting}
+                      disabled={retryingSagePost}
+                      className="bg-rose-700 text-white hover:bg-rose-800"
+                    >
+                      {retryingSagePost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                      {retryingSagePost ? 'Requeuing...' : 'Retry Sage GRV'}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}
