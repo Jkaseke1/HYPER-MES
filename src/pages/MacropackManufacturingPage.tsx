@@ -11,7 +11,6 @@ import StockErrorBanner from '../components/stock/StockErrorBanner';
 import StockOverrideModal from '../components/stock/StockOverrideModal';
 import PackagingDeclarationModal from '../components/production/PackagingDeclarationModal';
 import type { PackagingActual } from '../components/production/PackagingDeclarationModal';
-import MacropackReconReport from '../components/reports/MacropackReconReport';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 
 /* ── Types ── */
@@ -72,7 +71,7 @@ interface RawMaterial {
 }
 
 /* ── Constants ── */
-const TABS = ['Manufacturing Orders', 'Macropack BOMs', 'Premix & Pack Recon Report'] as const;
+const TABS = ['Manufacturing Orders', 'Macropack BOMs'] as const;
 type TabType = typeof TABS[number];
 
 const STATUS_STYLES: Record<string, { cls: string; label: string; icon: any }> = {
@@ -869,8 +868,7 @@ export default function MacropackManufacturingPage() {
         </div>
 
         {/* Search Bar (Orders & BOMs tabs) */}
-        {activeTab !== 'Premix & Pack Recon Report' && (
-          <div className="relative w-full lg:mr-1 lg:w-72">
+        <div className="relative w-full lg:mr-1 lg:w-72">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -879,14 +877,8 @@ export default function MacropackManufacturingPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pl-10 text-xs font-medium outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20"
             />
-          </div>
-        )}
+        </div>
       </div>
-
-      {/* ── Tab 3: Premix & Pack Recon Report ── */}
-      {activeTab === 'Premix & Pack Recon Report' && (
-        <MacropackReconReport />
-      )}
 
       {/* ── Tab 1: Manufacturing Orders Table ── */}
       {activeTab === 'Manufacturing Orders' && (

@@ -91,7 +91,6 @@ const navGroups: NavGroup[] = [
       { to: '/finished-goods', icon: Boxes, label: 'Finished Goods' },
       // Reporting
       { to: '/shift-reports', icon: ClipboardType, label: 'Shift Reports' },
-      { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Reports' },
       { to: '/production-efficiency', icon: Gauge, label: 'Efficiency Dashboard' },
     ],
   },
@@ -127,6 +126,8 @@ const navGroups: NavGroup[] = [
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost' },
       // Operational
       { to: '/production-report', icon: BarChart3Icon2, label: 'Production' },
+      { to: '/daily-production-report', icon: ClipboardType, label: 'Daily Production Declaration' },
+      { to: '/reports/macropack-reconciliation', icon: ClipboardCheck, label: 'Macropack Reconciliation' },
       { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
       // Reconciliation

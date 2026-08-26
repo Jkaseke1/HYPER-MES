@@ -65,6 +65,7 @@ import SagePostingReviewPage from './pages/SagePostingReviewPage';
 import PlantIntegrationHubPage from './pages/PlantIntegrationHubPage';
 import ManagementReportingPage from './pages/ManagementReportingPage';
 import ProductionControlCentrePage from './pages/ProductionControlCentrePage';
+import MacropackReconciliationReportPage from './pages/MacropackReconciliationReportPage';
 import { canAccessPath, defaultPathForRole } from './lib/roleAccess';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -150,6 +151,7 @@ export default function App() {
               <Route path="reports/rm-reconciliation" element={<MonthlyRMReconciliationPage />} />
               <Route path="reports/gross-margin" element={<GrossMarginReportPage />} />
               <Route path="reports/process-loss" element={<ProcessLossReportPage />} />
+              <Route path="reports/macropack-reconciliation" element={<MacropackReconciliationReportPage />} />
               <Route path="rm-stock-dashboard" element={<RMStockDashboardPage />} />
               <Route path="rm-receipts-matrix" element={<RMReceiptsMatrixPage />} />
               <Route path="rm-issues-matrix" element={<RMIssuesMatrixPage />} />
