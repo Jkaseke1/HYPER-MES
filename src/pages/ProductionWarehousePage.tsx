@@ -262,7 +262,26 @@ export default function ProductionWarehousePage() {
   async function saveProductionThreshold(materialId: string, value: string) {
     const threshold = Math.max(0, Number(value || 0));
     const { error } = await supabase.from('raw_materials').update({ production_reorder_level: threshold }).eq('id', materialId);
-    if (error) return toast.error('Could not save the Production threshold. Apply the latest database migration first.');
+    if (error) {
+      // Older UAT databases do not yet have the separate Production threshold
+      // column. Keep the control usable by persisting the established shared
+      // reorder level until that additive migration is applied.
+      const missingProductionThresholdColumn = error.code === 'PGRST204'
+        || /production_reorder_level|column/i.test(error.message || '');
+      if (!missingProductionThresholdColumn) return toast.error('Could not save the Production threshold. Please try again.');
+
+      const { error: fallbackError } = await supabase
+        .from('raw_materials')
+        .update({ reorder_level: threshold })
+        .eq('id', materialId);
+      if (fallbackError) return toast.error('Could not save the stock threshold. Please try again.');
+
+      setMaterialSettings((items) => items.map((item) => item.id === materialId
+        ? { ...item, reorder_level: threshold, production_reorder_level: threshold }
+        : item));
+      toast.success('Production minimum saved using the current shared reorder level.');
+      return;
+    }
     setMaterialSettings((items) => items.map((item) => item.id === materialId ? { ...item, production_reorder_level: threshold } : item));
     toast.success('Production threshold saved.');
   }
