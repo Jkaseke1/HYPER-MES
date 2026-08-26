@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, TrendingDown, Package, Calendar } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, TrendingDown, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import StatCard from '../components/ui/StatCard';
@@ -29,7 +29,6 @@ interface AggregatedMaterial {
   transfers: TransferRow[];
 }
 
-import { ArrowRightLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface PendingTransfer {
@@ -39,8 +38,13 @@ interface PendingTransfer {
   unit: string;
   status: string;
   created_at: string;
-  raw_materials?: { name: string; code: string };
+  purpose?: string;
+  notes?: string;
+  requester?: { full_name?: string | null } | null;
+  raw_materials?: { name: string; code: string; unit?: string };
 }
+
+type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 
 export default function ProductionWarehousePage() {
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
@@ -48,6 +52,8 @@ export default function ProductionWarehousePage() {
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
+  const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -76,8 +82,8 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, quantity, unit, status, created_at, raw_materials(name, code)')
-        .in('status', ['in_buffer', 'pending'])
+        .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .eq('status', 'in_buffer')
         .order('created_at', { ascending: false }),
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
@@ -104,22 +110,31 @@ export default function ProductionWarehousePage() {
     if (!silent) setLoading(false);
   }
 
-  async function handleAcceptToProduction(transferId: string) {
-    setAcceptingId(transferId);
+  async function handleAcceptToProduction(transfer: PendingTransfer) {
+    setAcceptingId(transfer.id);
+    setReceiptNotice(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('User not authenticated');
 
       const { error } = await supabase.rpc('approve_material_transfer_to_production', {
-        p_transfer_id: transferId,
+        p_transfer_id: transfer.id,
         p_approved_by: user.id,
       });
 
       if (error) throw error;
 
+      setReceiptToConfirm(null);
+      setReceiptNotice({
+        tone: 'success',
+        message: `${transfer.raw_materials?.name || 'Material'} received into Production Warehouse.`,
+      });
       await fetchTransfers(true);
     } catch (err: any) {
-      alert(`Failed to receive into Production Warehouse: ${err?.message || 'Please try again'}`);
+      setReceiptNotice({
+        tone: 'error',
+        message: err?.message || 'The transfer could not be received. Please try again.',
+      });
     } finally {
       setAcceptingId(null);
     }
@@ -137,6 +152,9 @@ export default function ProductionWarehousePage() {
         fetchTransfers(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
+        fetchTransfers(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
         fetchTransfers(true);
       })
       .subscribe();
@@ -207,6 +225,7 @@ export default function ProductionWarehousePage() {
     const diff = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
     return diff <= 7;
   }).length;
+  const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -224,62 +243,120 @@ export default function ProductionWarehousePage() {
         </button>
       </div>
 
-      {/* PENDING MATERIAL TRANSFERS TO ACCEPT INTO PRODUCTION WAREHOUSE */}
+      {receiptNotice && (
+        <div className={`flex items-start justify-between gap-4 border px-4 py-3 text-sm ${receiptNotice.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
+          <div className="flex items-start gap-2">
+            {receiptNotice.tone === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />}
+            <span className="font-medium">{receiptNotice.message}</span>
+          </div>
+          <button type="button" onClick={() => setReceiptNotice(null)} className="text-current/60 hover:text-current" aria-label="Dismiss notification"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {/* Live RM inbox for Production receiving */}
       {pendingAcceptanceTransfers.length > 0 && (
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-5 text-white shadow-lg border border-emerald-500/30 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
+        <section className="border border-teal-200 bg-teal-50/70">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-200 bg-white px-5 py-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <ArrowRightLeft className="w-5 h-5 animate-pulse" />
+              <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
+                <Truck className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-sm text-white uppercase tracking-wider">
-                  🚨 Pending Material Transfer Receipts ({pendingAcceptanceTransfers.length})
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Materials transferred from RM Warehouse sitting in Holding Bay — accept into Production WH 19
-                </p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900">Incoming from Raw Materials</h2>
+                  <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
+                </div>
+                <p className="mt-0.5 text-sm text-slate-600">Confirm physical receipt from the Holding Bay into Production Warehouse 19.</p>
               </div>
             </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} kg</p>
+                <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
+              </div>
             <Link
               to="/material-transfer"
-              className="text-xs font-bold text-emerald-300 hover:text-emerald-200 underline"
+              className="text-sm font-semibold text-teal-700 hover:text-teal-900"
             >
-              Open Full Transfer Hub ➔
+              Transfer history
             </Link>
           </div>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="divide-y divide-teal-100 px-5">
             {pendingAcceptanceTransfers.map(pt => (
-              <div key={pt.id} className="bg-slate-800/90 border border-slate-700 p-3.5 rounded-xl flex flex-col justify-between space-y-3">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{pt.transfer_number}</span>
-                    <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">In Holding Bay</span>
+              <div key={pt.id} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-slate-200 bg-white text-slate-600">
+                    <Package className="h-4 w-4" />
                   </div>
-                  <h4 className="font-bold text-sm text-white mt-1.5">{pt.raw_materials?.name}</h4>
-                  <p className="text-xs text-slate-400 font-mono">Code: {pt.raw_materials?.code}</p>
-                  <p className="text-sm font-extrabold text-white mt-1">
-                    Qty: <span className="text-emerald-400 font-mono">{pt.quantity.toLocaleString()} {pt.unit}</span>
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p>
+                      <span className="font-mono text-xs text-slate-500">{pt.raw_materials?.code || 'No code'}</span>
+                      <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">Holding Bay</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1"><ArrowRightLeft className="h-3.5 w-3.5 text-teal-600" /> RM Warehouse to Production</span>
+                      <span className="font-mono">{pt.transfer_number}</span>
+                      <span>{format(new Date(pt.created_at), 'dd MMM, HH:mm')}</span>
+                      {pt.requester?.full_name && <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> {pt.requester.full_name}</span>}
+                      {pt.purpose && <span className="inline-flex items-center gap-1"><ClipboardList className="h-3.5 w-3.5" /> {pt.purpose}</span>}
+                    </div>
+                    </div>
+                </div>
+                <div className="border-l border-teal-200 pl-4 text-right">
+                  <p className="font-mono text-lg font-bold text-slate-900">{Number(pt.quantity).toLocaleString()}</p>
+                  <p className="text-xs font-medium text-slate-500">{pt.unit}</p>
                 </div>
                 <button
                   disabled={acceptingId === pt.id}
-                  onClick={() => handleAcceptToProduction(pt.id)}
-                  className="w-full py-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-lg text-xs font-extrabold shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  onClick={() => setReceiptToConfirm(pt)}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
                 >
                   {acceptingId === pt.id ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Accepting...
+                      <Loader2 className="h-4 w-4 animate-spin" /> Receiving
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Receive into WH 19
+                      <CheckCircle2 className="h-4 w-4" /> Receive into Production
                     </>
                   )}
                 </button>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {receiptToConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="receive-transfer-title">
+          <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase text-teal-700">Production receipt</p>
+                <h2 id="receive-transfer-title" className="mt-1 text-lg font-bold text-slate-900">Receive material into Production?</h2>
+              </div>
+              <button type="button" onClick={() => setReceiptToConfirm(null)} disabled={acceptingId === receiptToConfirm.id} className="text-slate-400 hover:text-slate-700" aria-label="Close receipt confirmation"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-4 px-5 py-5 text-sm">
+              <div className="flex items-center justify-between gap-4 border-l-4 border-teal-600 bg-teal-50 px-4 py-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{receiptToConfirm.raw_materials?.name}</p>
+                  <p className="font-mono text-xs text-slate-500">{receiptToConfirm.transfer_number} · {receiptToConfirm.raw_materials?.code}</p>
+                </div>
+                <p className="font-mono text-lg font-bold text-teal-800">{Number(receiptToConfirm.quantity).toLocaleString()} {receiptToConfirm.unit}</p>
+              </div>
+              <p className="leading-6 text-slate-600">This confirms the physical handover from the Holding Bay and makes the material available in Production Warehouse 19.</p>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={() => setReceiptToConfirm(null)} disabled={acceptingId === receiptToConfirm.id} className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={() => handleAcceptToProduction(receiptToConfirm)} disabled={acceptingId === receiptToConfirm.id} className="inline-flex items-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60">
+                {acceptingId === receiptToConfirm.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Confirm receipt
+              </button>
+            </div>
           </div>
         </div>
       )}
