@@ -6,6 +6,8 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
+import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 interface MaterialTransfer {
   id: string;
@@ -95,6 +97,7 @@ function SageSyncBadge({ log }: { log?: SageTransferSyncLog }) {
 }
 
 export default function MaterialTransferPage() {
+  const { profile } = useAuth();
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
   const [sageSyncLogs, setSageSyncLogs] = useState<Record<string, SageTransferSyncLog>>({});
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
@@ -353,6 +356,7 @@ export default function MaterialTransferPage() {
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
+  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant'].includes(profile?.role || '');
   const activeSagePosts = transfers.filter((transfer) => {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
@@ -376,6 +380,14 @@ export default function MaterialTransferPage() {
           <p className="text-sm text-slate-500 mt-1">Transfer raw materials from warehouse to production</p>
         </div>
         <div className="flex items-center gap-3">
+          {canReceiveInProduction && statusCounts.in_buffer > 0 && (
+            <Link
+              to="/production-warehouse"
+              className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-100"
+            >
+              <CheckCircle2 className="h-4 w-4" /> Open Production Receiving ({statusCounts.in_buffer})
+            </Link>
+          )}
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors"
@@ -782,8 +794,8 @@ export default function MaterialTransferPage() {
                 <Eye className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-extrabold tracking-tight">Material Transfer Audit & Approval</h2>
-                <p className="text-slate-400 text-xs">Verify transfer parameters, buffer status, and sign-off</p>
+                <h2 className="text-lg font-extrabold tracking-tight">Material Transfer Audit</h2>
+                <p className="text-slate-400 text-xs">Verify transfer parameters, buffer status, and handover history</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -879,6 +891,15 @@ export default function MaterialTransferPage() {
 
                   {/* Approval history is visible to RM; Production receives the action in its own workspace. */}
                   <div className="space-y-4">
+                    {viewTransfer.status === 'in_buffer' && canReceiveInProduction && (
+                      <div className="rounded-xl border border-teal-200 bg-teal-50 p-5">
+                        <p className="text-xs font-bold uppercase tracking-wide text-teal-800">Production receipt pending</p>
+                        <p className="mt-1 text-sm text-slate-700">This transfer is ready in the Holding Bay. Receipt approval is performed in Production Warehouse.</p>
+                        <Link to="/production-warehouse" onClick={() => setViewTransfer(null)} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950">
+                          Open Production Receiving <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    )}
                     {/* Approval Timeline Card */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
                       <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
