@@ -236,20 +236,13 @@ export default function GoodsReceivedPage() {
 
   const generateGRNNumber = async () => {
     const year = new Date().getFullYear();
-    const { data: existing } = await supabase
-      .from('goods_received_notes')
-      .select('grn_number')
-      .like('grn_number', `GRN-${year}-%`)
-      .order('grn_number', { ascending: false })
-      .limit(1);
+    const { data: sequence, error } = await supabase.rpc('reserve_next_sage_grv_sequence');
 
-    let nextNum = 1;
-    if (existing && existing.length > 0) {
-      const lastNum = parseInt(existing[0].grn_number.split('-')[2]);
-      nextNum = lastNum + 1;
+    if (error || !Number.isInteger(sequence)) {
+      throw error || new Error('Sage GRV sequence did not return a number.');
     }
 
-    return `GRN-${year}-${String(nextNum).padStart(3, '0')}`;
+    return `GRN-${year}-${String(sequence).padStart(6, '0')}`;
   };
 
   const handleSaveGRN = async () => {

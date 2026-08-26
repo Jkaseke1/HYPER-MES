@@ -194,6 +194,16 @@ async function handleGoodsReceipt(syncEvent) {
   const grvNumber = result.grvNumber || result.goodsReceipt?.grvNumber || result.documentNumber;
   console.log(`  Sage standalone GRV response: ${result.status || 'ok'} - ${grvNumber || result.message || 'posted'}`);
 
+  if (grvNumber) {
+    const { error: sequenceError } = await supabase.rpc('advance_sage_grv_sequence', {
+      p_grv_number: grvNumber,
+    });
+    if (sequenceError) {
+      // Sage has already posted the GRV. Do not turn a successful posting into a retry.
+      console.warn(`Sage GRV sequence update skipped: ${sequenceError.message}`);
+    }
+  }
+
   return {
     message: grvNumber
       ? `Posted to Sage standalone GRV ${grvNumber} from MES ${grn.grn_number}`
