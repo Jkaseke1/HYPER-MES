@@ -158,7 +158,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   }, []);
 
   useEffect(() => {
-    const receivingRoles = ['admin', 'production_manager', 'supervisor', 'operator', 'logistics'];
+    const receivingRoles = ['admin', 'production_manager', 'supervisor', 'operator', 'logistics', 'finance', 'accountant'];
     if (!receivingRoles.includes(profile?.role || '')) {
       setIncomingProductionTransfers([]);
       return;
@@ -279,6 +279,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     supervisor: 'Supervisor',
     warehouse_manager: 'Warehouse Manager',
     raw_material_manager: 'Raw Material Manager',
+    weighbridge: 'Weighbridge Operator',
     logistics: 'Logistics Officer',
     operator: 'Operator',
     finance: 'Finance / Accountant',

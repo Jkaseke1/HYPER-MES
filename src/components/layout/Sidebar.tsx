@@ -40,6 +40,7 @@ import {
   Waypoints,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { canAccessPath, isFullAccessRole } from '../../lib/roleAccess';
 
 interface NavItem {
   to: string;
@@ -67,10 +68,10 @@ const navGroups: NavGroup[] = [
       { to: '/stock-take', icon: ClipboardList, label: 'Stock Take' },
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
       // Analytics
-      { to: '/raw-materials/dashboard', icon: LayoutDashboard, label: 'Stock Dashboard (DRS)' },
-      { to: '/raw-materials/receipts', icon: PackageCheck, label: 'Monthly Receipts' },
-      { to: '/raw-materials/issues', icon: ArrowRightLeft, label: 'Monthly Issues' },
-      { to: '/raw-materials/history', icon: History, label: 'Historical Snapshots' },
+      { to: '/rm-stock-dashboard', icon: LayoutDashboard, label: 'Stock Dashboard (DRS)' },
+      { to: '/rm-receipts-matrix', icon: PackageCheck, label: 'Monthly Receipts' },
+      { to: '/rm-issues-matrix', icon: ArrowRightLeft, label: 'Monthly Issues' },
+      { to: '/rm-history', icon: History, label: 'Historical Snapshots' },
       { to: '/rm-prices', icon: DollarSign, label: 'RM Prices' },
     ],
   },
@@ -125,7 +126,7 @@ const navGroups: NavGroup[] = [
       { to: '/reports/gross-margin', icon: TrendingUp, label: 'Gross Margin' },
       { to: '/reports/labour', icon: DollarSign, label: 'Labour Cost' },
       // Operational
-      { to: '/reports/production', icon: BarChart3Icon2, label: 'Production' },
+      { to: '/production-report', icon: BarChart3Icon2, label: 'Production' },
       { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
       // Reconciliation
@@ -187,14 +188,14 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
   };
 
   const { profile, signOut: doSignOut } = useAuth() as any;
-  const isAdminOrMd = profile?.role === 'admin' || profile?.role === 'md';
+  const isAdminOrMd = isFullAccessRole(profile?.role);
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = useMemo(() => {
-    let groups = navGroups;
-    if (!isAdminOrMd) {
-      groups = groups.filter((g) => g.label !== 'Administration');
-    }
+    let groups = navGroups
+      .filter((group) => isAdminOrMd || group.label !== 'Administration')
+      .map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(profile?.role, item.to)) }))
+      .filter((group) => group.items.length > 0);
     if (!normalizedQuery) return groups;
     return groups
       .map((group) => ({
@@ -202,7 +203,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
         items: group.items.filter((item) => item.label.toLowerCase().includes(normalizedQuery)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [normalizedQuery, isAdminOrMd]);
+  }, [normalizedQuery, isAdminOrMd, profile?.role]);
   const initials = (profile?.full_name || profile?.email || 'U').split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase();
 
   return (
@@ -240,8 +241,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
       )}
 
       <nav className="flex-1 px-3 py-2 overflow-y-auto scrollbar-thin">
-        {/* Dashboard - Always visible */}
-        <NavLink
+        {isAdminOrMd && <NavLink
           to="/"
           end
           onClick={onMobileMenuClose}
@@ -263,7 +263,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
               )}
             </>
           )}
-        </NavLink>
+        </NavLink>}
 
         {/* Grouped Navigation */}
         {visibleGroups.map((group) => {

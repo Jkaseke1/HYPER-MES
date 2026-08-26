@@ -34,7 +34,7 @@ export interface ApprovalHistoryWithUser extends ApprovalHistory {
 export const APPROVAL_PERMISSIONS = {
   grn: ['finance', 'accountant', 'admin'],  // Single approver: Finance only
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
-  production_order: ['production_manager', 'admin'],
+  production_order: ['production_manager', 'finance', 'accountant', 'admin'],
   dispatch_order: ['warehouse_manager', 'logistics', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],

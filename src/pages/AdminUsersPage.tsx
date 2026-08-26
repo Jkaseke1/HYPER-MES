@@ -1159,9 +1159,11 @@ export default function AdminUsersPage() {
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                 >
                   <option value="operator">Operator</option>
+                  <option value="weighbridge">Weighbridge Operator</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="production_manager">Production Manager</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
+                  <option value="raw_material_manager">Raw Materials Manager</option>
                   <option value="logistics">Logistics Officer</option>
                   <option value="finance">Finance / Accountant</option>
                   <option value="md">Managing Director (MD)</option>
@@ -1419,7 +1421,9 @@ export default function AdminUsersPage() {
                 <option value="finance">Finance / Accountant</option>
                 <option value="supervisor">Supervisor</option>
                 <option value="operator">Operator</option>
+                <option value="weighbridge">Weighbridge Operator</option>
                 <option value="admin">Administrator</option>
+                <option value="raw_material_manager">Raw Materials Manager</option>
               </select>
             </div>
           </div>
