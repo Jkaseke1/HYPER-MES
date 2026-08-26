@@ -105,11 +105,13 @@ async function handleBatchComplete(syncEvent) {
     processReference: (order.sage_mfp_reference || order.batch_number || '').substring(0, 50),
     externalReference: order.batch_number.substring(0, 50),
     finishedGoodCode: itemCode,
-    quantity,
+    // Sage manufacturing documents use the finished-good stock unit. MES keeps
+    // the operational quantity in kilograms, so 1,000 kg of a 50 kg SKU is 20.
+    quantity: sageUnits,
     warehouseId: PRODUCTION_WAREHOUSE_ID,
     unitCost,
     transactionDate: body.receiptDate,
-    description: `${order.formulations?.name || itemCode} manufacture`.substring(0, 255),
+    description: `${order.formulations?.name || itemCode} manufacture (${quantity}kg / ${sageUnits} Sage unit(s))`.substring(0, 255),
     components: issuedMaterials.map((material) => {
       const rawMaterial = Array.isArray(material.raw_materials) ? material.raw_materials[0] : material.raw_materials;
       const sageCode = (rawMaterial?.sage_code || rawMaterial?.code || '').trim();
