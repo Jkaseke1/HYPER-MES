@@ -4,7 +4,6 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
-import MaterialTransferApprovalButtons from '../components/approval/MaterialTransferApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 
@@ -110,8 +109,6 @@ export default function MaterialTransferPage() {
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
-  const [selectedTransferIds, setSelectedTransferIds] = useState<string[]>([]);
-  const [bulkProcessing, setBulkProcessing] = useState(false);
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -361,68 +358,6 @@ export default function MaterialTransferPage() {
     return status === 'pending' || status === 'processing' || status === 'retry';
   });
 
-  const toggleSelectAll = () => {
-    const inBufferFiltered = filteredTransfers.filter(t => t.status === 'in_buffer');
-    if (selectedTransferIds.length >= inBufferFiltered.length && inBufferFiltered.length > 0) {
-      setSelectedTransferIds([]);
-    } else {
-      setSelectedTransferIds(inBufferFiltered.map(t => t.id));
-    }
-  };
-
-  const toggleSelectTransfer = (id: string) => {
-    if (selectedTransferIds.includes(id)) {
-      setSelectedTransferIds(selectedTransferIds.filter(i => i !== id));
-    } else {
-      setSelectedTransferIds([...selectedTransferIds, id]);
-    }
-  };
-
-  async function bulkApproveTransfers(targetTransfers?: MaterialTransfer[]) {
-    const transfersToApprove = targetTransfers || transfers.filter(t => selectedTransferIds.includes(t.id) && t.status === 'in_buffer');
-    if (transfersToApprove.length === 0) {
-      alert('No eligible in-buffer transfers selected for approval');
-      return;
-    }
-
-    setBulkProcessing(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) throw new Error('User not authenticated');
-
-      let successCount = 0;
-      const errors: string[] = [];
-
-      for (const transfer of transfersToApprove) {
-        const { error } = await supabase.rpc('approve_material_transfer_to_production', {
-          p_transfer_id: transfer.id,
-          p_approved_by: user.id,
-        });
-
-        if (error) {
-          errors.push(`${transfer.raw_materials?.name || transfer.id}: ${error.message}`);
-        } else {
-          successCount++;
-        }
-      }
-
-      if (errors.length > 0) {
-        alert(`Bulk approval processed. ${successCount} succeeded, ${errors.length} failed:\n${errors.join('\n')}`);
-      } else {
-        setSuccessMessage(`Successfully approved ${successCount} material transfer(s) to Production Floor!`);
-        setTimeout(() => setSuccessMessage(''), 4000);
-      }
-
-      setSelectedTransferIds([]);
-      fetchData();
-    } catch (err: any) {
-      console.error('Bulk approval error:', err);
-      alert(`Bulk approval failed: ${err.message}`);
-    } finally {
-      setBulkProcessing(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -435,46 +370,12 @@ export default function MaterialTransferPage() {
     <div className="p-6 space-y-6">
       <StockTakeFrozenBanner />
 
-      {/* Holding Bay Pending Production Alert Banner */}
-      {statusCounts.in_buffer > 0 && (
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-xl p-4 shadow-lg border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-              <Package className="w-6 h-6 text-white animate-bounce" />
-            </div>
-            <div>
-              <h4 className="font-black text-sm uppercase tracking-wider">⚠️ Action Required: Stock Pending Production Approval</h4>
-              <p className="text-xs text-amber-100 mt-0.5 font-medium">
-                You have <span className="font-bold text-white underline">{statusCounts.in_buffer} material transfer(s)</span> sitting in the Buffer Holding Bay waiting for Production Approval to move into Production Warehouse!
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => bulkApproveTransfers(transfers.filter(t => t.status === 'in_buffer'))}
-            disabled={bulkProcessing || loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-amber-900 hover:bg-amber-50 rounded-lg text-xs font-black shadow-md transition-all shrink-0 active:scale-95 disabled:opacity-50"
-          >
-            {bulkProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-            Receive & Approve All ({statusCounts.in_buffer})
-          </button>
-        </div>
-      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Material Transfer</h1>
           <p className="text-sm text-slate-500 mt-1">Transfer raw materials from warehouse to production</p>
         </div>
         <div className="flex items-center gap-3">
-          {statusCounts.in_buffer > 0 && (
-            <button
-              onClick={() => bulkApproveTransfers(transfers.filter(t => t.status === 'in_buffer'))}
-              disabled={bulkProcessing || loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-50"
-            >
-              {bulkProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Bulk Approve In-Buffer ({statusCounts.in_buffer})
-            </button>
-          )}
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors"
@@ -529,34 +430,6 @@ export default function MaterialTransferPage() {
         </div>
       </div>
 
-      {/* Bulk Action Banner */}
-      {selectedTransferIds.length > 0 && (
-        <div className="flex items-center justify-between p-3.5 bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2.5 py-1 rounded-lg">
-              {selectedTransferIds.length} Selected
-            </span>
-            <p className="text-xs text-slate-300 font-medium">Ready for bulk approval to Production Floor</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedTransferIds([])}
-              className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              Clear Selection
-            </button>
-            <button
-              onClick={() => bulkApproveTransfers()}
-              disabled={bulkProcessing}
-              className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow disabled:opacity-50"
-            >
-              {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              Approve Selected ({selectedTransferIds.length})
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
           <div className="flex items-center gap-2">
@@ -591,18 +464,6 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
-                <th className="w-10 px-3 py-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      filteredTransfers.filter(t => t.status === 'in_buffer').length > 0 &&
-                      selectedTransferIds.length >= filteredTransfers.filter(t => t.status === 'in_buffer').length
-                    }
-                    onChange={toggleSelectAll}
-                    className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                    title="Select all in-buffer transfers"
-                  />
-                </th>
                 {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Initiated By', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
@@ -613,7 +474,7 @@ export default function MaterialTransferPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
@@ -623,26 +484,13 @@ export default function MaterialTransferPage() {
                   const quantity = Math.abs(transfer.quantity || 0);
                   const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
                   const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
-                  const isSelected = selectedTransferIds.includes(transfer.id);
                   const sageSyncLog = sageSyncLogs[transfer.id];
                   return (
                     <tr
                       key={transfer.id}
-                      className={`hover:bg-slate-50 cursor-pointer ${isSelected ? 'bg-teal-50/40' : ''}`}
+                      className="cursor-pointer hover:bg-slate-50"
                       onClick={() => setViewTransfer(transfer)}
                     >
-                      <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                        {transfer.status === 'in_buffer' ? (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectTransfer(transfer.id)}
-                            className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                          />
-                        ) : (
-                          <span className="text-slate-300 text-xs">•</span>
-                        )}
-                      </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5 text-sm text-slate-600">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -1029,32 +877,8 @@ export default function MaterialTransferPage() {
                     </div>
                   </div>
 
-                  {/* Right Column: Approval Action & History Timeline */}
+                  {/* Approval history is visible to RM; Production receives the action in its own workspace. */}
                   <div className="space-y-4">
-                    {/* Approval Action Panel */}
-                    {viewTransfer.status === 'in_buffer' && (
-                      <div className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm p-5 space-y-3">
-                        <div className="text-xs font-extrabold uppercase tracking-wider text-teal-800 flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-teal-600" /> Accept Stock to Production Floor
-                        </div>
-                        <MaterialTransferApprovalButtons
-                          transferId={viewTransfer.id}
-                          currentStatus={viewTransfer.status}
-                          quantity={viewTransfer.quantity}
-                          rawMaterialId={viewTransfer.raw_material_id}
-                          fromWarehouseId={viewTransfer.from_warehouse_id}
-                          onApproved={() => {
-                            fetchData();
-                            setViewTransfer(null);
-                          }}
-                          onRejected={() => {
-                            fetchData();
-                            setViewTransfer(null);
-                          }}
-                        />
-                      </div>
-                    )}
-
                     {/* Approval Timeline Card */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
                       <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
