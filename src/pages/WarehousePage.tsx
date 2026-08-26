@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter, Check } from 'lucide-react';
+import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter, Check, RefreshCw, Database } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { RawMaterial, StockMovement } from '../types/database';
@@ -234,12 +234,25 @@ export default function WarehousePage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Warehouse Management</h1>
-        <p className="text-sm text-slate-500 mt-1">Monitor stock levels and track material movements</p>
+    <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white shadow-sm">
+            <WarehouseIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Inventory control</p>
+            <h1 className="mt-0.5 text-2xl font-bold text-slate-900">Raw Materials Warehouse</h1>
+            <p className="mt-1 text-sm text-slate-500">Live Sage RM stock, reorder thresholds, and movement history.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"><span className="h-2 w-2 rounded-full bg-emerald-500" />Live Sage data</span>
+          <span className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600"><Database className="h-3.5 w-3.5 text-slate-400" />Auto-refreshes every 12 sec</span>
+          <button type="button" onClick={() => fetchData()} className="inline-flex h-8 w-8 items-center justify-center border border-slate-300 bg-white text-slate-600 transition-colors hover:border-teal-500 hover:text-teal-700" title="Refresh Sage RM stock" aria-label="Refresh Sage RM stock"><RefreshCw className="h-4 w-4" /></button>
+        </div>
       </div>
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-fit">
+      <div className="flex w-fit gap-1 border border-slate-200 bg-slate-50 p-1">
         {(['stock', 'buffer', 'movements'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === t ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'stock' ? 'Stock Overview' : t === 'buffer' ? 'Buffer / Holding Bay' : 'Stock Movements'}
@@ -249,30 +262,33 @@ export default function WarehousePage() {
 
       {tab === 'stock' && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Sage RM On Hand Value" value={`$ ${stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
-            <StatCard title="Sage RM Stock Lines" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
-            <StatCard title="Low RM Stock Items" value={stats.lowCount} icon={AlertTriangle} color="red" />
-            <StatCard title="Tracked RM Materials" value={catalogRows.length} icon={Package} color="blue" />
-          </div>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className={`border p-5 ${stockHealth.critical.length ? 'border-rose-200 bg-rose-50' : stockHealth.low.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">RM replenishment watch</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Restock immediately' : stockHealth.low.length ? 'Reorder attention needed' : 'Stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Thresholds are editable per material in the stock register below.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>
+          <section className="overflow-hidden border border-slate-200 bg-white">
+            <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div><h2 className="text-sm font-bold text-slate-900">RM stock position</h2><p className="mt-0.5 text-xs text-slate-500">Warehouse RM (Sage warehouse 18)</p></div>
+              <p className="text-xs font-medium text-slate-500">Last source: Sage stock synchronization</p>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 lg:grid-cols-4 lg:divide-y-0">
+              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">On-hand value</p><p className="mt-2 text-2xl font-bold text-slate-900">$ {stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-slate-500">Current Sage RM valuation</p></div>
+              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stock lines</p><p className="mt-2 text-2xl font-bold text-slate-900">{stats.stockedCount}</p><p className="mt-1 text-xs text-slate-500">Materials with stock on hand</p></div>
+              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reorder alerts</p><p className={`mt-2 text-2xl font-bold ${stats.lowCount ? 'text-rose-600' : 'text-emerald-600'}`}>{stats.lowCount}</p><p className="mt-1 text-xs text-slate-500">At or below their threshold</p></div>
+              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tracked materials</p><p className="mt-2 text-2xl font-bold text-slate-900">{catalogRows.length}</p><p className="mt-1 text-xs text-slate-500">Stocked or threshold-managed</p></div>
+            </div>
+          </section>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className={`border-l-4 p-5 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Replenishment watch</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Restock immediately' : stockHealth.low.length ? 'Reorder attention needed' : 'Stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Set each material's reorder point directly in the stock register.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>
               {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="mt-4 flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 6).map((m) => <span key={m.id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {m.rm_balance.toLocaleString()} / {m.reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
             </div>
             <div className="border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stock health mix</p><div className="mt-2 h-32"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Healthy', value: Math.max(0, stockHealth.healthy) }, { name: 'Low', value: stockHealth.low.length }, { name: 'Critical', value: stockHealth.critical.length }]} dataKey="value" nameKey="name" innerRadius={32} outerRadius={52} paddingAngle={3}><Cell fill="#10b981" /><Cell fill="#f59e0b" /><Cell fill="#ef4444" /></Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="flex justify-between text-[11px] text-slate-500"><span>Healthy {stockHealth.healthy}</span><span>Low {stockHealth.low.length}</span><span>Critical {stockHealth.critical.length}</span></div></div>
           </div>
-          <div className="rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3">
-            <p className="text-sm font-medium text-teal-900">RM Warehouse Control View</p>
-            <p className="text-xs text-teal-700 mt-1">Live Sage quantities for the Raw Materials warehouse, with only the stock and replenishment fields needed to act.</p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="border border-slate-200 bg-white">
+            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div><h2 className="text-base font-bold text-slate-900">RM stock register</h2><p className="mt-0.5 text-xs text-slate-500">Sage RM on-hand quantities with editable reorder thresholds.</p></div>
+              <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" placeholder="Search materials..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 ${inputCls}`} />
+              </div>
             </div>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
