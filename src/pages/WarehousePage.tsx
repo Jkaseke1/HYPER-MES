@@ -27,13 +27,10 @@ export default function WarehousePage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [bufferBalances, setBufferBalances] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
-  const [productionWarehouseBalances, setProductionWarehouseBalances] = useState<Record<string, number>>({});
-  const [productionTransferTotals, setProductionTransferTotals] = useState<Record<string, number>>({});
-  const [productionTransferMtd, setProductionTransferMtd] = useState<Record<string, number>>({});
   const [bufferSearchTerm, setBufferSearchTerm] = useState('');
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<'name' | 'rm_balance' | 'sent_mtd'>('name');
+  const [sortField, setSortField] = useState<'name' | 'rm_balance'>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -80,35 +77,17 @@ export default function WarehousePage() {
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true);
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
     const [
       { data: m },
       { data: formulations },
-      { data: sageRmBalances },
-      { data: prodBalances },
-      { data: transferOutMovements }
+      { data: sageRmBalances }
     ] = await Promise.all([
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase.from('formulations').select('sage_code').eq('status', 'active'),
       supabase
         .from('sage_stock_balances')
-        .select('raw_material_id, quantity')
+        .select('raw_material_id, sage_code, quantity')
         .eq('warehouse_id', 18),
-      supabase
-        .from('sage_stock_balances')
-        .select('raw_material_id, quantity')
-        .eq('warehouse_id', 19),
-      supabase
-        .from('stock_movements')
-        .select('raw_material_id, quantity, movement_date, warehouses!inner(code)')
-        .eq('movement_type', 'transfer')
-        .eq('reference_type', 'material_transfer')
-        .lt('quantity', 0)
-        .eq('warehouses.code', 'RM')
-        .limit(5000),
     ]);
 
     const finishedGoodCodes = new Set(
@@ -119,31 +98,18 @@ export default function WarehousePage() {
       return sageCode && !finishedGoodCodes.has(sageCode);
     }));
 
-    const rmMap: Record<string, number> = {};
+    const rmMapById: Record<string, number> = {};
+    const rmMapByCode: Record<string, number> = {};
     (sageRmBalances || []).forEach((b: any) => {
-      rmMap[b.raw_material_id] = Number(b.quantity || 0);
+      if (b.raw_material_id) rmMapById[b.raw_material_id] = Number(b.quantity || 0);
+      if (b.sage_code) rmMapByCode[String(b.sage_code).trim().toUpperCase()] = Number(b.quantity || 0);
+    });
+    const rmMap: Record<string, number> = {};
+    (m || []).forEach((material: any) => {
+      const code = String(material.sage_code || material.code || '').trim().toUpperCase();
+      rmMap[material.id] = rmMapById[material.id] ?? rmMapByCode[code] ?? 0;
     });
     setRmWarehouseBalances(rmMap);
-
-    const prodMap: Record<string, number> = {};
-    (prodBalances || []).forEach((b: any) => {
-      prodMap[b.raw_material_id] = Number(b.quantity || 0);
-    });
-    setProductionWarehouseBalances(prodMap);
-
-    const totalMap: Record<string, number> = {};
-    const mtdMap: Record<string, number> = {};
-    (transferOutMovements || []).forEach((mv: any) => {
-      if (!mv.raw_material_id) return;
-      const qty = Math.abs(Number(mv.quantity || 0));
-      totalMap[mv.raw_material_id] = (totalMap[mv.raw_material_id] || 0) + qty;
-
-      if (mv.movement_date && new Date(mv.movement_date) >= startOfMonth) {
-        mtdMap[mv.raw_material_id] = (mtdMap[mv.raw_material_id] || 0) + qty;
-      }
-    });
-    setProductionTransferTotals(totalMap);
-    setProductionTransferMtd(mtdMap);
 
     if (!silent) setLoading(false);
   }
@@ -168,14 +134,13 @@ export default function WarehousePage() {
     setBufferBalances(data || []);
   }
 
-  const rmRows = useMemo(() => {
-    let list = materials.map((m) => ({
+  const catalogRows = useMemo(() => materials.map((m) => ({
       ...m,
       rm_balance: rmWarehouseBalances[m.id] ?? 0,
-      prod_balance: productionWarehouseBalances[m.id] ?? 0,
-      sent_total: productionTransferTotals[m.id] ?? 0,
-      sent_mtd: productionTransferMtd[m.id] ?? 0,
-    }));
+  })).filter((m) => m.rm_balance > 0 || m.reorder_level > 0), [materials, rmWarehouseBalances]);
+
+  const rmRows = useMemo(() => {
+    let list = [...catalogRows];
 
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
@@ -187,24 +152,23 @@ export default function WarehousePage() {
       if (typeof av === 'string') return sortAsc ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
-  }, [materials, rmWarehouseBalances, productionWarehouseBalances, productionTransferTotals, productionTransferMtd, searchTerm, sortField, sortAsc]);
+  }, [catalogRows, searchTerm, sortField, sortAsc]);
 
   const stats = useMemo(() => ({
     rmValue: materials.reduce((s, m) => s + ((rmWarehouseBalances[m.id] || 0) * m.cost_per_unit), 0),
-    sentMtd: materials.reduce((s, m) => s + (productionTransferMtd[m.id] || 0), 0),
     lowCount: materials.filter((m) => {
       const rm = rmWarehouseBalances[m.id] || 0;
       return m.reorder_level > 0 && rm <= m.reorder_level;
     }).length,
     stockedCount: materials.filter((m) => (rmWarehouseBalances[m.id] || 0) > 0).length,
     total: materials.length,
-  }), [materials, rmWarehouseBalances, productionTransferMtd]);
+  }), [materials, rmWarehouseBalances]);
 
   const stockHealth = useMemo(() => {
-    const critical = rmRows.filter((m) => m.reorder_level > 0 && m.rm_balance === 0);
-    const low = rmRows.filter((m) => m.reorder_level > 0 && m.rm_balance > 0 && m.rm_balance <= m.reorder_level);
-    return { critical, low, healthy: rmRows.length - critical.length - low.length };
-  }, [rmRows]);
+    const critical = catalogRows.filter((m) => m.reorder_level > 0 && m.rm_balance === 0);
+    const low = catalogRows.filter((m) => m.reorder_level > 0 && m.rm_balance > 0 && m.rm_balance <= m.reorder_level);
+    return { critical, low, healthy: catalogRows.length - critical.length - low.length };
+  }, [catalogRows]);
 
   useEffect(() => {
     const signature = [...stockHealth.critical, ...stockHealth.low].map((m) => `${m.id}:${m.rm_balance}`).join('|');
@@ -214,7 +178,7 @@ export default function WarehousePage() {
     setLastAlertSignature(signature);
   }, [stockHealth, lastAlertSignature]);
 
-  function toggleSort(f: 'name' | 'rm_balance' | 'sent_mtd') {
+  function toggleSort(f: 'name' | 'rm_balance') {
     if (sortField === f) setSortAsc(!sortAsc);
     else { setSortField(f); setSortAsc(true); }
   }
@@ -287,9 +251,9 @@ export default function WarehousePage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard title="Sage RM On Hand Value" value={`$ ${stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} icon={Package} color="teal" />
-            <StatCard title="Sent to Production (MTD)" value={`${stats.sentMtd.toLocaleString()} kg`} icon={ArrowUpDown} color="amber" />
+            <StatCard title="Sage RM Stock Lines" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
             <StatCard title="Low RM Stock Items" value={stats.lowCount} icon={AlertTriangle} color="red" />
-            <StatCard title="Materials with RM Stock" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
+            <StatCard title="Tracked RM Materials" value={catalogRows.length} icon={Package} color="blue" />
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className={`border p-5 ${stockHealth.critical.length ? 'border-rose-200 bg-rose-50' : stockHealth.low.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
@@ -300,7 +264,7 @@ export default function WarehousePage() {
           </div>
           <div className="rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3">
             <p className="text-sm font-medium text-teal-900">RM Warehouse Control View</p>
-            <p className="text-xs text-teal-700 mt-1">Track what remains in Raw Materials warehouse and exactly what has been deducted to production.</p>
+            <p className="text-xs text-teal-700 mt-1">Live Sage quantities for the Raw Materials warehouse, with only the stock and replenishment fields needed to act.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -317,15 +281,9 @@ export default function WarehousePage() {
                       <span className="inline-flex items-center gap-1">Material <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
                     <th className={`text-left ${thCls}`}>Code</th>
-                    <th className={`text-left ${thCls}`}>Unit</th>
                     <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('rm_balance')}>
                       <span className="inline-flex items-center gap-1 justify-end">Sage RM On Hand <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
-                    <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('sent_mtd')}>
-                      <span className="inline-flex items-center gap-1 justify-end">Deducted to Production (MTD) <ArrowUpDown className="w-3 h-3" /></span>
-                    </th>
-                    <th className={`text-right ${thCls}`}>Deducted to Production (All Time)</th>
-                    <th className={`text-right ${thCls}`}>Sage PD On Hand</th>
                     <th className={`text-right ${thCls}`}>Reorder Level</th>
                     <th className={`text-center ${thCls}`}>Stock Level</th>
                     <th className={`text-center ${thCls}`}>Status</th>
@@ -338,11 +296,7 @@ export default function WarehousePage() {
                       <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">{m.code}</td>
-                        <td className="px-4 py-3 text-slate-500">{m.unit}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{m.rm_balance.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-medium text-amber-700">{m.sent_mtd.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">{m.sent_total.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-teal-700">{m.prod_balance.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-800">{m.rm_balance.toLocaleString()} <span className="text-xs font-normal text-slate-400">{m.unit}</span></td>
                         <td className="px-4 py-3 text-right">
                           {editingReorder === m.id ? (
                             <div className="flex items-center gap-1 justify-end">
@@ -393,7 +347,7 @@ export default function WarehousePage() {
                     );
                   })}
                   {rmRows.length === 0 && (
-                    <tr><td colSpan={10} className="px-4 py-12 text-center text-slate-400">No materials found</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No Sage RM stock or replenishment thresholds found</td></tr>
                   )}
                 </tbody>
               </table>
