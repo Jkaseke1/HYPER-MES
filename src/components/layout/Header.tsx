@@ -6,6 +6,7 @@ import NetworkStatusBadge from '../ui/NetworkStatusBadge';
 import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload, fetchRecentSystemUpdates, fetchPendingUpdates, SystemUpdateLogRecord } from '../../lib/updateManager';
 import { APP_VERSION } from '../../config/version';
 import { toast } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface NotificationItem {
   id: string;
@@ -24,6 +25,15 @@ interface SageQueueItem {
   updated_at: string;
 }
 
+interface IncomingProductionTransfer {
+  id: string;
+  transfer_number: string;
+  quantity: number;
+  unit: string;
+  created_at: string;
+  raw_materials?: { name?: string | null; code?: string | null } | null;
+}
+
 const sageEventLabels: Record<string, string> = {
   grn_confirmed: 'Goods receipt / GRV',
   material_transfer_to_production: 'Material transfer to Production',
@@ -40,13 +50,17 @@ interface HeaderProps {
 
 export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [sageQueue, setSageQueue] = useState<SageQueueItem[]>([]);
   const [loadingSageQueue, setLoadingSageQueue] = useState(true);
+  const [incomingProductionTransfers, setIncomingProductionTransfers] = useState<IncomingProductionTransfer[]>([]);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const updateRef = useRef<HTMLDivElement>(null);
+  const incomingTransfersLoadedRef = useRef(false);
+  const knownIncomingTransferIdsRef = useRef<Set<string>>(new Set());
 
   // System Update state
   const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
@@ -142,6 +156,75 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    const receivingRoles = ['admin', 'production_manager', 'supervisor', 'operator', 'logistics'];
+    if (!receivingRoles.includes(profile?.role || '')) {
+      setIncomingProductionTransfers([]);
+      return;
+    }
+
+    let isMounted = true;
+    async function loadIncomingTransfers() {
+      const { data, error } = await supabase
+        .from('material_transfers')
+        .select('id, transfer_number, quantity, unit, created_at, raw_materials(name, code)')
+        .eq('status', 'in_buffer')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Unable to load incoming Production transfers:', error.message);
+        return;
+      }
+      if (!isMounted) return;
+
+      const nextTransfers = (data || []) as IncomingProductionTransfer[];
+      const nextIds = new Set(nextTransfers.map((transfer) => transfer.id));
+      const newTransfers = nextTransfers.filter((transfer) => !knownIncomingTransferIdsRef.current.has(transfer.id));
+      const isInitialLoad = !incomingTransfersLoadedRef.current;
+      knownIncomingTransferIdsRef.current = nextIds;
+      incomingTransfersLoadedRef.current = true;
+      setIncomingProductionTransfers(nextTransfers);
+
+      if (!isInitialLoad && newTransfers.length > 0) {
+        const transfer = newTransfers[0];
+        toast.custom((notification) => (
+          <button
+            type="button"
+            onClick={() => {
+              toast.dismiss(notification.id);
+              navigate('/production-warehouse');
+            }}
+            className="w-[360px] max-w-[calc(100vw-2rem)] border border-teal-200 bg-white p-4 text-left shadow-xl transition-all hover:border-teal-400"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-teal-100 text-teal-700">
+                <ArrowRightLeft className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase text-teal-700">Production action required</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">Material ready from Raw Materials</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{transfer.raw_materials?.name || transfer.transfer_number}: {Number(transfer.quantity).toLocaleString()} {transfer.unit} is waiting in the Holding Bay.</p>
+              </div>
+            </div>
+          </button>
+        ), { duration: 9000 });
+      }
+    }
+
+    loadIncomingTransfers();
+    const channel = supabase
+      .channel('header-production-incoming-transfers')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, loadIncomingTransfers)
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      incomingTransfersLoadedRef.current = false;
+      knownIncomingTransferIdsRef.current = new Set();
+      supabase.removeChannel(channel);
+    };
+  }, [navigate, profile?.role]);
 
   useEffect(() => {
     let isMounted = true;
@@ -396,7 +479,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5 text-slate-500" />
-            {(notifications.length > 0 || sageQueue.length > 0) && (
+            {(notifications.length > 0 || sageQueue.length > 0 || incomingProductionTransfers.length > 0) && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
             )}
           </button>
@@ -404,9 +487,27 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-slate-700">Recent Alerts</p>
-                <span className="text-xs text-slate-400">{notifications.length + sageQueue.length} items</span>
+                <span className="text-xs text-slate-400">{notifications.length + sageQueue.length + incomingProductionTransfers.length} items</span>
               </div>
               <div className="max-h-64 overflow-y-auto space-y-2">
+                {incomingProductionTransfers.map((transfer) => (
+                  <button
+                    key={transfer.id}
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate('/production-warehouse');
+                    }}
+                    className="w-full border border-teal-200 bg-teal-50 p-3 text-left transition-colors hover:bg-teal-100"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-800"><ArrowRightLeft className="h-3.5 w-3.5" /> PRODUCTION RECEIPT</span>
+                      <span className="font-mono text-xs text-teal-700">{transfer.transfer_number}</span>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">Accept {transfer.raw_materials?.name || 'material'} from Raw Materials</p>
+                    <p className="mt-1 text-xs text-slate-600">{Number(transfer.quantity).toLocaleString()} {transfer.unit} is ready in the Holding Bay.</p>
+                  </button>
+                ))}
                 {loadingSageQueue && (
                   <div className="flex items-center justify-center py-2 text-slate-400 text-xs">
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" /> Checking Sage queue...
@@ -438,7 +539,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading alerts...
                   </div>
                 )}
-                {!loadingNotifications && !loadingSageQueue && notifications.length === 0 && sageQueue.length === 0 && (
+                {!loadingNotifications && !loadingSageQueue && notifications.length === 0 && sageQueue.length === 0 && incomingProductionTransfers.length === 0 && (
                   <p className="text-xs text-slate-400 text-center py-4">No alerts logged yet.</p>
                 )}
                 {notifications.map((notification) => (
