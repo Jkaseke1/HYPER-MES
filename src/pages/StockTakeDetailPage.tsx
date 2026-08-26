@@ -55,6 +55,7 @@ interface StockTakeLine {
   counted_at?: string;
   approved_by?: string;
   approved_at?: string;
+  variance_reason?: string;
   notes?: string;
   raw_materials?: {
     code: string;
@@ -103,9 +104,11 @@ export default function StockTakeDetailPage() {
   const [showFreezeModal, setShowFreezeModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showRecountModal, setShowRecountModal] = useState(false);
+  const [showVarianceApprovalModal, setShowVarianceApprovalModal] = useState(false);
   const [selectedLine, setSelectedLine] = useState<StockTakeLine | null>(null);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [recountReason, setRecountReason] = useState('');
+  const [varianceApprovalReason, setVarianceApprovalReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -209,6 +212,16 @@ export default function StockTakeDetailPage() {
 
   const handleUpdateCountedQty = async (lineId: string, value: string) => {
     const qty = value === '' ? null : parseFloat(value);
+
+    if (qty !== null && (!Number.isFinite(qty) || qty < 0)) {
+      toast.error('Counted quantity must be zero or greater.');
+      return;
+    }
+
+    const line = lines.find((candidate) => candidate.id === lineId);
+    const requiresRecount = qty !== null
+      && (line?.system_qty || 0) > 0
+      && Math.abs((qty - (line?.system_qty || 0)) / (line?.system_qty || 1)) > 0.05;
     
     try {
       const { error } = await supabase
@@ -216,7 +229,15 @@ export default function StockTakeDetailPage() {
         .update({ 
           counted_qty: qty,
           counted_by: profile?.id,
-          counted_at: new Date().toISOString()
+          counted_at: new Date().toISOString(),
+          approved_by: null,
+          approved_at: null,
+          variance_reason: null,
+          is_locked: false,
+          needs_recount: Boolean(line?.needs_recount || requiresRecount),
+          recount_reason: requiresRecount && !line?.needs_recount
+            ? 'Automatically required because the first count differs from system stock by more than 5%.'
+            : line?.recount_reason || null
         })
         .eq('id', lineId);
 
@@ -242,11 +263,22 @@ export default function StockTakeDetailPage() {
 
   const handleUpdateRecountQty = async (lineId: string, value: string) => {
     const qty = value === '' ? null : parseFloat(value);
+
+    if (qty !== null && (!Number.isFinite(qty) || qty < 0)) {
+      toast.error('Recount quantity must be zero or greater.');
+      return;
+    }
     
     try {
       const { error } = await supabase
         .from('stock_take_lines')
-        .update({ recount_qty: qty })
+        .update({
+          recount_qty: qty,
+          approved_by: null,
+          approved_at: null,
+          variance_reason: null,
+          is_locked: false
+        })
         .eq('id', lineId);
 
       if (error) throw error;
@@ -279,7 +311,11 @@ export default function StockTakeDetailPage() {
         .from('stock_take_lines')
         .update({ 
           needs_recount: true,
-          recount_reason: recountReason
+          recount_reason: recountReason,
+          approved_by: null,
+          approved_at: null,
+          variance_reason: null,
+          is_locked: false
         })
         .eq('id', selectedLine.id);
 
@@ -306,30 +342,31 @@ export default function StockTakeDetailPage() {
     }
   };
 
-  const handleApproveLine = async (lineId: string) => {
+  const handleApproveLine = async () => {
+    if (!selectedLine || !varianceApprovalReason.trim()) {
+      toast.error('Provide the reason for this stock variance.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      const { error } = await supabase
-        .from('stock_take_lines')
-        .update({ 
-          approved_by: profile?.id,
-          approved_at: new Date().toISOString()
-        })
-        .eq('id', lineId);
+      const { error } = await supabase.rpc('review_stock_take_variance', {
+        p_line_id: selectedLine.id,
+        p_reason: varianceApprovalReason.trim(),
+      });
 
       if (error) throw error;
 
-      await supabase.from('stock_take_audit_log').insert({
-        stock_take_id: id,
-        line_id: lineId,
-        action: 'line_approved',
-        changed_by: profile?.id
-      });
-
       await fetchLines();
-      toast.success('Line approved');
+      toast.success('Variance approved and line locked');
+      setShowVarianceApprovalModal(false);
+      setVarianceApprovalReason('');
+      setSelectedLine(null);
     } catch (error: any) {
       console.error('Error approving line:', error);
-      toast.error(`Failed to approve line: ${error.message}`);
+      toast.error(`Failed to approve variance: ${error.message}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -689,59 +726,33 @@ export default function StockTakeDetailPage() {
   const handleCloseStock = async () => {
     if (!stockTake) return;
 
-    // Validation checks
-    const mandatoryUncounted = lines.filter(l => l.is_mandatory && l.counted_qty === null);
-    if (mandatoryUncounted.length > 0) {
-      const itemNames = mandatoryUncounted.map(l => l.raw_materials?.code || l.raw_materials?.name || 'Unknown').join(', ');
-      toast.error(`Cannot close — ${mandatoryUncounted.length} mandatory item(s) not yet counted: ${itemNames}`);
+    const uncountedLines = lines.filter(l => l.counted_qty === null);
+    if (uncountedLines.length > 0) {
+      toast.error(`Cannot close — ${uncountedLines.length} item(s) have not been counted.`);
       return;
     }
 
-    const highVarianceUnapproved = lines.filter(l => 
-      l.counted_qty !== null && 
-      Math.abs(l.variance / l.system_qty) > 0.05 && 
-      !l.approved_by
-    );
-    if (highVarianceUnapproved.length > 0) {
-      const itemNames = highVarianceUnapproved.map(l => l.raw_materials?.code || l.raw_materials?.name || 'Unknown').join(', ');
-      toast.error(`Cannot close — ${highVarianceUnapproved.length} high-variance line(s) require approval: ${itemNames}. Click the 👍 icon in Actions to approve.`);
+    const unresolvedRecounts = lines.filter(l => l.needs_recount);
+    if (unresolvedRecounts.length > 0) {
+      toast.error(`Cannot close — ${unresolvedRecounts.length} line(s) still require recount review.`);
+      return;
+    }
+
+    const unapprovedVariances = lines.filter(l => l.counted_qty !== null && l.variance !== 0 && !l.approved_by);
+    if (unapprovedVariances.length > 0) {
+      toast.error(`Cannot close — ${unapprovedVariances.length} variance line(s) still require Finance approval.`);
       return;
     }
 
     setSaving(true);
     try {
-      // Update raw materials current_stock
-      const countedLines = lines.filter(l => l.counted_qty !== null);
-      for (const line of countedLines) {
-        await supabase
-          .from('raw_materials')
-          .update({ current_stock: line.counted_qty })
-          .eq('id', line.raw_material_id);
-      }
-
-      // Close stock take
-      const { error } = await supabase
-        .from('stock_takes')
-        .update({ 
-          status: 'CLOSED',
-          closed_by: profile?.id,
-          closed_at: new Date().toISOString()
-        })
-        .eq('id', stockTake.id);
+      const { error } = await supabase.rpc('finalize_stock_take', {
+        p_stock_take_id: stockTake.id,
+      });
 
       if (error) throw error;
 
-      // Write to sync_log
-      const totalVariance = lines.reduce((sum, l) => sum + Math.abs(l.variance || 0), 0);
-      await supabase.from('sync_log').insert({
-        event_type: 'reconciliation_completed',
-        reference_type: 'stock_take',
-        reference_id: stockTake.id,
-        status: 'success',
-        description: `Stock take ${stockTake.take_number} closed: ${countedLines.length} items counted, total variance ${totalVariance.toFixed(2)} kg`
-      });
-
-      toast.success(`Stock take ${stockTake.take_number} closed. ${countedLines.length} stock levels updated.`);
+      toast.success(`Stock take ${stockTake.take_number} closed. Sage stock was not adjusted automatically.`);
       setShowCloseModal(false);
       navigate('/stock-take');
     } catch (error: any) {
@@ -753,8 +764,8 @@ export default function StockTakeDetailPage() {
   };
 
   const getLineStatus = (line: StockTakeLine): string => {
-    if (line.is_locked) return 'LOCKED';
     if (line.approved_by) return 'APPROVED';
+    if (line.is_locked) return 'LOCKED';
     if (line.needs_recount) return 'NEEDS_RECOUNT';
     if (line.counted_qty !== null) return 'COUNTED';
     return 'PENDING';
@@ -786,7 +797,8 @@ export default function StockTakeDetailPage() {
     }
   };
 
-  const canManage = profile?.role === 'admin' || profile?.role === 'supervisor' || profile?.role === 'production_manager';
+  const canManage = ['admin', 'md', 'warehouse_manager', 'raw_material_manager'].includes(profile?.role || '');
+  const canApproveVariance = ['admin', 'md', 'finance', 'accountant'].includes(profile?.role || '');
   const canEdit = stockTake?.status === 'OPEN' || stockTake?.status === 'FROZEN';
   const showSystemQty = canManage || !stockTake?.blind_mode || stockTake?.status === 'CLOSED';
 
@@ -796,6 +808,11 @@ export default function StockTakeDetailPage() {
   const approvedLines = lines.filter(l => l.approved_by).length;
   const totalVariance = lines.reduce((sum, l) => sum + (l.variance || 0), 0);
   const progressPercent = lines.length > 0 ? Math.round((countedLines / lines.length) * 100) : 0;
+  const varianceReviewLines = lines.filter(line =>
+    line.counted_qty !== null && (line.needs_recount || (line.variance !== 0 && !line.approved_by))
+  );
+  const readyToClose = pendingLines === 0 && recountLines === 0 && varianceReviewLines.length === 0;
+  const remainingControlItems = pendingLines + varianceReviewLines.length;
 
   // ---- Reporting & Analytics computed stats ----
   const countedLinesData = lines.filter(l => l.counted_qty !== null);
@@ -863,52 +880,57 @@ export default function StockTakeDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 pb-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+      <section className="overflow-hidden rounded-xl bg-[#0B0B34] shadow-lg">
+        <div className="flex flex-col gap-5 px-5 py-5 lg:flex-row lg:items-center lg:justify-between lg:px-7">
+          <div className="flex min-w-0 items-start gap-4">
           <button
             onClick={() => navigate('/stock-take')}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="mt-0.5 rounded-lg border border-white/15 bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+            title="Back to Stock Takes"
           >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <div className="flex items-center space-x-3">
-              <h1 className="text-2xl font-bold text-gray-900">{stockTake.take_number}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-orange-300/40 bg-orange-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-orange-200">Inventory Control</span>
+              <span className="text-xs text-white/55">Physical count and variance review</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="font-mono text-2xl font-bold text-white">{stockTake.take_number}</h1>
               <StatusBadge status={stockTake.status.toLowerCase()} className={stockTake.status === 'FROZEN' ? 'animate-pulse' : ''} />
               {stockTake.blind_mode && (
-                <div className="flex items-center text-sm text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                  <EyeOff className="h-4 w-4 mr-1" />
+                <div className="flex items-center rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-xs text-amber-100">
+                  <EyeOff className="mr-1 h-4 w-4" />
                   Blind Mode
                 </div>
               )}
             </div>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="mt-2 text-sm text-white/65">
               Started by {stockTake.started_by_profile?.full_name} on {format(new Date(stockTake.started_at), 'PPp')}
             </p>
             {stockTake.notes && (
-              <p className="text-sm text-gray-600 italic mt-1">"{stockTake.notes}"</p>
+              <p className="mt-1 text-sm italic text-white/50">"{stockTake.notes}"</p>
             )}
           </div>
-        </div>
+          </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           {stockTake.status === 'OPEN' && canManage && (
             <>
               <button
                 onClick={() => setShowFreezeModal(true)}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center space-x-2"
+                className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
               >
                 <Lock className="h-4 w-4" />
                 <span>Freeze Stock</span>
               </button>
               <button
                 onClick={() => navigate('/stock-take')}
-                className="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors"
+                className="rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white/85 transition-colors hover:bg-white/10"
               >
-                Close & Discard
+                Back to Stock Takes
               </button>
             </>
           )}
@@ -916,14 +938,14 @@ export default function StockTakeDetailPage() {
             <>
               <button
                 onClick={handleReopenStock}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                className="flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white/85 transition-colors hover:bg-white/10"
               >
                 <Unlock className="h-4 w-4" />
                 <span>Reopen</span>
               </button>
               <button
                 onClick={() => setShowCloseModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-600"
               >
                 <CheckCircle className="h-4 w-4" />
                 <span>Close Stock Take</span>
@@ -932,34 +954,44 @@ export default function StockTakeDetailPage() {
           )}
           <button 
             onClick={handleExportPDF}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+            className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/10"
           >
             <Download className="h-4 w-4" />
             <span>Export PDF</span>
           </button>
           <button 
             onClick={handleExportExcel}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+            className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/10"
           >
             <FileSpreadsheet className="h-4 w-4" />
             <span>Export Excel</span>
           </button>
         </div>
-      </div>
+        </div>
+      </section>
 
-      {/* Progress Bar */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">Progress: {countedLines} of {lines.length} counted</span>
-          <span className="text-sm font-semibold text-indigo-600">{progressPercent}%</span>
+      {/* Control state */}
+      <section className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 shadow-sm lg:grid-cols-[1.4fr_1fr]">
+        <div className="bg-white px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Count Progress</p>
+              <p className="mt-1 text-sm font-medium text-slate-800">{countedLines} of {lines.length} lines counted</p>
+            </div>
+            <span className="font-mono text-xl font-bold text-[#0B0B34]">{progressPercent}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-teal-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+          </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div 
-            className="bg-indigo-600 h-3 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
+        <div className={readyToClose ? 'bg-emerald-50 px-5 py-4' : 'bg-amber-50 px-5 py-4'}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closure Readiness</p>
+          <p className={readyToClose ? 'mt-1 text-sm font-semibold text-emerald-800' : 'mt-1 text-sm font-semibold text-amber-800'}>
+            {readyToClose ? 'Ready for controlled close' : `${remainingControlItems} control item(s) remain`}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">{readyToClose ? 'All counts and variance reviews are complete.' : 'Complete counts, recounts, and Finance reviews before closing.'}</p>
         </div>
-      </div>
+      </section>
 
       {/* Professional Summary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -1042,6 +1074,36 @@ export default function StockTakeDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Variance review desk */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Variance Review Desk</p>
+            <h2 className="mt-1 text-lg font-bold text-[#0B0B34]">Resolve exceptions before stock is closed</h2>
+          </div>
+          <span className={readyToClose ? 'w-fit rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700' : 'w-fit rounded-full bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700'}>
+            {readyToClose ? 'No outstanding exceptions' : `${varianceReviewLines.length} line(s) in review`}
+          </span>
+        </div>
+        <div className="grid divide-y divide-slate-100 md:grid-cols-3 md:divide-x md:divide-y-0">
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Recounts Required</p>
+            <p className="mt-1 font-mono text-2xl font-bold text-orange-600">{recountLines}</p>
+            <p className="mt-1 text-xs text-slate-500">A second physical count is needed.</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Finance Reviews</p>
+            <p className="mt-1 font-mono text-2xl font-bold text-rose-600">{lines.filter(line => line.counted_qty !== null && line.variance !== 0 && !line.approved_by && !line.needs_recount).length}</p>
+            <p className="mt-1 text-xs text-slate-500">Written reason and approval required.</p>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Approved Variances</p>
+            <p className="mt-1 font-mono text-2xl font-bold text-emerald-600">{approvedLines}</p>
+            <p className="mt-1 text-xs text-slate-500">Locked with reviewer audit history.</p>
+          </div>
+        </div>
+      </section>
 
       {/* ---- Reports & Analytics Section ---- */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1145,17 +1207,14 @@ export default function StockTakeDetailPage() {
                       outerRadius={90}
                       paddingAngle={3}
                       dataKey="value"
-                      label={({ name, value }) => `${value}`}
+                      label={({ value }) => `${value}`}
                       labelLine={false}
                     >
                       {varianceDistribution.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value: number, name: string) => [`${value} items`, name]}
-                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                    />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" />
                   </RePieChart>
                 </ResponsiveContainer>
@@ -1176,10 +1235,7 @@ export default function StockTakeDetailPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis dataKey="code" type="category" width={70} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(value: number) => [`${value.toFixed(2)} kg`, 'Variance']}
-                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                    />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
                     <Bar dataKey="variance" radius={[0, 4, 4, 0]}>
                       {topVariances.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.variance > 0 ? '#f59e0b' : '#ef4444'} />
@@ -1366,44 +1422,44 @@ export default function StockTakeDetailPage() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex items-center space-x-2">
+      {/* Count register filters */}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            filter === 'all' ? 'bg-[#0B0B34] text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           All ({lines.length})
         </button>
         <button
           onClick={() => setFilter('zero')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            filter === 'zero' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            filter === 'zero' ? 'bg-emerald-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           Zero Variance ({lines.filter(l => l.variance === 0).length})
         </button>
         <button
           onClick={() => setFilter('low')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            filter === 'low' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            filter === 'low' ? 'bg-orange-500 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           Low Variance (&lt;5%) ({lines.filter(l => l.counted_qty !== null && Math.abs(l.variance / l.system_qty) > 0 && Math.abs(l.variance / l.system_qty) <= 0.05).length})
         </button>
         <button
           onClick={() => setFilter('high')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            filter === 'high' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            filter === 'high' ? 'bg-rose-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           High Variance (&gt;5%) ({lines.filter(l => l.counted_qty !== null && Math.abs(l.variance / l.system_qty) > 0.05).length})
         </button>
         <button
           onClick={() => setFilter('pending')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            filter === 'pending' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            filter === 'pending' ? 'bg-slate-700 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
           Not Counted ({pendingLines})
@@ -1411,10 +1467,17 @@ export default function StockTakeDetailPage() {
       </div>
 
       {/* Count Entry Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold text-[#0B0B34]">Count Register</h2>
+            <p className="mt-1 text-xs text-slate-500">Enter physical counts, resolve recounts, then route variances to Finance.</p>
+          </div>
+          <span className="rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold text-slate-600">{getFilteredLines().length} shown</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raw Material</th>
@@ -1433,19 +1496,19 @@ export default function StockTakeDetailPage() {
                 )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Counted By</th>
-                {canManage && (
+                {(canManage || canApproveVariance) && (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 )}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {getFilteredLines().map((line) => {
                 const status = getLineStatus(line);
                 const variancePercent = line.system_qty > 0 ? (line.variance / line.system_qty) * 100 : 0;
                 const canEditLine = canEdit && !line.is_locked && (canManage || !line.assigned_to || line.assigned_to === profile?.id);
 
                 return (
-                  <tr key={line.id} className={line.is_mandatory ? 'bg-red-50' : ''}>
+                  <tr key={line.id} className={line.is_mandatory ? 'bg-orange-50/50' : 'hover:bg-slate-50/70'}>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       {line.is_mandatory && <span className="text-red-600 mr-1">🔴</span>}
                       {line.raw_materials?.code}
@@ -1522,9 +1585,9 @@ export default function StockTakeDetailPage() {
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {line.counted_by_profile?.full_name || '—'}
                     </td>
-                    {canManage && (
+                    {(canManage || canApproveVariance) && (
                       <td className="px-4 py-3 whitespace-nowrap text-sm space-x-2">
-                        {!line.approved_by && line.counted_qty !== null && (
+                        {canManage && !line.approved_by && line.counted_qty !== null && (
                           <>
                             <button
                               onClick={() => {
@@ -1536,22 +1599,29 @@ export default function StockTakeDetailPage() {
                             >
                               <Flag className="h-4 w-4" />
                             </button>
-                            <button
-                              onClick={() => handleApproveLine(line.id)}
-                              className="text-green-600 hover:text-green-900"
-                              title="Approve line"
-                            >
-                              <ThumbsUp className="h-4 w-4" />
-                            </button>
                           </>
                         )}
-                        <button
-                          onClick={() => handleLockLine(line.id, !line.is_locked)}
-                          className={line.is_locked ? 'text-gray-600 hover:text-gray-900' : 'text-indigo-600 hover:text-indigo-900'}
-                          title={line.is_locked ? 'Unlock line' : 'Lock line'}
-                        >
-                          {line.is_locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                        </button>
+                        {canApproveVariance && !line.approved_by && line.counted_qty !== null && line.variance !== 0 && (
+                          <button
+                            onClick={() => {
+                              setSelectedLine(line);
+                              setShowVarianceApprovalModal(true);
+                            }}
+                            className="text-green-600 hover:text-green-900"
+                            title="Finance review and approve variance"
+                          >
+                            <ThumbsUp className="h-4 w-4" />
+                          </button>
+                        )}
+                        {canManage && (
+                          <button
+                            onClick={() => handleLockLine(line.id, !line.is_locked)}
+                            className={line.is_locked ? 'text-gray-600 hover:text-gray-900' : 'text-indigo-600 hover:text-indigo-900'}
+                            title={line.is_locked ? 'Unlock line' : 'Lock line'}
+                          >
+                            {line.is_locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -1650,8 +1720,8 @@ export default function StockTakeDetailPage() {
             <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-lg border border-red-200">
               <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm text-gray-900 font-medium">This will update {countedLines} raw material stock levels</p>
-                <p className="text-sm text-gray-600 mt-1">This action cannot be undone</p>
+                <p className="text-sm text-gray-900 font-medium">This closes the controlled stock-take record after Finance has reviewed every variance.</p>
+                <p className="text-sm text-gray-600 mt-1">It does not automatically adjust Sage or MES on-hand stock. Any inventory adjustment remains a separately approved Finance process.</p>
               </div>
             </div>
 
@@ -1689,6 +1759,51 @@ export default function StockTakeDetailPage() {
                     <span>Close Stock Take</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Finance variance review */}
+      {showVarianceApprovalModal && selectedLine && (
+        <Modal
+          open={showVarianceApprovalModal}
+          onClose={() => {
+            setShowVarianceApprovalModal(false);
+            setVarianceApprovalReason('');
+            setSelectedLine(null);
+          }}
+          title="Review Stock Variance"
+        >
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="font-medium text-slate-900">
+                {selectedLine.raw_materials?.code} - {selectedLine.raw_materials?.name}
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
+                <div><p className="text-slate-500">System</p><p className="font-semibold">{selectedLine.system_qty.toFixed(2)} kg</p></div>
+                <div><p className="text-slate-500">Final count</p><p className="font-semibold">{(selectedLine.recount_qty ?? selectedLine.counted_qty ?? 0).toFixed(2)} kg</p></div>
+                <div><p className="text-slate-500">Variance</p><p className={`font-semibold ${selectedLine.variance < 0 ? 'text-red-700' : 'text-amber-700'}`}>{selectedLine.variance > 0 ? '+' : ''}{selectedLine.variance.toFixed(2)} kg</p></div>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Finance review reason <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                value={varianceApprovalReason}
+                onChange={(event) => setVarianceApprovalReason(event.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                placeholder="Explain the cause, evidence checked, and agreed treatment."
+              />
+            </div>
+            <p className="text-xs text-slate-500">Approval locks this line and records the reviewer, date, final variance, and reason. It does not post a Sage adjustment.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowVarianceApprovalModal(false)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleApproveLine} disabled={saving || !varianceApprovalReason.trim()} className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-50">
+                {saving ? 'Approving...' : 'Approve Variance'}
               </button>
             </div>
           </div>

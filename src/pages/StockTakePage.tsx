@@ -250,29 +250,44 @@ export default function StockTakePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 pb-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <ClipboardList className="h-8 w-8 text-indigo-600" />
+      <section className="rounded-xl bg-[#0B0B34] px-6 py-6 shadow-lg lg:px-7">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="rounded-lg bg-teal-500 p-3 text-white shadow-sm"><ClipboardList className="h-6 w-6" /></div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Stock Take</h1>
-            <p className="text-sm text-gray-500">Physical count and variance management</p>
+            <span className="rounded-full border border-orange-300/40 bg-orange-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-orange-200">Inventory Control</span>
+            <h1 className="mt-2 text-2xl font-bold text-white">Stock Take</h1>
+            <p className="mt-1 text-sm text-white/65">Physical counts, controlled variance review, and an audit-ready close process.</p>
           </div>
         </div>
-      </div>
+          {!activeStockTake && (
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Start Stock Take</span>
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Active Stock Take Banner */}
       {activeStockTake ? (
-        <div className={`rounded-lg p-6 ${
+        <div className={`rounded-xl border p-6 shadow-sm ${
           activeStockTake.status === 'FROZEN' 
-            ? 'bg-amber-50 border-2 border-amber-300' 
-            : 'bg-blue-50 border-2 border-blue-300'
+            ? 'border-orange-200 bg-orange-50'
+            : 'border-teal-200 bg-teal-50'
         }`}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-2">
-                <h3 className="text-lg font-semibold text-gray-900">{activeStockTake.take_number}</h3>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Count</p>
+                  <h3 className="mt-1 font-mono text-lg font-bold text-[#0B0B34]">{activeStockTake.take_number}</h3>
+                </div>
                 {getStatusBadge(activeStockTake.status)}
                 {activeStockTake.status === 'FROZEN' && (
                   <div className="flex items-center text-amber-700 text-sm">
@@ -292,9 +307,9 @@ export default function StockTakePage() {
                   <span>Progress: {activeStockTake.counted_lines} of {activeStockTake.total_lines} counted</span>
                   <span>{getProgressPercent(activeStockTake.counted_lines || 0, activeStockTake.total_lines || 0)}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white">
                   <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="h-full rounded-full bg-teal-500 transition-all duration-300"
                     style={{ width: `${getProgressPercent(activeStockTake.counted_lines || 0, activeStockTake.total_lines || 0)}%` }}
                   />
                 </div>
@@ -316,7 +331,7 @@ export default function StockTakePage() {
 
             <button
               onClick={() => navigate(`/stock-take/${activeStockTake.id}`)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
+              className="flex items-center space-x-2 rounded-lg bg-[#0B0B34] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16164d]"
             >
               <Eye className="h-4 w-4" />
               <span>View Details</span>
@@ -324,14 +339,14 @@ export default function StockTakePage() {
           </div>
         </div>
       ) : (
-        <div className="bg-gray-50 rounded-lg p-6 border-2 border-dashed border-gray-300">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
           <div className="text-center">
-            <ClipboardList className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Stock Take</h3>
-            <p className="text-sm text-gray-500 mb-4">Start a new stock take to begin counting</p>
+            <ClipboardList className="mx-auto mb-3 h-12 w-12 text-teal-500" />
+            <h3 className="mb-2 text-lg font-semibold text-[#0B0B34]">No Active Stock Take</h3>
+            <p className="mb-4 text-sm text-slate-500">Start a controlled physical count. Every exception will be routed through recount and Finance review.</p>
             <button
               onClick={() => setShowNewModal(true)}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors inline-flex items-center space-x-2"
+              className="inline-flex items-center space-x-2 rounded-lg bg-orange-500 px-6 py-3 text-white shadow-sm transition-colors hover:bg-orange-600"
             >
               <Plus className="h-5 w-5" />
               <span>Start New Stock Take</span>
