@@ -71,6 +71,7 @@ export interface RawMaterial {
   currency_code: string;
   cost_per_unit_usd: number;
   reorder_level: number;
+  production_reorder_level: number;
   current_stock: number;
   alert_threshold_pct: number;
   days_of_cover_target: number;

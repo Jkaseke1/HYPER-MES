@@ -268,7 +268,7 @@ export default function DashboardPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
       {/* Sleek Low Stock Notice Banner */}
-      {lowStockItems.length > 0 && (
+      {filteredLowStock.length > 0 && (
         <div className="bg-slate-900 border border-amber-500/30 text-white rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                 <span className="text-xs text-slate-400">Finance & Warehouse Notice</span>
               </div>
               <p className="text-xs text-slate-200 mt-1 font-medium">
-                <strong className="text-amber-400">{lowStockItems.length} raw material(s)</strong> are below reorder threshold ({lowStockItems.slice(0, 3).map(m => m.name).join(', ')}...)
+                <strong className="text-amber-400">{filteredLowStock.length} raw material(s)</strong> are below reorder threshold ({filteredLowStock.slice(0, 3).map(({ item }) => item.name).join(', ')}...)
               </p>
             </div>
           </div>

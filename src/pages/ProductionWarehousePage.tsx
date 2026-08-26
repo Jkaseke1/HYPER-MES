@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, TrendingDown, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, TrendingDown, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import StatCard from '../components/ui/StatCard';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import toast from 'react-hot-toast';
 
 interface TransferRow {
   id: string;
@@ -27,7 +29,10 @@ interface AggregatedMaterial {
   last_transfer: string;
   transfer_count: number;
   transfers: TransferRow[];
+  production_reorder_level: number;
 }
+
+interface ProductionMaterialSetting { id: string; name: string; code: string; unit: string; reorder_level: number; production_reorder_level?: number; }
 
 import { Link } from 'react-router-dom';
 
@@ -58,6 +63,9 @@ export default function ProductionWarehousePage() {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [materialSettings, setMaterialSettings] = useState<ProductionMaterialSetting[]>([]);
+  const [thresholdDraft, setThresholdDraft] = useState<Record<string, string>>({});
+  const [lastAlertSignature, setLastAlertSignature] = useState('');
 
   async function fetchTransfers(silent = false) {
     if (!silent) setLoading(true);
@@ -65,7 +73,8 @@ export default function ProductionWarehousePage() {
       { data: smData, error: smError },
       { data: wbData, error: wbError },
       { data: sagePdData, error: sagePdError },
-      { data: pendingData, error: pendingError }
+      { data: pendingData, error: pendingError },
+      { data: settingsData, error: settingsError }
     ] = await Promise.all([
       supabase
         .from('stock_movements')
@@ -85,14 +94,17 @@ export default function ProductionWarehousePage() {
         .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
         .eq('status', 'in_buffer')
         .order('created_at', { ascending: false }),
+      supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
     if (wbError) console.error('Failed to load production balances:', wbError);
     if (sagePdError) console.error('Failed to load Sage Production balances:', sagePdError);
     if (pendingError) console.error('Failed to load pending transfers:', pendingError);
+    if (settingsError) console.error('Failed to load production stock thresholds:', settingsError);
 
     setTransfers((smData as any) || []);
     setPendingAcceptanceTransfers((pendingData as any) || []);
+    setMaterialSettings((settingsData as ProductionMaterialSetting[]) || []);
     const balMap: Record<string, number> = {};
     (wbData as any || []).forEach((b: any) => {
       balMap[b.raw_material_id] = Number(b.quantity || 0);
@@ -185,6 +197,7 @@ export default function ProductionWarehousePage() {
           last_transfer: t.movement_date || t.created_at,
           transfer_count: 0,
           transfers: [],
+          production_reorder_level: 0,
         };
       }
       map[id].mes_ledger_quantity += Number(t.quantity || 0);
@@ -192,6 +205,14 @@ export default function ProductionWarehousePage() {
       map[id].transfers.push(t);
       if ((t.movement_date || t.created_at) > map[id].last_transfer) {
         map[id].last_transfer = t.movement_date || t.created_at;
+      }
+    }
+    for (const setting of materialSettings) {
+      const threshold = Number(setting.production_reorder_level ?? setting.reorder_level ?? 0);
+      if (!map[setting.id]) {
+        map[setting.id] = { raw_material_id: setting.id, name: setting.name, code: setting.code, unit: setting.unit, mes_ledger_quantity: 0, sage_pd_quantity: 0, sage_pd_synced_at: null, last_transfer: new Date(0).toISOString(), transfer_count: 0, transfers: [], production_reorder_level: threshold };
+      } else {
+        map[setting.id].production_reorder_level = threshold;
       }
     }
     for (const [id, m] of Object.entries(map)) {
@@ -204,7 +225,7 @@ export default function ProductionWarehousePage() {
       }
     }
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
-  }, [transfers, balances, sageProductionBalances]);
+  }, [transfers, balances, sageProductionBalances, materialSettings]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return aggregated;
@@ -226,6 +247,25 @@ export default function ProductionWarehousePage() {
     return diff <= 7;
   }).length;
   const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const stockHealth = useMemo(() => {
+    const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
+    const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
+    return { critical, low, healthy: aggregated.length - critical.length - low.length };
+  }, [aggregated]);
+
+  useEffect(() => {
+    const signature = [...stockHealth.critical, ...stockHealth.low].map((m) => `${m.raw_material_id}:${m.sage_pd_quantity}`).join('|');
+    if (signature && signature !== lastAlertSignature) toast.error(`${stockHealth.critical.length ? `${stockHealth.critical.length} critical, ` : ''}${stockHealth.low.length} low Production stock alert${stockHealth.low.length === 1 ? '' : 's'} need attention.`, { duration: 7000 });
+    setLastAlertSignature(signature);
+  }, [stockHealth, lastAlertSignature]);
+
+  async function saveProductionThreshold(materialId: string, value: string) {
+    const threshold = Math.max(0, Number(value || 0));
+    const { error } = await supabase.from('raw_materials').update({ production_reorder_level: threshold }).eq('id', materialId);
+    if (error) return toast.error('Could not save the Production threshold. Apply the latest database migration first.');
+    setMaterialSettings((items) => items.map((item) => item.id === materialId ? { ...item, production_reorder_level: threshold } : item));
+    toast.success('Production threshold saved.');
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -368,6 +408,11 @@ export default function ProductionWarehousePage() {
         <StatCard title="Transfers (last 7 days)" value={recentCount} icon={TrendingDown} color="emerald" />
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className={`border p-5 ${stockHealth.critical.length ? 'border-rose-200 bg-rose-50' : stockHealth.low.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Production floor replenishment</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Material handover needed now' : stockHealth.low.length ? 'Production stock is nearing minimum' : 'Production stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Production has its own minimum levels, separate from RM warehouse thresholds.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>{(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="mt-4 flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 6).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}</div>
+        <div className="border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor stock health</p><div className="mt-2 h-32"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Healthy', value: Math.max(0, stockHealth.healthy) }, { name: 'Low', value: stockHealth.low.length }, { name: 'Critical', value: stockHealth.critical.length }]} dataKey="value" nameKey="name" innerRadius={32} outerRadius={52} paddingAngle={3}><Cell fill="#10b981" /><Cell fill="#f59e0b" /><Cell fill="#ef4444" /></Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="flex justify-between text-[11px] text-slate-500"><span>Healthy {stockHealth.healthy}</span><span>Low {stockHealth.low.length}</span><span>Critical {stockHealth.critical.length}</span></div></div>
+      </div>
+
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
         <p className="text-xs text-amber-800">
@@ -428,6 +473,10 @@ export default function ProductionWarehousePage() {
                     <div className="text-right hidden md:block">
                       <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
                       <p className="text-xs text-slate-400">MES floor ledger</p>
+                    </div>
+                    <div className="hidden lg:block" onClick={(event) => event.stopPropagation()}>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Floor minimum</label>
+                      <div className="mt-1 flex items-center gap-1"><SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" /><input type="number" min="0" step="0.01" value={thresholdDraft[m.raw_material_id] ?? String(m.production_reorder_level || '')} onChange={(event) => setThresholdDraft((draft) => ({ ...draft, [m.raw_material_id]: event.target.value }))} onBlur={(event) => saveProductionThreshold(m.raw_material_id, event.target.value)} className="w-20 border border-slate-200 bg-white px-1.5 py-1 text-right font-mono text-xs text-slate-700 focus:border-teal-500 focus:outline-none" /><span className="text-[10px] text-slate-400">{m.unit}</span></div>
                     </div>
                     <div className="text-right hidden sm:block">
                       <p className="text-slate-600 flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(m.last_transfer), 'dd MMM yyyy')}</p>

@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import { RawMaterial, StockMovement } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import toast from 'react-hot-toast';
 
 type Tab = 'stock' | 'buffer' | 'movements';
 const MOVE_TYPES = ['All', 'Receipt', 'Issue', 'Transfer', 'Production Input', 'Production Output', 'Dispatch'];
@@ -39,6 +41,7 @@ export default function WarehousePage() {
   const [loading, setLoading] = useState(true);
   const [editingReorder, setEditingReorder] = useState<string | null>(null);
   const [reorderValue, setReorderValue] = useState<string>('');
+  const [lastAlertSignature, setLastAlertSignature] = useState('');
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (tab === 'movements') fetchMovements(); }, [tab, dateFrom, dateTo, moveType]);
@@ -191,11 +194,25 @@ export default function WarehousePage() {
     sentMtd: materials.reduce((s, m) => s + (productionTransferMtd[m.id] || 0), 0),
     lowCount: materials.filter((m) => {
       const rm = rmWarehouseBalances[m.id] || 0;
-      return rm > 0 && rm <= m.reorder_level;
+      return m.reorder_level > 0 && rm <= m.reorder_level;
     }).length,
     stockedCount: materials.filter((m) => (rmWarehouseBalances[m.id] || 0) > 0).length,
     total: materials.length,
   }), [materials, rmWarehouseBalances, productionTransferMtd]);
+
+  const stockHealth = useMemo(() => {
+    const critical = rmRows.filter((m) => m.reorder_level > 0 && m.rm_balance === 0);
+    const low = rmRows.filter((m) => m.reorder_level > 0 && m.rm_balance > 0 && m.rm_balance <= m.reorder_level);
+    return { critical, low, healthy: rmRows.length - critical.length - low.length };
+  }, [rmRows]);
+
+  useEffect(() => {
+    const signature = [...stockHealth.critical, ...stockHealth.low].map((m) => `${m.id}:${m.rm_balance}`).join('|');
+    if (signature && signature !== lastAlertSignature) {
+      toast.error(`${stockHealth.critical.length ? `${stockHealth.critical.length} critical, ` : ''}${stockHealth.low.length} low RM stock alert${stockHealth.low.length === 1 ? '' : 's'} need attention.`, { duration: 7000 });
+    }
+    setLastAlertSignature(signature);
+  }, [stockHealth, lastAlertSignature]);
 
   function toggleSort(f: 'name' | 'rm_balance' | 'sent_mtd') {
     if (sortField === f) setSortAsc(!sortAsc);
@@ -273,6 +290,13 @@ export default function WarehousePage() {
             <StatCard title="Sent to Production (MTD)" value={`${stats.sentMtd.toLocaleString()} kg`} icon={ArrowUpDown} color="amber" />
             <StatCard title="Low RM Stock Items" value={stats.lowCount} icon={AlertTriangle} color="red" />
             <StatCard title="Materials with RM Stock" value={stats.stockedCount} icon={WarehouseIcon} color="emerald" />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className={`border p-5 ${stockHealth.critical.length ? 'border-rose-200 bg-rose-50' : stockHealth.low.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">RM replenishment watch</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Restock immediately' : stockHealth.low.length ? 'Reorder attention needed' : 'Stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Thresholds are editable per material in the stock register below.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>
+              {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="mt-4 flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 6).map((m) => <span key={m.id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {m.rm_balance.toLocaleString()} / {m.reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
+            </div>
+            <div className="border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stock health mix</p><div className="mt-2 h-32"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Healthy', value: Math.max(0, stockHealth.healthy) }, { name: 'Low', value: stockHealth.low.length }, { name: 'Critical', value: stockHealth.critical.length }]} dataKey="value" nameKey="name" innerRadius={32} outerRadius={52} paddingAngle={3}><Cell fill="#10b981" /><Cell fill="#f59e0b" /><Cell fill="#ef4444" /></Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="flex justify-between text-[11px] text-slate-500"><span>Healthy {stockHealth.healthy}</span><span>Low {stockHealth.low.length}</span><span>Critical {stockHealth.critical.length}</span></div></div>
           </div>
           <div className="rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3">
             <p className="text-sm font-medium text-teal-900">RM Warehouse Control View</p>
