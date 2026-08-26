@@ -20,6 +20,7 @@ import { Textarea } from '../components/ui/textarea';
 import StatCard from '../components/ui/StatCard';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import toast from 'react-hot-toast';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 interface GRNItem {
   raw_material_id: string;
@@ -160,6 +161,12 @@ export default function GoodsReceivedPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useRealtimeRefresh(
+    'goods-received-live',
+    ['goods_received_notes', 'grn_items', 'weigh_bridge_tickets', 'sync_log'],
+    fetchData,
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => {

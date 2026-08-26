@@ -5,6 +5,7 @@ import {
   Download, Plus, ChevronDown, ChevronUp, RefreshCw, Eye, EyeOff,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 const MATERIAL_NAMES = [
   'Beef Carcass Meal', 'Solvent Soya', 'Full Fat Soya Meal', 'Low Fat Soya Meal',
@@ -86,6 +87,8 @@ export default function RMStockDashboardPage() {
   useEffect(() => {
     fetchData();
   }, [date]);
+
+  useRealtimeRefresh('rm-stock-dashboard-live', ['rm_daily_snapshots'], fetchData);
 
   const sortedRows = useMemo(() => {
     const r = [...rows];

@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 type Tab = 'production' | 'variance' | 'costing' | 'inventory';
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -50,6 +51,20 @@ export default function ReportsPage() {
     }
     load();
   }, [startDate, endDate]);
+
+  useRealtimeRefresh('reports-dashboard-live', ['production_orders', 'raw_materials'], async () => {
+    const [oRes, mRes] = await Promise.all([
+      supabase
+        .from('production_orders')
+        .select('*, formulations(name, code)')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate + 'T23:59:59')
+        .order('created_at', { ascending: false }),
+      supabase.from('raw_materials').select('*').eq('is_active', true),
+    ]);
+    setOrders((oRes.data as any) || []);
+    setMaterials((mRes.data as any) || []);
+  });
 
   const productionByFormulation = useMemo(() => {
     const map: Record<string, number> = {};

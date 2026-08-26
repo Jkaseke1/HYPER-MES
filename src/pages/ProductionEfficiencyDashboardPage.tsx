@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Gauge, Clock, Factory, Calendar, TrendingUp, AlertTriangle } from 'lucide-react';
 import StatCard from '../components/ui/StatCard';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 interface DashboardRow {
   formulation_id: string;
@@ -178,6 +179,8 @@ export default function ProductionEfficiencyDashboardPage() {
   };
 
   useEffect(() => { fetchData(); }, [year, month]);
+
+  useRealtimeRefresh('production-efficiency-live', ['production_orders', 'production_order_downtime'], fetchData);
 
   const totals = useMemo(() => {
     const planT = rows.reduce((s, r) => s + r.monthly_plan_kg / 1000, 0);

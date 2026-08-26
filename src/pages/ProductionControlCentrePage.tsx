@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import ProductionNoticeAttachments from '../components/production/ProductionNoticeAttachments';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 type Order = { id: string; batch_number: string; status: string; planned_qty: number; planned_end?: string; created_at: string; formulations?: { name?: string; sage_code?: string } | null };
 type Notice = { id: string; production_order_id: string; output_qty_kg: number; output_bags: number; rejected_qty_kg: number; recycle_qty_kg: number; variance_reason: string; declaration_notes: string; status: string; submitted_at?: string; verified_at?: string };
@@ -33,6 +34,8 @@ export default function ProductionControlCentrePage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useRealtimeRefresh('production-control-centre-live', ['production_orders', 'production_notices'], load);
 
   const noticeByOrder = useMemo(() => new Map(notices.map((notice) => [notice.production_order_id, notice])), [notices]);
   const overdueOrders = useMemo(() => orders.filter((order) => {
