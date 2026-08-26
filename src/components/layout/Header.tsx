@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock } from 'lucide-react';
+import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock, ArrowRightLeft, PackageCheck, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
@@ -189,25 +189,49 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       if (!isInitialLoad && newTransfers.length > 0) {
         const transfer = newTransfers[0];
         toast.custom((notification) => (
-          <button
-            type="button"
-            onClick={() => {
-              toast.dismiss(notification.id);
-              navigate('/production-warehouse');
-            }}
-            className="w-[360px] max-w-[calc(100vw-2rem)] border border-teal-200 bg-white p-4 text-left shadow-xl transition-all hover:border-teal-400"
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-teal-100 text-teal-700">
-                <ArrowRightLeft className="h-4 w-4" />
+          <div className="w-[390px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="h-1 bg-teal-500" />
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200">
+                  <PackageCheck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-teal-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-500" /> Incoming to Production
+                    </p>
+                    <button type="button" onClick={() => toast.dismiss(notification.id)} className="text-xs font-medium text-slate-400 hover:text-slate-700">Dismiss</button>
+                  </div>
+                  <p className="mt-1 truncate text-sm font-bold text-slate-900">{transfer.raw_materials?.name || 'Raw material ready'}</p>
+                  <p className="mt-0.5 font-mono text-xs text-slate-500">{transfer.transfer_number}{transfer.raw_materials?.code ? ` · ${transfer.raw_materials.code}` : ''}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase text-teal-700">Production action required</p>
-                <p className="mt-1 text-sm font-bold text-slate-900">Material ready from Raw Materials</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">{transfer.raw_materials?.name || transfer.transfer_number}: {Number(transfer.quantity).toLocaleString()} {transfer.unit} is waiting in the Holding Bay.</p>
+
+              <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">From</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-700">Raw Materials</p>
+                </div>
+                <ArrowRightLeft className="h-4 w-4 text-teal-600" />
+                <div className="text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ready to receive</p>
+                  <p className="mt-0.5 font-mono text-sm font-bold text-slate-900">{Number(transfer.quantity).toLocaleString()} {transfer.unit}</p>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  toast.dismiss(notification.id);
+                  navigate('/production-warehouse');
+                }}
+                className="mt-3 flex w-full items-center justify-between rounded-md bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              >
+                Open receiving <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-          </button>
+          </div>
         ), { duration: 9000 });
       }
     }
@@ -485,12 +509,15 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             )}
           </button>
           {open && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-slate-700">Recent Alerts</p>
-                <span className="text-xs text-slate-400">{notifications.length + sageQueue.length + incomingProductionTransfers.length} items</span>
+            <div className="absolute right-0 z-50 mt-2 w-[380px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Notifications</p>
+                  <p className="text-xs text-slate-500">Operational activity requiring attention</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{notifications.length + sageQueue.length + incomingProductionTransfers.length}</span>
               </div>
-              <div className="max-h-64 overflow-y-auto space-y-2">
+              <div className="max-h-[420px] space-y-2 overflow-y-auto p-3">
                 {incomingProductionTransfers.map((transfer) => (
                   <button
                     key={transfer.id}
@@ -499,14 +526,22 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                       setOpen(false);
                       navigate('/production-warehouse');
                     }}
-                    className="w-full border border-teal-200 bg-teal-50 p-3 text-left transition-colors hover:bg-teal-100"
+                    className="w-full rounded-md border border-teal-200 bg-teal-50 p-3 text-left transition-colors hover:border-teal-300 hover:bg-teal-100"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-800"><ArrowRightLeft className="h-3.5 w-3.5" /> PRODUCTION RECEIPT</span>
-                      <span className="font-mono text-xs text-teal-700">{transfer.transfer_number}</span>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-teal-700 ring-1 ring-inset ring-teal-200"><PackageCheck className="h-4 w-4" /></div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-teal-800"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" /> Ready to receive</span>
+                          <span className="font-mono text-[11px] text-teal-700">{transfer.transfer_number}</span>
+                        </div>
+                        <p className="mt-1 truncate text-sm font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'}</p>
+                        <div className="mt-2 flex items-end justify-between gap-3">
+                          <p className="text-xs text-slate-600">Raw Materials <ArrowRightLeft className="mx-1 inline h-3.5 w-3.5 text-teal-600" /> Holding Bay</p>
+                          <p className="font-mono text-sm font-bold text-slate-900">{Number(transfer.quantity).toLocaleString()} {transfer.unit}</p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">Accept {transfer.raw_materials?.name || 'material'} from Raw Materials</p>
-                    <p className="mt-1 text-xs text-slate-600">{Number(transfer.quantity).toLocaleString()} {transfer.unit} is ready in the Holding Bay.</p>
                   </button>
                 ))}
                 {loadingSageQueue && (
