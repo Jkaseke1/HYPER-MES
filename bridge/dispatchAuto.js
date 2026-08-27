@@ -1,185 +1,64 @@
-// dispatchAuto.js - Event 4: Dispatch Delivery Handler
-// Reads from dispatch_orders + dispatch_items by reference_id from sync_log
-// Posts to Sage Pastel via direct MSSQL: two-leg transfer (DSP WhseID=20 → branch whse)
+// Dispatch-to-branch Sage handler. Posts only a confirmed, Finance-released IBT
+// through the Evolution SDK; it never writes Sage SQL tables directly.
 
-const { sql, sageConfig, supabase, safeWrite } = require('./lib/db');
+const http = require('http');
+const https = require('https');
+const { supabase, DRY_RUN } = require('./lib/db');
+const { getSageProductUnitSettings, toSageUnits } = require('./lib/sageProductUnits');
 
-const BRANCH_WAREHOUSE_MAP = {
-  'GLE0002': 36, 'MAR0001': 8,  'MAS0001': 9,  'BUL0001': 3,
-  'DAN0002': 32, 'SHO0001': 11, 'KAG0001': 5,  'MAK0001': 7,
-  'MBU0001': 23, 'MAZ00001': 28,'EPW0001': 27, 'HAT0001': 35,
-  'CHK0001': 40, 'MAINDOM0002': 38, 'DOM0002': 37, 'NGE0001': 10,
-  'GWE0001': 44, 'MTR0002': 21, 'CHR0002': 43, 'FCS0001': 26,
-  'AMT0002': 2,  'MSA0002': 31, 'SOU0001': 41, 'ZVI0001': 24,
-  'CHI000001': 39,
-};
+const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
+const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
+
+function postJson(urlString, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString); const payload = JSON.stringify(body); const transport = url.protocol === 'https:' ? https : http;
+    const request = transport.request({ method: 'POST', hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: `${url.pathname}${url.search}`, headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-Hyper-Api-Key': SDK_API_KEY } }, (response) => {
+      let responseBody = ''; response.setEncoding('utf8'); response.on('data', (chunk) => { responseBody += chunk; });
+      response.on('end', () => { let parsed = {}; try { parsed = responseBody ? JSON.parse(responseBody) : {}; } catch (_) { parsed = { message: responseBody }; }
+        if (response.statusCode >= 200 && response.statusCode < 300) return resolve(parsed);
+        const message = parsed?.exceptionMessage || parsed?.Message || parsed?.message || responseBody || `HTTP ${response.statusCode}`;
+        const error = new Error(`Sage branch transfer API failed: ${message}`); error.statusCode = response.statusCode; error.response = parsed; reject(error); });
+    });
+    request.on('error', (error) => reject(new Error(`Sage branch transfer API connection failed: ${error.message}`))); request.write(payload); request.end();
+  });
+}
 
 async function handleDispatch(syncEvent) {
-  console.log('\n  → Event 4: Dispatch (Auto)');
+  console.log('\n  -> Branch Dispatch Transfer (SDK)');
+  if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for protected Sage SDK API');
+  const { data: dispatch, error } = await supabase.from('dispatch_orders')
+    .select('id, dispatch_number, dispatch_type, status, branch_id, branch_confirmation_status, accounts_posting_status, branches(id, name, sage_warehouse_code, sage_warehouse_id), warehouses(code, name)')
+    .eq('id', syncEvent.reference_id).single();
+  if (error || !dispatch) throw new Error(`Dispatch not found: ${syncEvent.reference_id}`);
+  if (dispatch.dispatch_type !== 'branch_transfer') throw new Error(`Dispatch ${dispatch.dispatch_number} is not a branch transfer; direct-customer dispatches require their sales-document workflow.`);
+  if (dispatch.status !== 'delivered') throw new Error(`Dispatch ${dispatch.dispatch_number} is not delivered yet.`);
+  if (dispatch.branch_confirmation_status !== 'confirmed') throw new Error(`Dispatch ${dispatch.dispatch_number} has not been confirmed by the receiving branch.`);
+  if (dispatch.accounts_posting_status !== 'approved') throw new Error(`Dispatch ${dispatch.dispatch_number} has not been released by Finance.`);
 
-  const dispatchId = syncEvent.reference_id;
+  const sourceWarehouse = String(dispatch.warehouses?.code || '').trim().toUpperCase();
+  if (!sourceWarehouse || !dispatch.branch_id) throw new Error(`Dispatch ${dispatch.dispatch_number} is missing its source warehouse or destination branch.`);
+  const destinationWarehouse = String(dispatch.branches?.sage_warehouse_code || '').trim().toUpperCase();
+  const { data: destination, error: destinationError } = await supabase.from('warehouses')
+    .select('id, name').eq('code', destinationWarehouse).eq('type', 'finished_goods').eq('is_active', true).maybeSingle();
+  if (destinationError) throw new Error(`Could not load the receiving branch warehouse: ${destinationError.message}`);
+  if (!destinationWarehouse) throw new Error(`The finished-goods warehouse for ${dispatch.branches?.name || 'this branch'} has no Sage warehouse code. Configure it before releasing this dispatch.`);
 
-  const { data: dispatch, error } = await supabase
-    .from('dispatch_orders')
-    .select(`
-      id, dispatch_number, dispatch_date, status,
-      branches ( id, name, sage_code )
-    `)
-    .eq('id', dispatchId)
-    .single();
-
-  if (error || !dispatch) throw new Error(`Dispatch not found: ${dispatchId}`);
-
-  const branchSageCode = dispatch.branches?.sage_code;
-  const destWhseLink   = BRANCH_WAREHOUSE_MAP[branchSageCode];
-
-  console.log(`  Dispatch: ${dispatch.dispatch_number}`);
-  console.log(`  Branch: ${dispatch.branches?.name} (${branchSageCode})`);
-
-  if (!destWhseLink) throw new Error(`No warehouse mapping for ${branchSageCode}`);
-
-  const { data: items, error: itemsError } = await supabase
-    .from('dispatch_items')
-    .select(`
-      id, quantity, unit_price,
-      formulations ( id, name, sage_code )
-    `)
-    .eq('dispatch_order_id', dispatchId);
-
-  if (itemsError || !items || items.length === 0) {
-    throw new Error(`No items for dispatch ${dispatch.dispatch_number}`);
+  const { data: items, error: itemsError } = await supabase.from('dispatch_items')
+    .select('id, quantity, unit, formulations(id, name, sage_code)').eq('dispatch_order_id', dispatch.id);
+  if (itemsError || !items?.length) throw new Error(`No items found for dispatch ${dispatch.dispatch_number}`);
+  const posted = [];
+  for (const item of items) {
+    const itemCode = String(item.formulations?.sage_code || '').trim().toUpperCase(); const quantityKg = Number(item.quantity || 0);
+    if (!itemCode) throw new Error('A dispatch line has no Sage item code.');
+    if (!Number.isFinite(quantityKg) || quantityKg <= 0) throw new Error(`Invalid quantity for ${itemCode}: ${item.quantity}`);
+    const { kgPerSageUnit } = await getSageProductUnitSettings(supabase, item.formulations?.id, itemCode);
+    const sageUnits = toSageUnits(quantityKg, kgPerSageUnit, itemCode);
+    const body = { itemCode, fromWarehouse: sourceWarehouse, toWarehouse: destinationWarehouse, quantity: sageUnits, reference: dispatch.dispatch_number, reference2: `MES IBT ${dispatch.branches?.name || dispatch.branch_id}`.substring(0, 50), confirmPost: true };
+    console.log(`  ${itemCode}: ${quantityKg}kg (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) ${sourceWarehouse} -> ${destinationWarehouse}`);
+    if (!DRY_RUN) await postJson(`${SDK_BASE_URL}/api/v1/warehouse-transfers/post`, body);
+    posted.push({ itemCode, quantityKg, kgPerSageUnit, sageUnits, body });
   }
-
-  let pool;
-  try {
-    pool = await sql.connect(sageConfig);
-
-    for (const item of items) {
-      const sageCode = item.formulations?.sage_code;
-      const qty      = Number(item.quantity);
-
-      if (!sageCode) {
-        console.log(`  ⚠️  No sage_code for item — skipping`);
-        continue;
-      }
-
-      const stockResult = await pool.request()
-        .input('Code', sql.VarChar, sageCode)
-        .query(`SELECT StockLink FROM StkItem WHERE Code = @Code AND ItemActive = 1`);
-
-      if (stockResult.recordset.length === 0) {
-        console.log(`  ⚠️  ${sageCode} not found in Sage — skipping`);
-        continue;
-      }
-
-      const stockLink   = stockResult.recordset[0].StockLink;
-      const reference   = dispatch.dispatch_number.substring(0, 20);
-      const descOut     = `Dispatch to ${dispatch.branches?.name}`.substring(0, 40);
-      const descIn      = `Receipt fr DSP ${dispatch.dispatch_number}`.substring(0, 40);
-
-      console.log(`  Item: ${sageCode} — ${qty}kg to warehouse ${destWhseLink}`);
-
-      await safeWrite(
-        `Dispatch ${qty}kg of ${sageCode} to ${dispatch.branches?.name}`,
-        async () => {
-          // Issue from DSP (WhseID=20)
-          await pool.request()
-            .input('iInvJrBatchID', sql.Int,      1)
-            .input('iStockID',      sql.Int,      stockLink)
-            .input('iWarehouseID',  sql.Int,      20)
-            .input('dTrDate',       sql.DateTime, new Date(dispatch.dispatch_date))
-            .input('iTrCodeID',     sql.Int,      31)
-            .input('iGLContraID',   sql.Int,      0)
-            .input('cReference',    sql.VarChar,  reference)
-            .input('cDescription',  sql.VarChar,  descOut)
-            .input('fQtyIn',        sql.Float,    0)
-            .input('fQtyOut',       sql.Float,    qty)
-            .input('fNewCost',      sql.Float,    Number(item.unit_price || 0))
-            .input('bIsLotItem',    sql.Bit,      0)
-            .input('bIsSerialItem', sql.Bit,      0)
-            .query(`
-              INSERT INTO _etblInvJrBatchLines (
-                iInvJrBatchID, iStockID, iWarehouseID,
-                dTrDate, iTrCodeID, iGLContraID,
-                cReference, cDescription,
-                fQtyIn, fQtyOut, fNewCost,
-                bIsLotItem, bIsSerialItem
-              ) VALUES (
-                @iInvJrBatchID, @iStockID, @iWarehouseID,
-                @dTrDate, @iTrCodeID, @iGLContraID,
-                @cReference, @cDescription,
-                @fQtyIn, @fQtyOut, @fNewCost,
-                @bIsLotItem, @bIsSerialItem
-              )
-            `);
-
-          await pool.request()
-            .input('StockID', sql.Int,   stockLink)
-            .input('WhseID',  sql.Int,   20)
-            .input('QtyOut',  sql.Float, qty)
-            .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand - @QtyOut WHERE StockID = @StockID AND WhseID = @WhseID`);
-
-          // Receive into branch warehouse
-          await pool.request()
-            .input('iInvJrBatchID', sql.Int,      1)
-            .input('iStockID',      sql.Int,      stockLink)
-            .input('iWarehouseID',  sql.Int,      destWhseLink)
-            .input('dTrDate',       sql.DateTime, new Date(dispatch.dispatch_date))
-            .input('iTrCodeID',     sql.Int,      31)
-            .input('iGLContraID',   sql.Int,      0)
-            .input('cReference',    sql.VarChar,  reference)
-            .input('cDescription',  sql.VarChar,  descIn)
-            .input('fQtyIn',        sql.Float,    qty)
-            .input('fQtyOut',       sql.Float,    0)
-            .input('fNewCost',      sql.Float,    Number(item.unit_price || 0))
-            .input('bIsLotItem',    sql.Bit,      0)
-            .input('bIsSerialItem', sql.Bit,      0)
-            .query(`
-              INSERT INTO _etblInvJrBatchLines (
-                iInvJrBatchID, iStockID, iWarehouseID,
-                dTrDate, iTrCodeID, iGLContraID,
-                cReference, cDescription,
-                fQtyIn, fQtyOut, fNewCost,
-                bIsLotItem, bIsSerialItem
-              ) VALUES (
-                @iInvJrBatchID, @iStockID, @iWarehouseID,
-                @dTrDate, @iTrCodeID, @iGLContraID,
-                @cReference, @cDescription,
-                @fQtyIn, @fQtyOut, @fNewCost,
-                @bIsLotItem, @bIsSerialItem
-              )
-            `);
-
-          const branchQty = await pool.request()
-            .input('StockID', sql.Int, stockLink)
-            .input('WhseID',  sql.Int, destWhseLink)
-            .query(`SELECT idStockQtys FROM _etblStockQtys WHERE StockID = @StockID AND WhseID = @WhseID`);
-
-          if (branchQty.recordset.length > 0) {
-            await pool.request()
-              .input('StockID', sql.Int,   stockLink)
-              .input('WhseID',  sql.Int,   destWhseLink)
-              .input('QtyIn',   sql.Float, qty)
-              .query(`UPDATE _etblStockQtys SET QtyOnHand = QtyOnHand + @QtyIn WHERE StockID = @StockID AND WhseID = @WhseID`);
-          } else {
-            await pool.request()
-              .input('StockID', sql.Int,   stockLink)
-              .input('WhseID',  sql.Int,   destWhseLink)
-              .input('QtyIn',   sql.Float, qty)
-              .query(`INSERT INTO _etblStockQtys (StockID, WhseID, QtyOnHand) VALUES (@StockID, @WhseID, @QtyIn)`);
-          }
-        }
-      );
-    }
-  } finally {
-    if (pool) await sql.close();
-  }
+  return { message: `Posted branch transfer ${dispatch.dispatch_number}: ${posted.length} item(s) from ${sourceWarehouse} to ${destinationWarehouse}.`, details: { sdkBranchDispatchTransfer: { dispatchNumber: dispatch.dispatch_number, sourceWarehouse, destinationWarehouse, destinationWarehouseId: dispatch.branches?.sage_warehouse_id || null, items: posted } } };
 }
 
 module.exports = { handleDispatch };
-
-if (require.main === module) {
-  handleDispatch({ reference_id: process.argv[2] })
-    .then(() => { console.log('✅ Done'); process.exit(0); })
-    .catch((err) => { console.error('❌', err.message); process.exit(1); });
-}

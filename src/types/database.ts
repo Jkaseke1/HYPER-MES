@@ -12,6 +12,9 @@ export interface Branch {
   id: string;
   name: string;
   code: string;
+  sage_code?: string | null;
+  sage_warehouse_code?: string | null;
+  sage_warehouse_id?: number | null;
   address: string;
   contact_person: string;
   phone: string;
@@ -24,6 +27,8 @@ export interface Warehouse {
   id: string;
   name: string;
   code: string;
+  sage_warehouse_code?: string | null;
+  sage_warehouse_id?: number | null;
   type: 'raw_material' | 'finished_goods';
   branch_id: string | null;
   location: string;

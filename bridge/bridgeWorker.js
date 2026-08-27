@@ -213,6 +213,11 @@ async function processPendingEvents() {
         const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsTransfer?.itemCode;
         if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
       }
+      if (event.event_type === 'dispatch_delivered') {
+        const transfer = handlerResult?.details?.sdkBranchDispatchTransfer;
+        const itemCodes = transfer?.items?.map((item) => item.itemCode).filter(Boolean) || [];
+        if (itemCodes.length) await refreshFinishedGoodsStock(itemCodes, 'after dispatch_delivered', [transfer.sourceWarehouse, transfer.destinationWarehouse]);
+      }
 
       const { error: syncSuccessError } = await supabase
         .from('sync_log')

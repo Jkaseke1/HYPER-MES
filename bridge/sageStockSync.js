@@ -134,9 +134,29 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
     Number(setting.kg_per_sage_unit || 1),
   ]));
 
-  const warehouses = (warehouseCodes?.length
-    ? FINISHED_GOODS_WAREHOUSES.filter((warehouse) => warehouseCodes.includes(warehouse.code))
-    : FINISHED_GOODS_WAREHOUSES);
+  const requestedCodes = (warehouseCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
+  let warehouses = requestedCodes.length
+    ? FINISHED_GOODS_WAREHOUSES.filter((warehouse) => requestedCodes.includes(warehouse.code))
+    : FINISHED_GOODS_WAREHOUSES;
+  const missingCodes = requestedCodes.filter((code) => !warehouses.some((warehouse) => warehouse.code === code));
+  if (missingCodes.length) {
+    const { data: configuredWarehouses, error: warehouseError } = await supabase
+      .from('warehouses')
+      .select('sage_warehouse_code, sage_warehouse_id')
+      .in('sage_warehouse_code', missingCodes)
+      .eq('type', 'finished_goods')
+      .eq('is_active', true);
+    if (warehouseError) throw new Error(`Could not load configured Sage branch warehouses: ${warehouseError.message}`);
+    const { data: configuredBranches, error: branchError } = await supabase
+      .from('branches')
+      .select('sage_warehouse_code, sage_warehouse_id')
+      .in('sage_warehouse_code', missingCodes)
+      .eq('is_active', true);
+    if (branchError) throw new Error(`Could not load configured Sage branch warehouses: ${branchError.message}`);
+    warehouses = warehouses.concat((configuredWarehouses || []).concat(configuredBranches || [])
+      .filter((warehouse) => warehouse.sage_warehouse_code && Number.isInteger(Number(warehouse.sage_warehouse_id)))
+      .map((warehouse) => ({ code: String(warehouse.sage_warehouse_code).trim().toUpperCase(), id: Number(warehouse.sage_warehouse_id) })));
+  }
   let synced = 0;
   const failures = [];
   for (const formulation of formulations || []) {

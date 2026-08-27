@@ -359,6 +359,7 @@ export default function DispatchPage() {
   const [branchConfirmOrder, setBranchConfirmOrder] = useState<DispatchOrder | null>(null);
   const [branchConfirmItems, setBranchConfirmItems] = useState<Array<{
     id: string;
+    formulation_id: string | null;
     product_name: string;
     product_code: string;
     batch_number: string;
@@ -389,11 +390,12 @@ export default function DispatchPage() {
 
     const { data: itemsData } = await supabase
       .from('dispatch_items')
-      .select('*, formulations(name, code, sage_code)')
+      .select('*, formulations(id, name, code, sage_code)')
       .eq('dispatch_order_id', order.id);
 
     const mapped = (itemsData || []).map((it: any) => ({
       id: it.id,
+      formulation_id: it.formulation_id || it.formulations?.id || null,
       product_name: it.formulations?.name || 'Finished Product',
       product_code: it.formulations?.code || it.formulations?.sage_code || 'FG-PROD',
       batch_number: it.batch_number || 'N/A',
@@ -436,7 +438,7 @@ export default function DispatchPage() {
 
     const { data } = await supabase
       .from('dispatch_items')
-      .select('*, formulations(name, code, sage_code)')
+      .select('*, formulations(id, name, code, sage_code)')
       .eq('dispatch_order_id', order.id);
 
     setAccountsApproveItems((data || []) as DispatchItem[]);
@@ -445,6 +447,10 @@ export default function DispatchPage() {
   // Branch Confirm Delivery Action with Variance Declaration
   const handleConfirmBranchDelivery = async () => {
     if (!branchConfirmOrder) return;
+    if (branchConfirmOrder.branch_confirmation_status === 'confirmed') {
+      toast.error('This branch receipt has already been confirmed.');
+      return;
+    }
     setSaving(true);
     try {
       const totalDispatched = branchConfirmItems.reduce((s, i) => s + i.dispatched_qty, 0);
@@ -465,7 +471,7 @@ export default function DispatchPage() {
         totalVariance !== 0 ? `[VARIANCE: ${totalVarianceBags > 0 ? '+' : ''}${totalVarianceBags} bags / ${totalVariance > 0 ? '+' : ''}${totalVariance} kg] ` : '[FULL RECEIPT] '
       }${totalDamaged > 0 ? `[DAMAGED: ${totalDamaged} bags/units] ` : ''}${branchNotes ? `Remarks: ${branchNotes}. ` : ''}Details: ${lineBreakdown}`;
 
-      const updates = {
+      const updates: Pick<DispatchOrder, 'status' | 'delivered_at' | 'branch_confirmation_status' | 'branch_confirmed_by' | 'branch_confirmed_at' | 'branch_confirmation_notes'> = {
         status: 'delivered',
         delivered_at: new Date().toISOString(),
         branch_confirmation_status: 'confirmed',
@@ -474,26 +480,18 @@ export default function DispatchPage() {
         branch_confirmation_notes: formattedNotes,
       };
 
-      const { error } = await supabase.from('dispatch_orders').update(updates).eq('id', branchConfirmOrder.id);
+      const { error } = await supabase.rpc('confirm_branch_dispatch_receipt', {
+        p_dispatch_id: branchConfirmOrder.id,
+        p_confirmation_notes: formattedNotes,
+        p_confirmed_by: profile?.id || null,
+        p_lines: branchConfirmItems.map(item => ({
+          formulation_id: item.formulation_id,
+          quantity: item.received_qty,
+          unit: item.unit,
+          batch_number: item.batch_number || null,
+        })),
+      });
       if (error) throw error;
-
-      // Log stock movement for received stock at branch
-      const movements = branchConfirmItems.map(item => ({
-        warehouse_id: branchConfirmOrder.warehouse_id,
-        raw_material_id: null,
-        movement_type: 'transfer_in',
-        quantity: item.received_qty,
-        unit: item.unit,
-        notes: `Branch Goods Receipt ${branchConfirmOrder.dispatch_number} — Recv ${item.received_qty} ${item.unit}`,
-        reference_type: 'dispatch_order',
-        reference_id: branchConfirmOrder.id,
-        batch_number: item.batch_number || null,
-        movement_date: new Date().toISOString(),
-      }));
-
-      if (movements.length > 0) {
-        await supabase.from('stock_movements').insert(movements);
-      }
 
       if (totalVariance < 0 || totalDamaged > 0) {
         toast.error(`Branch Receipt Confirmed with Variance: ${Math.abs(totalVariance)} kg shortfall, ${totalDamaged} damaged!`, { duration: 6000 });
@@ -524,10 +522,14 @@ export default function DispatchPage() {
       toast.error('Access restricted: Step 4 posting is reserved for Finance and Admin users.');
       return;
     }
+    if (accountsApproveOrder.dispatch_type === 'branch_transfer' && accountsApproveOrder.branch_confirmation_status !== 'confirmed') {
+      toast.error('The receiving branch must confirm receipt before Finance releases a branch transfer to Sage.');
+      return;
+    }
 
     setSaving(true);
     try {
-      const updates = {
+      const updates: Pick<DispatchOrder, 'accounts_posting_status' | 'accounts_approved_at' | 'accounts_approval_notes'> = {
         accounts_posting_status: 'approved',
         accounts_approved_at: new Date().toISOString(),
         accounts_approval_notes: accountsNotes,

@@ -89,8 +89,8 @@ export default function SettingsPage() {
 
   function openAdd() {
     const defaults: Record<Tab, Record<string, any>> = {
-      branches: { name: '', code: '', address: '', contact_person: '', phone: '', is_active: true },
-      warehouses: { name: '', code: '', type: 'raw_material', branch_id: '', location: '', is_active: true },
+      branches: { name: '', code: '', sage_code: '', sage_warehouse_code: '', sage_warehouse_id: '', address: '', contact_person: '', phone: '', is_active: true },
+      warehouses: { name: '', code: '', type: 'raw_material', branch_id: '', location: '', sage_warehouse_code: '', sage_warehouse_id: '', is_active: true },
       machines: { name: '', code: '', type: '', capacity_per_hour: 0, capacity_unit: 'kg', status: 'operational' },
       suppliers: { name: '', code: '', sage_code: '', contact_person: '', email: '', phone: '', address: '', payment_terms: '', is_active: true },
       cost_rates: {},
@@ -213,10 +213,10 @@ export default function SettingsPage() {
 
         {tab === 'warehouses' && (
           <table className="w-full">
-            <thead className="bg-slate-50"><tr><th className={thCls}>Code</th><th className={thCls}>Name</th><th className={thCls}>Type</th><th className={thCls}>Branch</th><th className={thCls}>Active</th><th className={thCls}>Actions</th></tr></thead>
+            <thead className="bg-slate-50"><tr><th className={thCls}>MES Code</th><th className={thCls}>Sage Warehouse</th><th className={thCls}>Name</th><th className={thCls}>Type</th><th className={thCls}>Branch</th><th className={thCls}>Active</th><th className={thCls}>Actions</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {filteredWarehouses.map(w => (
-                <tr key={w.id} className="hover:bg-slate-50"><td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{w.code}</span></td><td className={`${tdCls} font-medium`}>{w.name}</td><td className={tdCls}><StatusBadge status={w.type} /></td><td className={tdCls}>{w.branches?.name || '-'}</td><td className={tdCls}><ActiveDot active={w.is_active} /></td>
+                <tr key={w.id} className="hover:bg-slate-50"><td className={tdCls}><span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{w.code}</span></td><td className={tdCls}>{w.sage_warehouse_code ? <span className="font-mono text-xs text-teal-700">{w.sage_warehouse_code} ({w.sage_warehouse_id || '-'})</span> : <span className="text-xs text-amber-700">Not configured</span>}</td><td className={`${tdCls} font-medium`}>{w.name}</td><td className={tdCls}><StatusBadge status={w.type} /></td><td className={tdCls}>{w.branches?.name || '-'}</td><td className={tdCls}><ActiveDot active={w.is_active} /></td>
                   <td className={tdCls}><div className="flex gap-1"><button onClick={() => openEdit(w)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-teal-600"><Edit2 className="w-4 h-4" /></button><button onClick={() => handleDelete(w.id)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></div></td></tr>
               ))}
             </tbody>
@@ -361,6 +361,11 @@ export default function SettingsPage() {
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Name</label><input value={form.name || ''} onChange={e => set('name', e.target.value)} className={inputCls} /></div>
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Code</label><input value={form.code || ''} onChange={e => set('code', e.target.value)} className={inputCls} /></div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Sage Branch Account</label><input value={form.sage_code || ''} onChange={e => set('sage_code', e.target.value.toUpperCase())} className={inputCls} /></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Sage Warehouse Code</label><input value={form.sage_warehouse_code || ''} onChange={e => set('sage_warehouse_code', e.target.value.toUpperCase())} className={inputCls} /></div>
+          </div>
+          <div><label className="block text-sm font-medium text-slate-700 mb-1">Sage Warehouse ID</label><input type="number" min="1" value={form.sage_warehouse_id || ''} onChange={e => set('sage_warehouse_id', e.target.value ? Number(e.target.value) : null)} className={inputCls} /></div>
           <div><label className="block text-sm font-medium text-slate-700 mb-1">Address</label><input value={form.address || ''} onChange={e => set('address', e.target.value)} className={inputCls} /></div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Contact Person</label><input value={form.contact_person || ''} onChange={e => set('contact_person', e.target.value)} className={inputCls} /></div>
@@ -380,6 +385,10 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Type</label><select value={form.type || 'raw_material'} onChange={e => set('type', e.target.value)} className={inputCls}><option value="raw_material">Raw Material</option><option value="finished_goods">Finished Goods</option></select></div>
             <div><label className="block text-sm font-medium text-slate-700 mb-1">Branch</label><select value={form.branch_id || ''} onChange={e => set('branch_id', e.target.value || null)} className={inputCls}><option value="">Select branch</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Sage Warehouse Code</label><input value={form.sage_warehouse_code || ''} onChange={e => set('sage_warehouse_code', e.target.value.toUpperCase())} className={inputCls} placeholder="e.g. GLE" /></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Sage Warehouse ID</label><input type="number" min="1" value={form.sage_warehouse_id || ''} onChange={e => set('sage_warehouse_id', e.target.value ? Number(e.target.value) : null)} className={inputCls} placeholder="e.g. 36" /></div>
           </div>
           <div><label className="block text-sm font-medium text-slate-700 mb-1">Location</label><input value={form.location || ''} onChange={e => set('location', e.target.value)} className={inputCls} /></div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active ?? true} onChange={e => set('is_active', e.target.checked)} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" />Active</label>
