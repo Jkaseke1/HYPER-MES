@@ -2,7 +2,7 @@ export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       const baseUrl = import.meta.env.BASE_URL || './';
-      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js?v=26`;
+      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js?v=27`;
       
       navigator.serviceWorker
         // Do not let the HTTP cache delay discovery of a newly deployed worker.
