@@ -46,16 +46,16 @@ export default function HyperfeedsLogo({ className = '', variant = 'full', heigh
           <path d="M10,15 C14,17 12,23 6,25 C2,26 4,20 10,15 Z" fill="#ff9100"/>
         </g>
 
-        {/* "hyper" Text */}
-        <text x="65" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="58" fill="#ffffff" letterSpacing="-1">hyper</text>
+        {/* "Plant" Text */}
+        <text x="49" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="53" fill="#ffffff" letterSpacing="-1">Plant</text>
 
-        {/* "feeds" Text */}
-        <text x="202" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="58" fill="url(#orangeGradComp)" letterSpacing="-1">feeds</text>
+        {/* "Control" Text */}
+        <text x="185" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="46" fill="url(#orangeGradComp)" letterSpacing="-1">Control</text>
 
         {/* Subtitle */}
         {variant !== 'compact' && (
           <text x="200" y="110" fontFamily="'Arial Black', 'Helvetica', sans-serif" fontWeight="900" fontSize="13" fill="#ffffff" letterSpacing="4.5" textAnchor="middle">
-            ANIMAL NUTRITION
+            MANUFACTURING SYSTEM
           </text>
         )}
       </svg>

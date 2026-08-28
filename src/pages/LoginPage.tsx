@@ -91,7 +91,7 @@ export default function LoginPage() {
                   {isLogin ? 'Sign In' : 'Create Account'}
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-1">
-                  {isLogin ? 'Enter your credentials to access Hyperfeeds MES' : 'Register a new employee user account'}
+                  {isLogin ? 'Enter your credentials to access PlantControl' : 'Register a new employee user account'}
                 </p>
               </div>
               <div className="hidden sm:block">

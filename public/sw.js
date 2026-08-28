@@ -1,9 +1,9 @@
-const CACHE_NAME = 'hyper-mes-v26';
+const CACHE_NAME = 'plant-control-v1';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[ServiceWorker] Installing new version v26...');
+      console.log('[ServiceWorker] Installing PlantControl...');
       const scope = self.registration.scope;
       const indexUrl = new URL('index.html', scope).href;
       try {
@@ -69,7 +69,7 @@ self.addEventListener('fetch', (event) => {
           const indexUrl = new URL('index.html', scope).href;
           const cachedIndex = (await caches.match(indexUrl)) || (await caches.match(scope));
           if (cachedIndex) return cachedIndex;
-          return new Response('HYPER MES App Loading...', { status: 200, headers: { 'Content-Type': 'text/html' } });
+          return new Response('PlantControl loading...', { status: 200, headers: { 'Content-Type': 'text/html' } });
         })
     );
     return;

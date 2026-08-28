@@ -1,6 +1,6 @@
 {
-  "short_name": "HYPER MES",
-  "name": "HYPER MES — Operations & Manufacturing Execution System",
+  "short_name": "PlantControl",
+  "name": "PlantControl — Operations & Manufacturing Execution System",
   "icons": [
     {
       "src": "favicon.ico",

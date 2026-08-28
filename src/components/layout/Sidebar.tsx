@@ -221,7 +221,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
         </div>
         {!collapsed && (
           <div className="leading-tight overflow-hidden">
-            <h1 className="text-[14px] font-semibold tracking-wide text-white uppercase">Hyperfeeds</h1>
+            <h1 className="text-[14px] font-semibold tracking-wide text-white">PlantControl</h1>
             <p className="text-[11px] text-white/55 uppercase tracking-wider mt-0.5">Manufacturing System</p>
           </div>
         )}

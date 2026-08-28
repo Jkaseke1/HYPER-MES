@@ -414,7 +414,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">HYPER MES Version Control</h4>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">PlantControl Version Control</h4>
                     <p className="text-[10px] text-slate-400 font-mono">Installed Build: {APP_VERSION}</p>
                   </div>
                 </div>
@@ -471,7 +471,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     <span>System Up to Date</span>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-snug">
-                    You are running the latest production build of HYPER MES ({APP_VERSION}). System operating at optimal performance.
+                    You are running the latest production build of PlantControl ({APP_VERSION}). System operating at optimal performance.
                   </p>
                   <button
                     onClick={handleApplyAllUpdates}

@@ -45,7 +45,7 @@ export default function Layout() {
   const location = useLocation();
   const { user, profile } = useAuth();
 
-  const title = pageTitles[location.pathname] || 'Hyperfeeds MES';
+  const title = pageTitles[location.pathname] || 'PlantControl';
 
   // Record user access log on page view
   useEffect(() => {
