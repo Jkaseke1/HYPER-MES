@@ -15,6 +15,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function withTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(operation),
+    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
+  ]);
+}
+
 function validateHyperfeedsDomain(email: string): Error | null {
   const cleanEmail = (email || '').trim().toLowerCase();
   const isExactAdmin = cleanEmail === 'admin@hyperfeeds.com';
@@ -32,15 +39,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        fetchProfile(s.user.id);
-      } else {
+    withTimeout(supabase.auth.getSession(), 8000, 'Session check timed out.')
+      .then(({ data: { session: s } }) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          void fetchProfile(s.user.id);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.warn('Unable to restore the saved session:', error);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
         setLoading(false);
-      }
-    });
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
@@ -59,13 +74,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-    setProfile(data);
-    setLoading(false);
+    try {
+      const { data } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(),
+        8000,
+        'Profile lookup timed out.'
+      );
+      setProfile(data);
+    } catch (error) {
+      console.warn('Unable to load the user profile:', error);
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function signIn(email: string, password: string) {
