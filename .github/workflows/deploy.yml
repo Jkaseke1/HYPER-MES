@@ -38,9 +38,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # Default project-site path. Set repository variable VITE_SITE_BASE to /
-          # only after the verified custom domain is configured in GitHub Pages.
-          VITE_SITE_BASE: ${{ vars.VITE_SITE_BASE || '/HYPER-MES/' }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

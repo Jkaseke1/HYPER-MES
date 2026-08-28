@@ -4,8 +4,7 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // GitHub Pages uses /HYPER-MES/ until a custom PlantControl domain is enabled.
-  base: process.env.VITE_SITE_BASE || (process.env.NETLIFY ? '/' : '/HYPER-MES/'),
+  base: process.env.NETLIFY ? '/' : '/HYPER-MES/',
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
