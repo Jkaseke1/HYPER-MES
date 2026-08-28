@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plant-control-v2';
+const CACHE_NAME = 'plant-control-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
