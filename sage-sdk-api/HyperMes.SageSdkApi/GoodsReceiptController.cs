@@ -339,19 +339,30 @@ namespace SDK_Test
 
         private static void LinkStandaloneGrvStockPostings(SqlConnection connection, string grvNumber)
         {
-            // Sage Audit Trail resolves a GRV source through PostST.InvNumKey. The legacy
-            // procedure creates stock first and the GRV header afterwards, so attach the
-            // already-posted stock rows to the original GRV header once it exists.
+            // The legacy procedure creates posting rows before the GRV header. Reconcile
+            // them to Sage's native GRV source fields once the original header exists so
+            // Audit Trail can open the GRV from its stock and GL entries.
             using (var command = new SqlCommand(@"
                 UPDATE stockPost
-                SET InvNumKey = header.AutoIndex
+                SET InvNumKey = header.AutoIndex,
+                    Id = 'Grv',
+                    DrCrAccount = header.AccountID
                 FROM PostST AS stockPost
                 INNER JOIN InvNum AS header
                     ON header.InvNumber = @GrvNumber
                    AND header.DocType = 2
                    AND header.DocVersion = 1
-                WHERE stockPost.Reference = @GrvNumber
-                  AND ISNULL(stockPost.InvNumKey, 0) = 0;", connection))
+                WHERE stockPost.Reference = @GrvNumber;
+
+                UPDATE glPost
+                SET Id = 'Grv',
+                    DrCrAccount = header.AccountID
+                FROM PostGL AS glPost
+                INNER JOIN InvNum AS header
+                    ON header.InvNumber = @GrvNumber
+                   AND header.DocType = 2
+                   AND header.DocVersion = 1
+                WHERE glPost.Reference = @GrvNumber;", connection))
             {
                 command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
                 command.ExecuteNonQuery();
