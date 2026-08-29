@@ -28,6 +28,7 @@ namespace SDK_Test
             {
                 SdkSession.EnsureConnected();
                 ValidateSageMastersWithReconnect(request);
+                ValidateStandaloneGrvSupplier(request.SupplierCode);
             }
 
             return Ok(new
@@ -83,6 +84,7 @@ namespace SDK_Test
                 {
                     SdkSession.EnsureConnected();
                     ValidateSageMastersWithReconnect(request);
+                    ValidateStandaloneGrvSupplier(request.SupplierCode);
 
                     string grvNumber;
                     lock (GrvNumberLock)
@@ -276,7 +278,9 @@ namespace SDK_Test
                     }
                 }
 
+                StampStandaloneGrvReferences(connection, grvNumber, request);
                 StampStandaloneGrvDisplayTotals(connection, grvNumber);
+                LinkStandaloneGrvStockPostings(connection, grvNumber);
             }
 
             ValidateStandaloneGrvDocument(grvNumber);
@@ -298,6 +302,56 @@ namespace SDK_Test
                 FROM _btblInvoiceLines AS line
                 INNER JOIN InvNum AS header ON header.AutoIndex = line.iInvoiceID
                 WHERE header.InvNumber = @GrvNumber OR header.GrvNumber = @GrvNumber;", connection))
+            {
+                command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
+                command.ExecuteNonQuery();
+            }
+        }
+
+        private static void StampStandaloneGrvReferences(
+            SqlConnection connection,
+            string grvNumber,
+            GoodsReceiptRequest request)
+        {
+            // Evolution displays Supplier Invoice from the GRV header DeliveryNote field.
+            // The legacy posting procedure owns the financial transaction; this only fills
+            // its document references after a successful GRV creation.
+            using (var command = new SqlCommand(@"
+                UPDATE header
+                SET
+                    OrderNum = CASE
+                        WHEN NULLIF(@SupplierOrderNo, '') IS NULL THEN header.OrderNum
+                        ELSE @SupplierOrderNo
+                    END,
+                    DeliveryNote = CASE
+                        WHEN NULLIF(@SupplierInvoiceNo, '') IS NULL THEN header.DeliveryNote
+                        ELSE @SupplierInvoiceNo
+                    END
+                FROM InvNum AS header
+                WHERE header.InvNumber = @GrvNumber OR header.GrvNumber = @GrvNumber;", connection))
+            {
+                command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
+                command.Parameters.Add("@SupplierInvoiceNo", SqlDbType.VarChar, 50).Value = Trim(request.SupplierInvoiceNo, 50);
+                command.Parameters.Add("@SupplierOrderNo", SqlDbType.VarChar, 50).Value = Trim(request.SupplierOrderNo, 50);
+                command.ExecuteNonQuery();
+            }
+        }
+
+        private static void LinkStandaloneGrvStockPostings(SqlConnection connection, string grvNumber)
+        {
+            // Sage Audit Trail resolves a GRV source through PostST.InvNumKey. The legacy
+            // procedure creates stock first and the GRV header afterwards, so attach the
+            // already-posted stock rows to the original GRV header once it exists.
+            using (var command = new SqlCommand(@"
+                UPDATE stockPost
+                SET InvNumKey = header.AutoIndex
+                FROM PostST AS stockPost
+                INNER JOIN InvNum AS header
+                    ON header.InvNumber = @GrvNumber
+                   AND header.DocType = 2
+                   AND header.DocVersion = 1
+                WHERE stockPost.Reference = @GrvNumber
+                  AND ISNULL(stockPost.InvNumKey, 0) = 0;", connection))
             {
                 command.Parameters.Add("@GrvNumber", SqlDbType.VarChar, 50).Value = grvNumber;
                 command.ExecuteNonQuery();
@@ -356,6 +410,25 @@ namespace SDK_Test
                 // No GRV transaction has started yet, so one reconnect/retry is safe.
                 SdkSession.Reconnect();
                 ValidateSageMasters(request);
+            }
+        }
+
+        private static void ValidateStandaloneGrvSupplier(string supplierCode)
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 Name
+                FROM Vendor
+                WHERE Account = @SupplierCode
+                  AND NULLIF(LTRIM(RTRIM(Name)), '') IS NOT NULL;", connection))
+            {
+                command.Parameters.Add("@SupplierCode", SqlDbType.VarChar, 50).Value = supplierCode.Trim();
+                connection.Open();
+                var supplierName = command.ExecuteScalar() as string;
+                if (string.IsNullOrWhiteSpace(supplierName))
+                    throw new InvalidOperationException(
+                        "Sage supplier " + supplierCode.Trim() +
+                        " could not be resolved to a named Vendor. The GRV was not posted.");
             }
         }
 

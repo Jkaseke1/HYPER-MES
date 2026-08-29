@@ -22,6 +22,12 @@ const configuredStockSyncInterval = Number(process.env.SAGE_STOCK_SYNC_INTERVAL_
 const STOCK_SYNC_INTERVAL_MS = Number.isFinite(configuredStockSyncInterval)
   ? Math.max(configuredStockSyncInterval, 10 * 1000)
   : 60 * 1000;
+const ALLOWED_EVENT_TYPES = new Set(
+  (process.env.BRIDGE_ALLOWED_EVENT_TYPES || '')
+    .split(',')
+    .map((eventType) => eventType.trim())
+    .filter(Boolean),
+);
 let stockSyncInProgress = false;
 let eventProcessingInProgress = false;
 
@@ -76,12 +82,18 @@ async function processPendingEvents() {
   eventProcessingInProgress = true;
 
   try {
-  const { data: pending, error } = await supabase
+  let pendingQuery = supabase
     .from('sync_log')
     .select('*')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(100);
+
+  if (ALLOWED_EVENT_TYPES.size > 0) {
+    pendingQuery = pendingQuery.in('event_type', [...ALLOWED_EVENT_TYPES]);
+  }
+
+  const { data: pending, error } = await pendingQuery;
 
   if (error) {
     console.error('❌ Failed to read sync_log:', error.message);
@@ -286,6 +298,7 @@ async function startWorker() {
   console.log(' HYPER MES — Sage Pastel Bridge Worker');
   console.log(` Mode: ${DRY_RUN ? 'DRY RUN (safe — no Sage writes)' : 'LIVE'}`);
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
+  console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');

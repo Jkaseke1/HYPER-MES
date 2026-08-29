@@ -550,7 +550,7 @@ export default function GoodsReceivedPage() {
       <StockTakeFrozenBanner />
       
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#063b3a] p-6 rounded-lg text-white shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full border border-teal-500/30 font-mono font-medium">Inbound Logistics</span>
@@ -734,7 +734,7 @@ export default function GoodsReceivedPage() {
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[1280px] w-[96vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-[1280px] flex flex-col overflow-hidden rounded-xl border border-slate-200 shadow-2xl [&>button.absolute]:hidden">
-          <DialogHeader className="shrink-0 bg-slate-950 text-white px-6 py-4 relative border-b border-slate-800">
+          <DialogHeader className="shrink-0 bg-[#063b3a] text-white px-6 py-4 relative border-b border-teal-900">
             <div className="flex items-center justify-between pr-10">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-emerald-500/15 border border-emerald-400/30 rounded-lg flex items-center justify-center">
@@ -828,10 +828,10 @@ export default function GoodsReceivedPage() {
                 </div>
 
               {/* Sage Reference Controls */}
-              <div className="rounded-lg border border-blue-200 bg-blue-50/40 shadow-sm overflow-hidden">
-                <div className="bg-white border-b border-blue-100 px-5 py-4">
+              <div className="rounded-lg border border-teal-200 bg-teal-50/40 shadow-sm overflow-hidden">
+                <div className="bg-white border-b border-teal-100 px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-700 border border-blue-100">
+                    <div className="w-9 h-9 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
@@ -842,14 +842,14 @@ export default function GoodsReceivedPage() {
                 </div>
                 <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-slate-600">Supplier Invoice No</Label>
+                    <Label className="text-xs font-bold text-teal-800">Supplier Invoice No</Label>
                     <Input
                       value={supplierInvoiceNo}
                       onChange={(e) => setSupplierInvoiceNo(e.target.value)}
                       placeholder="e.g. INV27539"
-                      className="bg-white border-blue-200 font-mono"
+                      className="bg-white border-teal-300 font-mono focus:border-teal-600"
                     />
-                    <p className="text-[10px] text-slate-500">Maps to Sage external order/reference for Finance matching.</p>
+                    <p className="text-[10px] text-teal-800">Saved to the Sage GRV Supplier Invoice field for Finance matching.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-600">Supplier Delivery Note No</Label>

@@ -213,8 +213,7 @@ export default function WeighBridgePage() {
           </div>
 
           {/* Header Banner */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-5 rounded-2xl text-white shadow-lg relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+          <div className="bg-[#063b3a] p-5 rounded-lg text-white shadow-lg relative overflow-hidden">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
@@ -222,9 +221,9 @@ export default function WeighBridgePage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-extrabold tracking-tight">Weighbridge Scale Hub</h2>
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      <Sparkles className="w-3 h-3" /> Digital Calibration
+                    <h2 className="text-xl font-extrabold tracking-tight">PlantControl Weighbridge</h2>
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      <Sparkles className="w-3 h-3" /> Intake control
                     </span>
                   </div>
                   <p className="text-slate-300 text-xs mt-0.5">
@@ -421,9 +420,9 @@ export default function WeighBridgePage() {
 
       {/* New Ticket Modal */}
       <Dialog open={newOpen} onOpenChange={() => setNewOpen(false)}>
-        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] rounded-3xl border-0 shadow-2xl [&>button.absolute]:hidden">
+        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] rounded-lg border-0 shadow-2xl [&>button.absolute]:hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 py-4 flex-shrink-0 relative">
+          <div className="bg-[#063b3a] text-white px-6 py-4 flex-shrink-0 relative">
             <button
               onClick={() => setNewOpen(false)}
               className="absolute top-3.5 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"

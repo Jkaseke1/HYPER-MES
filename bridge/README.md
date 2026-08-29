@@ -108,6 +108,13 @@ SAGE_SDK_API_BASE_URL=http://127.0.0.1:5088
 SAGE_SDK_API_KEY=your-protected-sdk-api-key
 ```
 
+### Phased rollout event scope
+
+Set `BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed` on the hosted bridge when only
+the GRN phase is approved. The worker then ignores pending production,
+material-transfer, and dispatch events until their event types are deliberately
+added to the allow-list. Leave it blank only once every Sage workflow is live.
+
 ### **Required Sage Codes**
 - **suppliers.sage_code** - Sage supplier account codes
 - **raw_materials.sage_code** - Sage stock item codes  
