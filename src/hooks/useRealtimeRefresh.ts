@@ -36,11 +36,18 @@ export function useRealtimeRefresh(
     const refreshWhenVisible = () => {
       if (!document.hidden) scheduleRefresh();
     };
+    const refreshWhenActive = () => scheduleRefresh();
     document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenActive);
+    window.addEventListener('online', refreshWhenActive);
+    window.addEventListener('plantcontrol:data-changed', refreshWhenActive);
 
     return () => {
       if (timeoutId) window.clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenActive);
+      window.removeEventListener('online', refreshWhenActive);
+      window.removeEventListener('plantcontrol:data-changed', refreshWhenActive);
       supabase.removeChannel(channel);
     };
     // tableKey intentionally stabilizes the subscription against equivalent array literals.

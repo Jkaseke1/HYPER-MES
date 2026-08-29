@@ -2,7 +2,7 @@ export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       const baseUrl = import.meta.env.BASE_URL || './';
-      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js?v=28`;
+      const swUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}sw.js?v=29`;
       
       navigator.serviceWorker
         // Do not let the HTTP cache delay discovery of a newly deployed worker.
@@ -10,7 +10,9 @@ export function registerServiceWorker() {
         .then((registration) => {
           console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
 
-          // Auto-check for updates every 60 seconds
+          // Auto-check for updates every 60 seconds. The recovery worker clears
+          // retired cached assets, then unregisters itself so releases are fetched
+          // directly from the current PlantControl deployment.
           setInterval(() => {
             registration.update();
           }, 60000);
@@ -42,6 +44,7 @@ export function registerServiceWorker() {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) {
           refreshing = true;
+          sessionStorage.setItem('plantcontrol_release_refreshed', 'true');
           window.location.reload();
         }
       });

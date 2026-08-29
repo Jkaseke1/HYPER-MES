@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 import { cacheData, getCachedData } from '../lib/offlineSync';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 interface WBTicket {
   id: string;
@@ -116,6 +117,12 @@ export default function WeighBridgePage() {
   }
 
   useEffect(() => { fetchTickets(); }, []);
+
+  useRealtimeRefresh(
+    'weighbridge-live',
+    ['weigh_bridge_tickets', 'goods_received_notes', 'sync_log'],
+    fetchTickets,
+  );
 
   async function openNewTicketModal() {
     const nextTicketNo = await generateNextTicketNo();
