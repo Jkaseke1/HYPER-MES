@@ -1817,7 +1817,7 @@ export default function ProductionOrdersPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
-      <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/10">
+      <section className="sticky top-16 z-20 overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
         <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
