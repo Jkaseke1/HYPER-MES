@@ -443,7 +443,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm sm:px-6">
       {/* Mobile menu button */}
       <div className="flex items-center gap-3">
         <button
