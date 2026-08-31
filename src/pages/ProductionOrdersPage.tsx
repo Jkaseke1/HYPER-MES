@@ -1817,31 +1817,32 @@ export default function ProductionOrdersPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
-      <section className="flex flex-col gap-5 border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">Shop-floor execution</span>
-            <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700"><Radio className="h-3 w-3" /> Sage live</span>
+      <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/10">
+        <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffc36b]">Production control</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><Radio className="h-3 w-3" /> Sage connected</span>
+            </div>
+            <h1 className="mt-3 text-2xl font-bold">Production Orders</h1>
+            <p className="mt-1 text-sm text-slate-300">Live execution board for batches, material staging, and finished-goods completion.</p>
           </div>
-          <h1 className="mt-3 text-2xl font-bold text-[#101936]">Production Orders</h1>
-          <p className="mt-1 text-sm text-slate-500">Plan, issue, execute, and complete batches with controlled Sage confirmation.</p>
+          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 bg-[#f39200] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-black/20 transition-colors hover:bg-[#dc8500]">
+            <Plus className="w-5 h-5" /> Create Production Order
+          </button>
         </div>
-        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 bg-[#f39200] px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#db8300]">
-          <Plus className="w-5 h-5" /> Create Production Order
-        </button>
+        <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Order book</p><Layers className="h-4 w-4 text-teal-300" /></div><p className="mt-2 text-3xl font-bold">{totalOrders}</p><p className="mt-1 text-xs text-slate-400">Registered batches</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting issue</p><Clock className="h-4 w-4 text-[#ffc36b]" /></div><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{pendingCount}</p><p className="mt-1 text-xs text-slate-400">Ready for material staging</p></div>
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On the floor</p><Activity className="h-4 w-4 text-cyan-300" /></div><p className="mt-2 text-3xl font-bold text-cyan-300">{activeOrders.length}</p><p className="mt-1 text-xs text-slate-400">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
+          <div className="px-5 py-4"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Completed</p><CheckCircle2 className="h-4 w-4 text-emerald-300" /></div><p className="mt-2 text-3xl font-bold text-emerald-300">{completedCount}</p><p className="mt-1 text-xs text-slate-400">Finished batches</p></div>
+        </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="border border-slate-200 border-t-[#0f9f94] bg-white px-4 py-3.5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Order book</p><p className="mt-1 text-2xl font-bold text-[#101936]">{totalOrders}</p></div><div className="flex h-8 w-8 items-center justify-center bg-teal-50 text-teal-700"><Layers className="h-4 w-4" /></div></div><p className="mt-1 text-xs text-slate-500">All registered batches</p></div>
-        <div className="border border-slate-200 border-t-[#f39200] bg-white px-4 py-3.5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ready to stage</p><p className="mt-1 text-2xl font-bold text-amber-700">{pendingCount}</p></div><div className="flex h-8 w-8 items-center justify-center bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></div></div><p className="mt-1 text-xs text-slate-500">Awaiting material issue</p></div>
-        <div className="border border-slate-200 border-t-blue-500 bg-white px-4 py-3.5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">On the floor</p><p className="mt-1 text-2xl font-bold text-blue-700">{activeOrders.length}</p></div><div className="flex h-8 w-8 items-center justify-center bg-blue-50 text-blue-700"><Activity className="h-4 w-4" /></div></div><p className="mt-1 text-xs text-slate-500">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
-        <div className="border border-slate-200 border-t-emerald-500 bg-white px-4 py-3.5 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Completed</p><p className="mt-1 text-2xl font-bold text-emerald-700">{completedCount}</p></div><div className="flex h-8 w-8 items-center justify-center bg-emerald-50 text-emerald-700"><CheckCircle2 className="h-4 w-4" /></div></div><p className="mt-1 text-xs text-slate-500">Finished batches</p></div>
-      </section>
-
-      <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 lg:grid-cols-[1.1fr_0.9fr_1fr]">
-        <div className="flex items-center gap-4 bg-white px-4 py-3"><div className="min-w-0 flex-1"><div className="flex items-baseline justify-between gap-3"><p className="text-xs font-bold text-slate-600">Output attainment</p><p className="text-lg font-bold text-[#101936]">{outputAttainment}%</p></div><div className="mt-2 h-1.5 overflow-hidden bg-slate-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-[#f39200]'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-1.5 text-[11px] text-slate-500">{actualCompletedQuantity.toLocaleString()} / {plannedCompletedQuantity.toLocaleString()} kg completed</p></div></div>
-        <div className="flex items-center justify-between gap-4 bg-white px-4 py-3"><div><p className="text-xs font-bold text-slate-600">Active line workload</p><p className="mt-1 text-sm font-semibold text-slate-900">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => `${line}: ${lineOrders.length}`).join(' · ') : 'No line activity'}</p><p className="mt-1 text-[11px] text-slate-500">{inProgressCount} running · {materialsIssuedCount} staged</p></div><Factory className="h-5 w-5 shrink-0 text-slate-400" /></div>
-        <div className="flex items-center justify-between gap-4 bg-white px-4 py-3"><div><p className="text-xs font-bold text-slate-600">Next controlled action</p><p className="mt-1 text-sm font-semibold text-slate-900">{pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} await material issue` : activeOrders.length ? `${activeOrders.length} active on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-[11px] text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-teal-600" /></div>
+      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm lg:grid-cols-[1.15fr_0.9fr_1fr]">
+        <div className="border-l-4 border-[#f39200] bg-[#fffaf1] px-4 py-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Output attainment</p><p className="text-xl font-bold text-[#0d2036]">{outputAttainment}%</p></div><div className="mt-2 h-2 overflow-hidden bg-amber-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-[#f39200]'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-2 text-xs text-slate-600">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg completed</p></div>
+        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Live line</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => `${line}: ${lineOrders.length}`).join(' · ') : 'No line activity'}</p><p className="mt-1 text-xs text-slate-500">{inProgressCount} running · {materialsIssuedCount} staged</p></div><Factory className="h-5 w-5 shrink-0 text-teal-600" /></div>
+        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Workflow focus</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} need material issue` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-xs text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-[#f39200]" /></div>
       </section>
 
       {/* Filter & Search Bar */}
