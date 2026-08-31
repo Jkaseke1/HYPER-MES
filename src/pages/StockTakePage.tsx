@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ClipboardList, Plus, Settings, Eye, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { ClipboardList, Plus, Settings, Eye, AlertTriangle, CheckCircle, Clock, Loader2, Database } from 'lucide-react';
 import StockTakeDetailPage from './StockTakeDetailPage';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -27,6 +27,10 @@ interface StockTake {
   total_lines?: number;
   counted_lines?: number;
   total_variance?: number;
+  baseline_source?: 'sage_sdk' | 'legacy_mes';
+  baseline_snapshot_at?: string;
+  baseline_sync_status?: 'SYNCING' | 'READY' | 'FAILED';
+  baseline_sync_message?: string;
 }
 
 interface RawMaterial {
@@ -34,7 +38,6 @@ interface RawMaterial {
   code: string;
   name: string;
   sage_code: string;
-  current_stock: number;
 }
 
 export default function StockTakePage() {
@@ -136,7 +139,7 @@ export default function StockTakePage() {
       // Fetch all raw materials for mandatory selection
       const { data: rms } = await supabase
         .from('raw_materials')
-        .select('id, code, name, sage_code, current_stock')
+        .select('id, code, name, sage_code')
         .eq('is_active', true)
         .order('name');
 
@@ -202,20 +205,33 @@ export default function StockTakePage() {
 
       if (takeError) throw takeError;
 
-      // Snapshot all active raw materials
-      const lines = allRawMaterials.map(rm => ({
-        stock_take_id: stockTake.id,
-        raw_material_id: rm.id,
-        system_qty: rm.current_stock || 0,
-        unit: 'kg',
-        is_mandatory: mandatoryItems.includes(rm.id)
-      }));
+      const { error: snapshotError } = await supabase
+        .from('stock_takes')
+        .update({
+          baseline_source: 'sage_sdk',
+          baseline_sync_status: 'SYNCING',
+          baseline_sync_message: 'Waiting for the bridge to read live Sage RM stock.',
+        })
+        .eq('id', stockTake.id);
 
-      const { error: linesError } = await supabase
-        .from('stock_take_lines')
-        .insert(lines);
+      if (snapshotError) throw snapshotError;
 
-      if (linesError) throw linesError;
+      const { error: eventError } = await supabase
+        .from('sync_log')
+        .insert({
+          event_type: 'stock_take_sage_snapshot',
+          reference_id: stockTake.id,
+          reference_type: 'stock_take',
+          status: 'pending',
+          message: 'Queued to read live Sage RM stock for stock take.',
+          details: {
+            requestedBy: profile.id,
+            mandatoryItemIds: mandatoryItems,
+            warehouse: 'RM',
+          },
+        });
+
+      if (eventError) throw eventError;
 
       // Navigate to detail view
       navigate(`/stock-take/${stockTake.id}`);
@@ -289,6 +305,12 @@ export default function StockTakePage() {
                   <h3 className="mt-1 font-mono text-lg font-bold text-[#0B0B34]">{activeStockTake.take_number}</h3>
                 </div>
                 {getStatusBadge(activeStockTake.status)}
+                {activeStockTake.baseline_sync_status === 'SYNCING' && (
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-cyan-700"><Loader2 className="h-4 w-4 animate-spin" /> Syncing live Sage stock</div>
+                )}
+                {activeStockTake.baseline_sync_status === 'FAILED' && (
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-red-700"><AlertTriangle className="h-4 w-4" /> Sage snapshot needs retry</div>
+                )}
                 {activeStockTake.status === 'FROZEN' && (
                   <div className="flex items-center text-amber-700 text-sm">
                     <AlertTriangle className="h-4 w-4 mr-1" />
@@ -298,6 +320,11 @@ export default function StockTakePage() {
               </div>
               <div className="text-sm text-gray-600 space-y-1">
                 <p>Started by {activeStockTake.started_by_profile?.full_name} on {format(new Date(activeStockTake.started_at), 'PPp')}</p>
+                {activeStockTake.baseline_snapshot_at ? (
+                  <p className="flex items-center gap-1.5 font-medium text-emerald-700"><Database className="h-4 w-4" /> Sage SDK snapshot: {format(new Date(activeStockTake.baseline_snapshot_at), 'PPp')}</p>
+                ) : (
+                  <p className="text-slate-500">{activeStockTake.baseline_sync_message || 'Preparing the Sage stock snapshot.'}</p>
+                )}
                 {activeStockTake.notes && <p className="italic">"{activeStockTake.notes}"</p>}
               </div>
               

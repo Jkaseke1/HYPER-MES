@@ -58,6 +58,91 @@ async function refreshSageStock(itemCodes, reason) {
   }
 }
 
+async function createStockTakeSageSnapshot(event) {
+  const stockTakeId = event.reference_id;
+  const mandatoryItemIds = new Set((event.details?.mandatoryItemIds || []).filter(Boolean));
+
+  if (!stockTakeId) throw new Error('Stock take snapshot event is missing its stock take reference.');
+
+  try {
+    await supabase
+      .from('stock_takes')
+      .update({ baseline_sync_status: 'SYNCING', baseline_sync_message: 'Reading live RM stock from Sage SDK.', updated_at: new Date().toISOString() })
+      .eq('id', stockTakeId);
+
+    // A stock take requires every active RM item at one point in time. Do not
+    // use the rolling cache batch that supports normal operational screens.
+    const result = await syncSageStock(undefined, { fullSync: true, warehouseCodes: ['RM'] });
+    if (result.failures.length) {
+      throw new Error(`Sage snapshot incomplete: ${result.failures.slice(0, 5).join('; ')}`);
+    }
+
+    const [{ data: materials, error: materialsError }, { data: formulations, error: formulationsError }, { data: balances, error: balancesError }, { data: existingLines, error: linesError }] = await Promise.all([
+      supabase.from('raw_materials').select('id, code, sage_code, unit').eq('is_active', true).order('name'),
+      supabase.from('formulations').select('sage_code').eq('status', 'active'),
+      supabase.from('sage_stock_balances').select('raw_material_id, sage_code, quantity, last_synced_at').eq('warehouse_id', 18),
+      supabase.from('stock_take_lines').select('id').eq('stock_take_id', stockTakeId).limit(1),
+    ]);
+    if (materialsError) throw new Error(`Could not read stock-take materials: ${materialsError.message}`);
+    if (formulationsError) throw new Error(`Could not identify finished-good materials: ${formulationsError.message}`);
+    if (balancesError) throw new Error(`Could not read the Sage stock snapshot: ${balancesError.message}`);
+    if (linesError) throw new Error(`Could not verify stock-take lines: ${linesError.message}`);
+    if (existingLines?.length) throw new Error('Stock take already has count lines and cannot be replaced.');
+
+    const finishedGoodCodes = new Set((formulations || []).map((formulation) => String(formulation.sage_code || '').trim().toUpperCase()));
+    const rawMaterials = (materials || []).filter((material) => {
+      const sageCode = String(material.sage_code || material.code || '').trim().toUpperCase();
+      return sageCode && !finishedGoodCodes.has(sageCode);
+    });
+    const balancesByMaterial = new Map((balances || []).filter((balance) => balance.raw_material_id).map((balance) => [balance.raw_material_id, Number(balance.quantity || 0)]));
+    const unmatchedMaterials = rawMaterials.filter((material) => !balancesByMaterial.has(material.id));
+    if (unmatchedMaterials.length) {
+      throw new Error(`Sage did not return RM balances for ${unmatchedMaterials.length} material(s): ${unmatchedMaterials.slice(0, 5).map((material) => material.sage_code || material.code).join(', ')}`);
+    }
+
+    const snapshotAt = new Date().toISOString();
+    const lines = rawMaterials.map((material) => ({
+      stock_take_id: stockTakeId,
+      raw_material_id: material.id,
+      system_qty: balancesByMaterial.get(material.id) || 0,
+      unit: material.unit || 'kg',
+      is_mandatory: mandatoryItemIds.has(material.id),
+    }));
+    const { error: insertError } = await supabase.from('stock_take_lines').insert(lines);
+    if (insertError) throw new Error(`Could not create Sage stock-take lines: ${insertError.message}`);
+
+    const { error: takeUpdateError } = await supabase
+      .from('stock_takes')
+      .update({
+        baseline_source: 'sage_sdk',
+        baseline_snapshot_at: snapshotAt,
+        baseline_sync_status: 'READY',
+        baseline_sync_message: `Live Sage RM snapshot loaded: ${lines.length} material(s).`,
+        updated_at: snapshotAt,
+      })
+      .eq('id', stockTakeId);
+    if (takeUpdateError) throw new Error(`Could not mark the Sage snapshot ready: ${takeUpdateError.message}`);
+
+    await supabase.from('stock_take_audit_log').insert({
+      stock_take_id: stockTakeId,
+      action: 'sage_sdk_snapshot_created',
+      changed_by: event.details?.requestedBy || null,
+      notes: `Live Sage SDK snapshot captured for RM warehouse: ${lines.length} material(s) at ${snapshotAt}.`,
+    });
+
+    return {
+      message: `Live Sage RM snapshot complete: ${lines.length} material(s).`,
+      details: { materialCount: lines.length, snapshotAt, warehouse: 'RM' },
+    };
+  } catch (error) {
+    await supabase
+      .from('stock_takes')
+      .update({ baseline_sync_status: 'FAILED', baseline_sync_message: error.message, updated_at: new Date().toISOString() })
+      .eq('id', stockTakeId);
+    throw error;
+  }
+}
+
 async function refreshFinishedGoodsStock(itemCodes, reason, warehouseCodes) {
   try {
     const result = await syncFinishedGoodsStock(itemCodes, warehouseCodes);
@@ -179,6 +264,14 @@ async function processPendingEvents() {
           .eq('status', 'processing');
       }
 
+      if (event.event_type === 'stock_take_sage_snapshot') {
+        await supabase
+          .from('sync_log')
+          .update({ message: 'Reading live RM stock from Sage SDK', updated_at: new Date().toISOString() })
+          .eq('id', event.id)
+          .eq('status', 'processing');
+      }
+
       switch (event.event_type) {
         case 'grn_confirmed':
           handlerResult = await handleGoodsReceipt(event);
@@ -200,6 +293,9 @@ async function processPendingEvents() {
           break;
         case 'rm_cost_updated':
           handlerResult = await handleRmCostUpdated(event);
+          break;
+        case 'stock_take_sage_snapshot':
+          handlerResult = await createStockTakeSageSnapshot(event);
           break;
         default:
           console.log(`  ⚠️  Unknown event type: ${event.event_type} — skipping`);

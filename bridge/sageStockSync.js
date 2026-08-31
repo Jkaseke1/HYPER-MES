@@ -44,18 +44,18 @@ function getJson(urlString) {
   });
 }
 
-async function loadMaterials(itemCodes) {
+async function loadMaterials(itemCodes, { fullSync = false } = {}) {
   let query = supabase
     .from('raw_materials')
     .select('id, code, sage_code')
     .eq('is_active', true)
     .order('id');
-  if (!itemCodes?.length) {
+  if (!itemCodes?.length && !fullSync) {
     query = query.range(nextFullSyncOffset, nextFullSyncOffset + FULL_SYNC_BATCH_SIZE - 1);
   }
   const { data, error } = await query;
   if (error) throw new Error(`Could not load MES raw materials: ${error.message}`);
-  if (!itemCodes?.length) {
+  if (!itemCodes?.length && !fullSync) {
     nextFullSyncOffset = (data || []).length < FULL_SYNC_BATCH_SIZE
       ? 0
       : nextFullSyncOffset + FULL_SYNC_BATCH_SIZE;
@@ -84,15 +84,22 @@ async function loadMaterials(itemCodes) {
   return materials.filter((material) => !finishedGoodCodes.has((material.sage_code || material.code).trim().toUpperCase()));
 }
 
-async function syncSageStock(itemCodes) {
+async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {}) {
   if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for Sage stock sync');
-  const materials = await loadMaterials(itemCodes);
+  const materials = await loadMaterials(itemCodes, { fullSync });
+  const requestedWarehouses = (warehouseCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
+  const warehouses = requestedWarehouses.length
+    ? WAREHOUSES.filter((warehouse) => requestedWarehouses.includes(warehouse.code))
+    : WAREHOUSES;
+  if (requestedWarehouses.length && warehouses.length !== requestedWarehouses.length) {
+    throw new Error(`Unknown Sage warehouse requested: ${requestedWarehouses.filter((code) => !warehouses.some((warehouse) => warehouse.code === code)).join(', ')}`);
+  }
   let synced = 0;
   const failures = [];
 
   for (const material of materials) {
     const itemCode = (material.sage_code || material.code).trim().toUpperCase();
-    for (const warehouse of WAREHOUSES) {
+    for (const warehouse of warehouses) {
       try {
         const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock?itemCode=${encodeURIComponent(itemCode)}&warehouse=${encodeURIComponent(warehouse.code)}`);
         const { error } = await supabase.from('sage_stock_balances').upsert({
@@ -111,7 +118,7 @@ async function syncSageStock(itemCodes) {
     }
   }
 
-  return { materialCount: materials.length, synced, failures, fullSyncBatch: !itemCodes?.length };
+  return { materialCount: materials.length, warehouseCount: warehouses.length, synced, failures, fullSyncBatch: !itemCodes?.length && !fullSync, fullSync };
 }
 
 async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {

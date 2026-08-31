@@ -5,7 +5,7 @@ import {
   Download, FileSpreadsheet, Loader2, Flag, ThumbsUp,
   EyeOff, Users, Clock,
   BarChart3, PieChart, TrendingUp, TrendingDown, Minus,
-  CheckCircle2, XCircle, Activity, Package
+  CheckCircle2, XCircle, Activity, Package, RefreshCw
 } from 'lucide-react';
 import {
   ResponsiveContainer, PieChart as RePieChart, Pie, Cell,
@@ -35,6 +35,10 @@ interface StockTake {
   started_by_profile?: { full_name: string };
   frozen_by_profile?: { full_name: string };
   closed_by_profile?: { full_name: string };
+  baseline_source?: 'sage_sdk' | 'legacy_mes';
+  baseline_snapshot_at?: string;
+  baseline_sync_status?: 'SYNCING' | 'READY' | 'FAILED';
+  baseline_sync_message?: string;
 }
 
 interface StockTakeLine {
@@ -117,10 +121,11 @@ export default function StockTakeDetailPage() {
   useEffect(() => {
     if (id) {
       fetchStockTake();
-      // Auto-refresh every 30 seconds
+      // A Sage snapshot can take longer than one normal screen refresh. Poll
+      // the header too so the counter sees the bridge result without reload.
       const interval = setInterval(() => {
-        fetchLines();
-      }, 30000);
+        fetchStockTake();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [id]);
@@ -365,6 +370,46 @@ export default function StockTakeDetailPage() {
     } catch (error: any) {
       console.error('Error approving line:', error);
       toast.error(`Failed to approve variance: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRetrySageSnapshot = async () => {
+    if (!stockTake || stockTake.baseline_sync_status === 'SYNCING') return;
+    setSaving(true);
+    try {
+      const { data: previousEvent } = await supabase
+        .from('sync_log')
+        .select('details')
+        .eq('event_type', 'stock_take_sage_snapshot')
+        .eq('reference_id', stockTake.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { error: takeError } = await supabase
+        .from('stock_takes')
+        .update({ baseline_sync_status: 'SYNCING', baseline_sync_message: 'Retry queued to read live Sage RM stock.' })
+        .eq('id', stockTake.id);
+      if (takeError) throw takeError;
+
+      const { error: eventError } = await supabase
+        .from('sync_log')
+        .insert({
+          event_type: 'stock_take_sage_snapshot',
+          reference_id: stockTake.id,
+          reference_type: 'stock_take',
+          status: 'pending',
+          message: 'Retry queued to read live Sage RM stock for stock take.',
+          details: previousEvent?.details || { requestedBy: profile?.id, warehouse: 'RM' },
+        });
+      if (eventError) throw eventError;
+
+      toast.success('Live Sage snapshot retry queued. This page will update automatically.');
+      await fetchStockTake();
+    } catch (error: any) {
+      toast.error(`Could not retry the Sage snapshot: ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -674,6 +719,10 @@ export default function StockTakeDetailPage() {
 
   const handleFreezeStock = async () => {
     if (!stockTake) return;
+    if (!hasReadySageSnapshot) {
+      toast.error('Wait for the live Sage SDK snapshot before freezing this stock take.');
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase
@@ -725,6 +774,10 @@ export default function StockTakeDetailPage() {
 
   const handleCloseStock = async () => {
     if (!stockTake) return;
+    if (!hasReadySageSnapshot) {
+      toast.error('This stock take has no ready Sage SDK snapshot.');
+      return;
+    }
 
     const uncountedLines = lines.filter(l => l.counted_qty === null);
     if (uncountedLines.length > 0) {
@@ -799,7 +852,8 @@ export default function StockTakeDetailPage() {
 
   const canManage = ['admin', 'md', 'warehouse_manager', 'raw_material_manager'].includes(profile?.role || '');
   const canApproveVariance = ['admin', 'md', 'finance', 'accountant'].includes(profile?.role || '');
-  const canEdit = stockTake?.status === 'OPEN' || stockTake?.status === 'FROZEN';
+  const hasReadySageSnapshot = stockTake?.baseline_source === 'sage_sdk' && stockTake?.baseline_sync_status === 'READY' && Boolean(stockTake?.baseline_snapshot_at);
+  const canEdit = hasReadySageSnapshot && (stockTake?.status === 'OPEN' || stockTake?.status === 'FROZEN');
   const showSystemQty = canManage || !stockTake?.blind_mode || stockTake?.status === 'CLOSED';
 
   const countedLines = lines.filter(l => l.counted_qty !== null).length;
@@ -917,7 +971,7 @@ export default function StockTakeDetailPage() {
           </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {stockTake.status === 'OPEN' && canManage && (
+          {stockTake.status === 'OPEN' && canManage && hasReadySageSnapshot && (
             <>
               <button
                 onClick={() => setShowFreezeModal(true)}
@@ -934,7 +988,7 @@ export default function StockTakeDetailPage() {
               </button>
             </>
           )}
-          {stockTake.status === 'FROZEN' && canManage && (
+          {stockTake.status === 'FROZEN' && canManage && hasReadySageSnapshot && (
             <>
               <button
                 onClick={handleReopenStock}
@@ -969,6 +1023,36 @@ export default function StockTakeDetailPage() {
         </div>
         </div>
       </section>
+
+      {!hasReadySageSnapshot && stockTake.status !== 'CLOSED' && (
+        <section className={`flex flex-col gap-4 rounded-xl border px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+          stockTake.baseline_sync_status === 'FAILED'
+            ? 'border-red-200 bg-red-50'
+            : 'border-cyan-200 bg-cyan-50'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${stockTake.baseline_sync_status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-cyan-100 text-cyan-700'}`}>
+              {stockTake.baseline_sync_status === 'FAILED' ? <AlertTriangle className="h-5 w-5" /> : <Loader2 className="h-5 w-5 animate-spin" />}
+            </div>
+            <div>
+              <p className={`text-sm font-bold ${stockTake.baseline_sync_status === 'FAILED' ? 'text-red-900' : 'text-cyan-900'}`}>
+                {stockTake.baseline_sync_status === 'FAILED' ? 'Live Sage snapshot failed' : 'Reading live Sage RM stock'}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">{stockTake.baseline_sync_message || 'The bridge is preparing the count baseline from Sage.'}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Counting, freezing, and closing remain unavailable until a complete Sage SDK snapshot is ready.</p>
+            </div>
+          </div>
+          {stockTake.baseline_sync_status === 'FAILED' && canManage && (
+            <button
+              onClick={handleRetrySageSnapshot}
+              disabled={saving}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${saving ? 'animate-spin' : ''}`} /> Retry live Sage snapshot
+            </button>
+          )}
+        </section>
+      )}
 
       {/* Control state */}
       <section className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 shadow-sm lg:grid-cols-[1.4fr_1fr]">
