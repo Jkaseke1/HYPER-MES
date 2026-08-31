@@ -64,6 +64,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const updateRef = useRef<HTMLDivElement>(null);
   const incomingTransfersLoadedRef = useRef(false);
   const knownIncomingTransferIdsRef = useRef<Set<string>>(new Set());
+  const sageQueueLoadedRef = useRef(false);
+  const knownSageStagesRef = useRef<Map<string, string>>(new Map());
 
   // System Update state
   const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
@@ -262,20 +264,42 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         .select('id, event_type, reference_id, status, message, updated_at, last_failure_message, retried_at, resolved_at')
         .in('status', ['pending', 'processing', 'failed', 'success'])
         .order('updated_at', { ascending: false })
-        .limit(40);
+        .limit(60);
 
       if (error) {
         console.warn('Unable to load Sage posting queue:', error.message);
         return;
       }
       if (!isMounted) return;
-      const resolvedCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      setSageQueue((data || [])
+      const recentSuccessCutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const visibleQueue = (data || [])
         .filter((item: SageQueueItem) =>
           item.status !== 'success' ||
-          (!!item.retried_at && !!item.resolved_at && new Date(item.resolved_at).getTime() >= resolvedCutoff)
+          new Date(item.updated_at).getTime() >= recentSuccessCutoff
         )
-        .slice(0, 8) as SageQueueItem[]);
+        .slice(0, 12) as SageQueueItem[];
+
+      const nextStages = new Map(visibleQueue.map((item) => [item.id, `${item.status}:${item.message || ''}`]));
+      if (sageQueueLoadedRef.current) {
+        visibleQueue.forEach((item) => {
+          const stage = nextStages.get(item.id);
+          if (!stage || knownSageStagesRef.current.get(item.id) === stage) return;
+
+          const label = sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ');
+          if (item.status === 'failed') {
+            toast.error(`${label}: ${item.message || item.last_failure_message || 'Sage posting failed'}`);
+          } else if (item.status === 'success') {
+            toast.success(`${label}: posted to Sage`);
+          } else if (item.status === 'processing') {
+            toast(`${label}: ${item.message || 'Processing in Sage'}`, { duration: 5000 });
+          } else {
+            toast(`${label}: queued for Sage`, { duration: 4000 });
+          }
+        });
+      }
+      knownSageStagesRef.current = nextStages;
+      sageQueueLoadedRef.current = true;
+      setSageQueue(visibleQueue);
       setLoadingSageQueue(false);
     }
 
@@ -289,6 +313,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
     return () => {
       isMounted = false;
+      sageQueueLoadedRef.current = false;
+      knownSageStagesRef.current = new Map();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -562,6 +588,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                   const isPosting = item.status === 'processing';
                   const isFailed = item.status === 'failed';
                   const isResolvedRetry = item.status === 'success' && !!item.retried_at && !!item.resolved_at;
+                  const isPosted = item.status === 'success';
                   return (
                     <button
                       key={item.id}
@@ -571,14 +598,14 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                         navigate('/sync-log');
                       }}
                       className={`w-full rounded-lg border p-2 text-left transition-colors ${
-                        isFailed ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : isResolvedRetry ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : isPosting ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' : 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+                        isFailed ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : isPosted ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : isPosting ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' : 'border-amber-200 bg-amber-50 hover:bg-amber-100'
                       }`}>
                       <div className="flex items-center justify-between gap-2 text-xs mb-1">
                         <span className={`inline-flex items-center gap-1 font-semibold ${
-                          isFailed ? 'text-rose-700' : isResolvedRetry ? 'text-emerald-700' : isPosting ? 'text-blue-700' : 'text-amber-700'
+                          isFailed ? 'text-rose-700' : isPosted ? 'text-emerald-700' : isPosting ? 'text-blue-700' : 'text-amber-700'
                         }`}>
-                          {isPosting ? <Loader2 className="h-3 w-3 animate-spin" /> : isFailed ? <AlertTriangle className="h-3 w-3" /> : isResolvedRetry ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                          {isPosting ? 'POSTING TO SAGE' : isFailed ? 'SAGE FAILED' : isResolvedRetry ? 'RETRY SUCCEEDED' : 'QUEUED FOR SAGE'}
+                          {isPosting ? <Loader2 className="h-3 w-3 animate-spin" /> : isFailed ? <AlertTriangle className="h-3 w-3" /> : isPosted ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                          {isPosting ? 'PROCESSING IN SAGE' : isFailed ? 'SAGE FAILED' : isResolvedRetry ? 'RETRY SUCCEEDED' : isPosted ? 'POSTED TO SAGE' : 'QUEUED FOR SAGE'}
                         </span>
                         <span className="text-slate-400">{formatDate(item.updated_at)}</span>
                       </div>
