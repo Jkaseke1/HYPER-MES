@@ -8,6 +8,7 @@ import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
+import OperationsPageHeader from '../components/layout/OperationsPageHeader';
 
 interface MaterialTransfer {
   id: string;
@@ -374,12 +375,15 @@ export default function MaterialTransferPage() {
     <div className="p-6 space-y-6">
       <StockTakeFrozenBanner />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Material Transfer</h1>
-          <p className="text-sm text-slate-500 mt-1">Transfer raw materials from warehouse to production</p>
-        </div>
-        <div className="flex items-center gap-3">
+      <OperationsPageHeader
+        eyebrow="Warehouse movement"
+        title="Material Transfer"
+        description="Move approved raw materials from RM through the production buffer."
+        icon={Truck}
+        liveLabel="Live Sage transfer status"
+        refreshLabel="Auto-refreshes every 3 sec"
+        onRefresh={() => fetchData()}
+        actions={<div className="flex flex-wrap items-center gap-2">
           {canReceiveInProduction && statusCounts.in_buffer > 0 && (
             <Link
               to="/production-warehouse"
@@ -395,8 +399,8 @@ export default function MaterialTransferPage() {
             <Plus className="w-4 h-4" />
             New Transfer
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {activeSagePosts.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center gap-3 text-blue-900">

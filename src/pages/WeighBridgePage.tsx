@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X, Sparkles, RefreshCw,
+  Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X,
   Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 import { cacheData, getCachedData } from '../lib/offlineSync';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import OperationsPageHeader from '../components/layout/OperationsPageHeader';
 
 interface WBTicket {
   id: string;
@@ -217,51 +218,24 @@ export default function WeighBridgePage() {
 
         {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
         <div className="shrink-0 space-y-3.5">
-          {/* Top Page Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">WeighBridge Operations</h1>
-              <p className="text-xs text-slate-500">Record vehicle gross, tare & nett weights at the intake gate scale.</p>
-            </div>
-          </div>
-
-          {/* Header Banner */}
-          <div className="bg-[#063b3a] p-5 rounded-lg text-white shadow-lg relative overflow-hidden">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shrink-0">
-                  <Scale className="w-6 h-6 text-emerald-400" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-extrabold tracking-tight">PlantControl Weighbridge</h2>
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      <Sparkles className="w-3 h-3" /> Intake control
-                    </span>
-                  </div>
-                  <p className="text-slate-300 text-xs mt-0.5">
-                    Capture gross and tare vehicle weights, print tickets, and link directly to Goods Received Notes (GRN).
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={fetchTickets}
-                  className="p-2 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl transition-all text-white"
-                  title="Refresh Tickets"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={openNewTicketModal}
-                  className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-500/20 transition-all active:scale-95 text-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  New WB Ticket
-                </button>
-              </div>
-            </div>
-          </div>
+          <OperationsPageHeader
+            eyebrow="Inbound logistics"
+            title="Weighbridge Operations"
+            description="Capture vehicle gross, tare, and nett weights before linking them to Goods Received Notes."
+            icon={Scale}
+            liveLabel="Live intake data"
+            refreshLabel="Updates automatically"
+            onRefresh={fetchTickets}
+            actions={
+              <button
+                onClick={openNewTicketModal}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
+              >
+                <Plus className="w-4 h-4" />
+                New WB Ticket
+              </button>
+            }
+          />
 
           {/* Stats Overview */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
