@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -8,7 +8,6 @@ import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import OperationsPageHeader from '../components/layout/OperationsPageHeader';
 
 interface MaterialTransfer {
   id: string;
@@ -362,6 +361,11 @@ export default function MaterialTransferPage() {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
   });
+  const thisMonthCount = transfers.filter((transfer) => {
+    const transferDate = new Date(transfer.transfer_date || transfer.created_at);
+    const now = new Date();
+    return transferDate.getFullYear() === now.getFullYear() && transferDate.getMonth() === now.getMonth();
+  }).length;
 
   if (loading) {
     return (
@@ -375,32 +379,48 @@ export default function MaterialTransferPage() {
     <div className="p-6 space-y-6">
       <StockTakeFrozenBanner />
 
-      <OperationsPageHeader
-        eyebrow="Warehouse movement"
-        title="Material Transfer"
-        description="Move approved raw materials from RM through the production buffer."
-        icon={Truck}
-        liveLabel="Live Sage transfer status"
-        refreshLabel="Auto-refreshes every 3 sec"
-        onRefresh={() => fetchData()}
-        actions={<div className="flex flex-wrap items-center gap-2">
-          {canReceiveInProduction && statusCounts.in_buffer > 0 && (
-            <Link
-              to="/production-warehouse"
-              className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-100"
+      <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg">
+        <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className="border border-[#f39200] px-2 py-1 uppercase tracking-wide text-[#ffc36b]">Warehouse movement</span>
+              <span className="inline-flex items-center gap-1.5 text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />Sage transfer status live</span>
+            </div>
+            <h1 className="mt-4 text-3xl font-bold">Material Transfer</h1>
+            <p className="mt-1 text-slate-300">Move approved raw materials from RM through the production buffer.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => fetchData(true)}
+              className="inline-flex items-center gap-2 border border-white/20 px-3 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10"
+              title="Refresh transfer data"
             >
-              <CheckCircle2 className="h-4 w-4" /> Open Production Receiving ({statusCounts.in_buffer})
-            </Link>
-          )}
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Transfer
-          </button>
-        </div>}
-      />
+              <RefreshCw className="h-4 w-4" /> Updates automatically
+            </button>
+            {canReceiveInProduction && statusCounts.in_buffer > 0 && (
+              <Link
+                to="/production-warehouse"
+                className="inline-flex items-center gap-2 border border-cyan-300/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-400/20"
+              >
+                <CheckCircle2 className="h-4 w-4" /> Production Receiving ({statusCounts.in_buffer})
+              </Link>
+            )}
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
+            >
+              <Plus className="h-4 w-4" /> New Transfer
+            </button>
+          </div>
+        </div>
+        <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Register</p><p className="mt-2 text-3xl font-bold">{statusCounts.all}</p><p className="mt-1 text-xs text-slate-400">Transfer requests</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">In buffer</p><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{statusCounts.in_buffer}</p><p className="mt-1 text-xs text-slate-400">Awaiting production</p></div>
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Received</p><p className="mt-2 text-3xl font-bold text-emerald-300">{statusCounts.received}</p><p className="mt-1 text-xs text-slate-400">Production confirmed</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">This month</p><p className="mt-2 text-3xl font-bold text-cyan-300">{thisMonthCount}</p><p className="mt-1 text-xs text-slate-400">Materials moved</p></div>
+          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Queued {activeSagePosts.length}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Received {statusCounts.received}</span></div><p className="mt-2 text-xs text-slate-400">Rejected {statusCounts.rejected}</p></div>
+        </div>
+      </section>
 
       {activeSagePosts.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center gap-3 text-blue-900">
@@ -415,36 +435,6 @@ export default function MaterialTransferPage() {
           </div>
         </div>
       )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-            <Factory className="w-4 h-4 text-amber-600" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">In Buffer</p>
-            <p className="mt-0.5 text-xl font-bold text-amber-900">{statusCounts.in_buffer}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-            <CheckCircle className="w-4 h-4 text-green-600" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Received</p>
-            <p className="mt-0.5 text-xl font-bold text-green-900">{statusCounts.received}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white px-4 py-3 shadow-sm flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-            <Eye className="w-4 h-4 text-red-600" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Rejected</p>
-            <p className="mt-0.5 text-xl font-bold text-red-900">{statusCounts.rejected}</p>
-          </div>
-        </div>
-      </div>
 
       <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
