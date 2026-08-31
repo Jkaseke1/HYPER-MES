@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, Clock, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -17,7 +17,6 @@ import { cacheData, getCachedData, queueOfflineAction } from '../lib/offlineSync
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
-import StatCard from '../components/ui/StatCard';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import toast from 'react-hot-toast';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -542,6 +541,17 @@ export default function GoodsReceivedPage() {
     }).length,
   };
 
+  const sageActivity = Object.values(syncByGrnId).reduce(
+    (totals, sync) => {
+      if (sync.status === 'pending') totals.queued += 1;
+      if (sync.status === 'processing') totals.processing += 1;
+      if (sync.status === 'success') totals.posted += 1;
+      if (sync.status === 'failed') totals.failed += 1;
+      return totals;
+    },
+    { queued: 0, processing: 0, posted: 0, failed: 0 },
+  );
+
   const totalOrderedQty = items.reduce((sum, item) => sum + (Number(item.ordered_qty) || 0), 0);
   const totalReceivedQty = items.reduce((sum, item) => sum + (Number(item.received_qty) || 0), 0);
   const totalReceivedValue = items.reduce(
@@ -562,31 +572,38 @@ export default function GoodsReceivedPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-[1600px] mx-auto">
+    <div className="space-y-4 p-4 sm:p-5 max-w-[1600px] mx-auto">
       <StockTakeFrozenBanner />
       
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0b0b30] p-6 rounded-lg text-white shadow-xl">
+      {/* GRN command header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-[#0b0b30] px-5 py-4 rounded-lg text-white shadow-xl">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1.5">
             <span className="bg-[#ff9100]/15 text-orange-200 text-xs px-2.5 py-0.5 rounded-full border border-[#ff9100]/40 font-mono font-medium">Hyperfeeds Inbound</span>
             <span className="text-slate-400 text-xs">• Sage Synchronized</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Goods Received Notes</h1>
-          <p className="text-slate-300 text-sm mt-1">Capture raw material deliveries & automated Sage GRV postings</p>
+          <h1 className="text-2xl font-extrabold tracking-tight">Goods Received Notes</h1>
+          <p className="text-slate-300 text-sm mt-0.5">Raw material receipt and Sage GRV control</p>
         </div>
         <Button onClick={() => setModalOpen(true)} size="lg" className="bg-[#ff9100] hover:bg-[#e67f00] text-white font-bold shadow-lg shadow-orange-500/20 shrink-0">
-          <Plus className="mr-2 h-5 w-5" />
+          <Plus className="mr-2 h-4 w-4" />
           New GRN Delivery
         </Button>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard icon={Package} title="Total GRNs" value={stats.total} subtitle="All time" color="blue" />
-        <StatCard icon={Clock} title="Pending Approval" value={stats.pending} subtitle="Awaiting sign-off" color="amber" />
-        <StatCard icon={FileText} title="Sage Approved" value={stats.approved} subtitle="Posted to Sage" color="emerald" />
-        <StatCard icon={Calendar} title="This Month" value={stats.thisMonth} subtitle="Current period" color="teal" />
+      {/* Compact live control strip */}
+      <div className="grid grid-cols-2 xl:grid-cols-[auto_auto_auto_auto_1fr] gap-x-6 gap-y-3 bg-white border border-slate-200 rounded-lg px-5 py-3 shadow-sm">
+        <div><p className="text-[10px] uppercase font-bold tracking-wide text-slate-400">Register</p><p className="text-lg leading-5 font-bold text-[#0b0b30]">{stats.total}</p></div>
+        <div><p className="text-[10px] uppercase font-bold tracking-wide text-slate-400">Awaiting Finance</p><p className="text-lg leading-5 font-bold text-amber-600">{stats.pending}</p></div>
+        <div><p className="text-[10px] uppercase font-bold tracking-wide text-slate-400">Sage Posted</p><p className="text-lg leading-5 font-bold text-emerald-600">{stats.approved}</p></div>
+        <div><p className="text-[10px] uppercase font-bold tracking-wide text-slate-400">This Month</p><p className="text-lg leading-5 font-bold text-[#0b0b30]">{stats.thisMonth}</p></div>
+        <div className="col-span-2 xl:col-span-1 xl:justify-self-end flex flex-wrap items-center gap-2 xl:border-l xl:border-slate-200 xl:pl-5">
+          <span className="text-[10px] uppercase font-bold tracking-wide text-slate-400 mr-1">Live Sage Activity</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Queued {sageActivity.queued}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700"><Loader2 className={`h-3 w-3 ${sageActivity.processing > 0 ? 'animate-spin' : ''}`} />Processing {sageActivity.processing}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700"><CheckCircle className="h-3 w-3" />Posted {sageActivity.posted}</span>
+          {sageActivity.failed > 0 && <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-50 border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700"><AlertCircle className="h-3 w-3" />Failed {sageActivity.failed}</span>}
+        </div>
       </div>
 
       {/* Search & Filter Toolbar */}
@@ -619,7 +636,7 @@ export default function GoodsReceivedPage() {
 
       {/* GRNs View: Desktop Table + Mobile Card Grid */}
       <Card className="border border-slate-200 shadow-md overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4 px-6">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-3 px-5">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold text-slate-900">Delivery Register</CardTitle>
@@ -632,25 +649,23 @@ export default function GoodsReceivedPage() {
         </CardHeader>
         <CardContent className="p-0">
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
+          <div className="hidden md:block">
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow className="bg-slate-100/70 hover:bg-slate-100/70">
-                  <TableHead className="font-bold text-slate-700">GRN Number</TableHead>
+                  <TableHead className="w-[155px] font-bold text-slate-700">GRN Number</TableHead>
                   <TableHead className="font-bold text-slate-700">Supplier</TableHead>
-                  <TableHead className="font-bold text-slate-700">Weigh Bridge</TableHead>
-                  <TableHead className="font-bold text-slate-700">Received Date</TableHead>
-                  <TableHead className="font-bold text-slate-700">Initiated By</TableHead>
-                  <TableHead className="font-bold text-slate-700">Status</TableHead>
-                  <TableHead className="font-bold text-slate-700">Sage</TableHead>
-                  <TableHead className="font-bold text-slate-700">Created Date</TableHead>
-                  <TableHead className="text-right font-bold text-slate-700 pr-6">Action</TableHead>
+                  <TableHead className="hidden xl:table-cell w-[105px] font-bold text-slate-700">Weigh Bridge</TableHead>
+                  <TableHead className="w-[118px] font-bold text-slate-700">Received</TableHead>
+                  <TableHead className="w-[104px] font-bold text-slate-700">Approval</TableHead>
+                  <TableHead className="w-[180px] font-bold text-slate-700">Sage Live Status</TableHead>
+                  <TableHead className="w-[100px] text-right font-bold text-slate-700 pr-5">Inspect</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredGRNs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-slate-400 py-12">
+                    <TableCell colSpan={7} className="text-center text-slate-400 py-12">
                       No Goods Received Notes found matching criteria
                     </TableCell>
                   </TableRow>
@@ -665,24 +680,20 @@ export default function GoodsReceivedPage() {
                           <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">{grn.grn_number}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium text-slate-900">{supplierLabel(grn.suppliers)}</TableCell>
-                      <TableCell className="text-slate-600 font-mono text-xs">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
+                      <TableCell className="font-medium text-slate-900 truncate" title={supplierLabel(grn.suppliers)}>{supplierLabel(grn.suppliers)}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-slate-600 font-mono text-xs truncate">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell className="text-xs text-slate-700 font-medium">{(grn as any).receiver?.full_name || (grn as any).receiver?.email || '—'}</TableCell>
                       <TableCell>{getStatusBadge(grn.status)}</TableCell>
                       <TableCell>{getSageBadge(grn.id)}</TableCell>
-                      <TableCell className="text-xs text-slate-500">
-                        {format(new Date(grn.created_at), 'MMM d, yyyy • HH:mm')}
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
+                      <TableCell className="text-right pr-5">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleViewGRN(grn)}
-                          className="hover:bg-teal-50 hover:text-teal-700 border-slate-300 font-semibold"
+                          className="hover:bg-orange-50 hover:text-orange-700 border-slate-300 font-semibold"
                         >
-                          <Eye className="h-4 w-4 mr-1.5 text-teal-600" />
-                          Inspect
+                          <Eye className="h-4 w-4" />
+                          <span className="sr-only">Inspect {grn.grn_number}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
