@@ -184,14 +184,19 @@ export default function GRNApprovalButtons({
         {/* Finance Approval - Single Step */}
         {canApprove && (
           <div className="p-3 bg-[#0b0b30]/5 border border-[#0b0b30]/15 rounded-lg">
-            <p className="text-xs font-semibold text-blue-800 mb-2">Finance Approval Required</p>
-            <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold text-[#0b0b30] mb-1">Finance review</p>
+            <p className="text-xs text-slate-600 mb-3">1. Set VAT configuration. 2. Approve and queue Sage, or reject.</p>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setShowVatModal(true)}
                 disabled={processing}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0b0b30] hover:bg-[#171750] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                  vatReviewedAt
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-[#0b0b30] hover:bg-[#171750] text-white'
+                }`}
               >
-                Finance VAT Review
+                {vatReviewedAt ? 'VAT Configured' : 'Set VAT Configuration'}
               </button>
               <button
                 onClick={handleApprove}
