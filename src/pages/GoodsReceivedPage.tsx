@@ -601,7 +601,9 @@ export default function GoodsReceivedPage() {
         <div className="col-span-2 xl:col-span-1 xl:justify-self-end flex flex-wrap items-center gap-2 xl:border-l xl:border-slate-200 xl:pl-5">
           <span className="text-[10px] uppercase font-bold tracking-wide text-slate-400 mr-1">Live Sage Activity</span>
           <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Queued {sageActivity.queued}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700"><Loader2 className={`h-3 w-3 ${sageActivity.processing > 0 ? 'animate-spin' : ''}`} />Processing {sageActivity.processing}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
           <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700"><CheckCircle className="h-3 w-3" />Posted {sageActivity.posted}</span>
           {sageActivity.failed > 0 && <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-50 border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700"><AlertCircle className="h-3 w-3" />Failed {sageActivity.failed}</span>}
         </div>
