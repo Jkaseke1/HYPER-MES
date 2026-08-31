@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, ChevronRight, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
