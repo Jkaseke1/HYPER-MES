@@ -214,14 +214,14 @@ export default function WeighBridgePage() {
 
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
-      <div className="max-w-7xl mx-auto w-full flex flex-col h-full space-y-4">
+      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col space-y-5">
 
         {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
         <div className="shrink-0 space-y-3.5">
           <OperationsPageHeader
             eyebrow="Inbound logistics"
-            title="Weighbridge Operations"
-            description="Capture vehicle gross, tare, and nett weights before linking them to Goods Received Notes."
+            title="Weigh Bridge"
+            description="Live vehicle intake, ticket status, and GRN handover."
             icon={Scale}
             liveLabel="Live intake data"
             refreshLabel="Updates automatically"
@@ -229,7 +229,7 @@ export default function WeighBridgePage() {
             actions={
               <button
                 onClick={openNewTicketModal}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
+                className="inline-flex whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
               >
                 <Plus className="w-4 h-4" />
                 New WB Ticket
