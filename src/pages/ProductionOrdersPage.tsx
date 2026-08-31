@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, BarChart3, Radio, ArrowUpRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,6 @@ import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, Produ
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
-import StatCard from '../components/ui/StatCard';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
@@ -449,8 +448,6 @@ export default function ProductionOrdersPage() {
   const fetchOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     let q = supabase.from('production_orders').select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)').order('created_at', { ascending: false });
-    if (tab !== 'all') q = q.eq('status', tab);
-    if (search) q = q.ilike('batch_number', `%${search}%`);
     const { data, error } = await q;
     if (error) {
       console.error('Error fetching orders:', error);
@@ -1793,6 +1790,7 @@ export default function ProductionOrdersPage() {
   };
 
   const filtered = orders.filter((o) => {
+    if (tab !== 'all' && o.status !== tab) return false;
     if (!search.trim()) return true;
     return o.batch_number.toLowerCase().includes(search.toLowerCase());
   });
@@ -1801,35 +1799,59 @@ export default function ProductionOrdersPage() {
   const pendingCount = orders.filter(o => o.status === 'pending').length;
   const inProgressCount = orders.filter(o => o.status === 'in_progress').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
+  const materialsIssuedCount = orders.filter(o => o.status === 'materials_issued').length;
+  const activeOrders = orders.filter(o => ['materials_issued', 'in_progress'].includes(o.status));
+  const plannedCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.planned_qty || 0), 0);
+  const actualCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.actual_qty || 0), 0);
+  const outputAttainment = plannedCompletedQuantity > 0 ? Math.round((actualCompletedQuantity / plannedCompletedQuantity) * 100) : 0;
+  const lineWorkload = Object.entries(activeOrders.reduce<Record<string, ProductionOrder[]>>((byLine, order) => {
+    const line = order.machines?.name || 'Unassigned line';
+    (byLine[line] ||= []).push(order);
+    return byLine;
+  }, {})).sort(([, a], [, b]) => b.length - a.length).slice(0, 4);
+  const activeSagePosts = Object.values(sageIssueStatuses).filter((status) => ['pending', 'processing'].includes(status.status)).length;
   const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
   const sageCompletionInFlight = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
   const sageCompletionPosted = sageCompletionStatus?.status === 'success';
   const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-xl">
+    <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
+      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 bg-[#101936] px-5 py-5 text-white shadow-sm">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full border border-teal-500/30 font-mono font-medium">Shop-Floor Execution</span>
-            <span className="text-slate-400 text-xs">• Sage Synchronized</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="border border-amber-400/50 bg-amber-400/10 px-2 py-1 text-xs font-bold text-amber-200">Hyperfeeds Production</span>
+            <span className="inline-flex items-center gap-1 border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-xs font-bold text-emerald-100"><Radio className="h-3 w-3" /> Sage synchronized</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Production Orders</h1>
-          <p className="text-slate-300 text-sm mt-1">Manage batch production, material issues, and Sage FG completions</p>
+          <h1 className="mt-3 text-2xl sm:text-3xl font-bold">Production Orders</h1>
+          <p className="mt-1 text-sm text-slate-300">Plan, issue, execute, and complete production batches with live Sage confirmations.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all shrink-0">
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-600 shrink-0">
           <Plus className="w-5 h-5" /> Create Production Order
         </button>
-      </div>
+      </section>
 
-      {/* KPI Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard title="Total Orders" value={totalOrders} icon={Package} color="teal" />
-        <StatCard title="Pending" value={pendingCount} icon={Clock} color="amber" />
-        <StatCard title="In Progress" value={inProgressCount} icon={Play} color="blue" />
-        <StatCard title="Completed" value={completedCount} icon={CheckCircle2} color="emerald" />
-      </div>
+      <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Order book</p><Layers className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p><p className="mt-1 text-xs text-slate-500">All production batches</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Ready to stage</p><Clock className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-amber-700">{pendingCount}</p><p className="mt-1 text-xs text-slate-500">Pending material issue</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">On the floor</p><Activity className="h-4 w-4 text-blue-600" /></div><p className="mt-2 text-2xl font-bold text-blue-700">{activeOrders.length}</p><p className="mt-1 text-xs text-slate-500">{materialsIssuedCount} staged · {inProgressCount} in progress</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Completed</p><CheckCircle2 className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{completedCount}</p><p className="mt-1 text-xs text-slate-500">Finished batches in register</p></div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+        <div className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Execution pulse</p><h2 className="mt-1 text-base font-bold text-slate-900">Batch completion and Sage workflow</h2></div><BarChart3 className="h-5 w-5 text-teal-600" /></div>
+          <div className="grid gap-px bg-slate-100 sm:grid-cols-3">
+            <div className="bg-white px-5 py-4"><p className="text-xs font-semibold text-slate-500">Output attainment</p><p className="mt-2 text-2xl font-bold text-slate-900">{outputAttainment}%</p><div className="mt-3 h-1.5 overflow-hidden bg-slate-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-2 text-xs text-slate-500">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg</p></div>
+            <div className="bg-white px-5 py-4"><p className="text-xs font-semibold text-slate-500">Sage actions</p><p className="mt-2 text-2xl font-bold text-slate-900">{activeSagePosts}</p><p className="mt-2 text-xs leading-5 text-slate-500">Material issues currently queued or processing in Sage.</p></div>
+            <div className="bg-white px-5 py-4"><p className="text-xs font-semibold text-slate-500">Next action</p><p className="mt-2 text-sm font-bold text-slate-900">{pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} await material issue` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No active batches'}</p><p className="mt-2 text-xs leading-5 text-slate-500">Open a batch to continue its controlled workflow.</p></div>
+          </div>
+        </div>
+        <div className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Line workload</p><h2 className="mt-1 text-base font-bold text-slate-900">Active production lines</h2></div><Factory className="h-5 w-5 text-slate-600" /></div>
+          <div className="divide-y divide-slate-100 px-5">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => <div key={line} className="flex items-center justify-between gap-4 py-3"><div><p className="text-sm font-semibold text-slate-800">{line}</p><p className="mt-0.5 text-xs text-slate-500">{lineOrders.filter(order => order.status === 'in_progress').length} running · {lineOrders.filter(order => order.status === 'materials_issued').length} staged</p></div><span className="font-mono text-lg font-bold text-slate-900">{lineOrders.length}</span></div>) : <div className="py-8 text-sm text-slate-500">No batches currently staged or running.</div>}</div>
+        </div>
+      </section>
 
       {/* Filter & Search Bar */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-md overflow-hidden">
