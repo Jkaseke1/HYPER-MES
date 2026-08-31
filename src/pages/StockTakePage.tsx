@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ClipboardList, Plus, Settings, Eye, AlertTriangle, CheckCircle, Clock, Loader2, Database } from 'lucide-react';
+import { ClipboardList, Plus, Eye, AlertTriangle, CheckCircle, Clock, Loader2, Database, ShieldCheck, Users, ArrowRight, ClipboardCheck, CircleDot } from 'lucide-react';
 import StockTakeDetailPage from './StockTakeDetailPage';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface StockTake {
   id: string;
@@ -267,42 +266,44 @@ export default function StockTakePage() {
 
   return (
     <div className="space-y-5 pb-8">
-      {/* Header */}
-      <section className="rounded-xl bg-[#0B0B34] px-6 py-6 shadow-lg lg:px-7">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+      <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg">
+        <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
-            <div className="rounded-lg bg-teal-500 p-3 text-white shadow-sm"><ClipboardList className="h-6 w-6" /></div>
-          <div>
-            <span className="rounded-full border border-orange-300/40 bg-orange-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-orange-200">Inventory Control</span>
-            <h1 className="mt-2 text-2xl font-bold text-white">Stock Take</h1>
-            <p className="mt-1 text-sm text-white/65">Physical counts, controlled variance review, and an audit-ready close process.</p>
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-teal-500 text-white shadow-sm"><ClipboardList className="h-7 w-7" /></div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                <span className="border border-[#f39200] px-2 py-1 uppercase tracking-wide text-[#ffc36b]">Inventory control</span>
+                <span className="inline-flex items-center gap-1.5 text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />Live Sage baseline required</span>
+              </div>
+              <h1 className="mt-3 text-3xl font-bold">Stock Take</h1>
+              <p className="mt-1 text-slate-300">Physical counts with live Sage comparison, recount control, and Finance sign-off.</p>
+            </div>
           </div>
-        </div>
           {!activeStockTake && (
             <button
               onClick={() => setShowNewModal(true)}
-              className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
+              className="inline-flex items-center justify-center gap-2 bg-[#f39200] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
             >
-              <Plus className="h-4 w-4" />
-              <span>Start Stock Take</span>
+              <Plus className="h-4 w-4" /> Start Stock Take
             </button>
           )}
+        </div>
+        <div className="grid border-t border-white/10 sm:grid-cols-3">
+          <div className="border-b border-white/10 px-5 py-4 sm:border-b-0 sm:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Sage baseline</p><p className="mt-2 text-xl font-bold text-emerald-300">SDK live read</p><p className="mt-1 text-xs text-slate-400">RM warehouse snapshot</p></div>
+          <div className="border-b border-white/10 px-5 py-4 sm:border-b-0 sm:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Active count</p><p className="mt-2 text-xl font-bold">{activeStockTake ? activeStockTake.take_number : 'None'}</p><p className="mt-1 text-xs text-slate-400">{activeStockTake ? `${activeStockTake.counted_lines || 0} lines counted` : 'Ready to start'}</p></div>
+          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Controlled close</p><p className="mt-2 text-xl font-bold text-[#ffc36b]">Finance review</p><p className="mt-1 text-xs text-slate-400">Variances need reasons</p></div>
         </div>
       </section>
 
       {/* Active Stock Take Banner */}
       {activeStockTake ? (
-        <div className={`rounded-xl border p-6 shadow-sm ${
-          activeStockTake.status === 'FROZEN' 
-            ? 'border-orange-200 bg-orange-50'
-            : 'border-teal-200 bg-teal-50'
-        }`}>
-          <div className="flex items-start justify-between">
+        <div className={`rounded-lg border p-6 shadow-sm ${activeStockTake.status === 'FROZEN' ? 'border-amber-200 bg-amber-50' : 'border-teal-200 bg-white'}`}>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Count</p>
-                  <h3 className="mt-1 font-mono text-lg font-bold text-[#0B0B34]">{activeStockTake.take_number}</h3>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current stock take</p>
+                  <h3 className="mt-1 font-mono text-lg font-bold text-[#0B0B34]">{activeStockTake.title || activeStockTake.take_number}</h3>
                 </div>
                 {getStatusBadge(activeStockTake.status)}
                 {activeStockTake.baseline_sync_status === 'SYNCING' && (
@@ -358,29 +359,29 @@ export default function StockTakePage() {
 
             <button
               onClick={() => navigate(`/stock-take/${activeStockTake.id}`)}
-              className="flex items-center space-x-2 rounded-lg bg-[#0B0B34] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16164d]"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0d2036] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#162f4d]"
             >
               <Eye className="h-4 w-4" />
-              <span>View Details</span>
+              Open Count <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
-          <div className="text-center">
-            <ClipboardList className="mx-auto mb-3 h-12 w-12 text-teal-500" />
-            <h3 className="mb-2 text-lg font-semibold text-[#0B0B34]">No Active Stock Take</h3>
-            <p className="mb-4 text-sm text-slate-500">Start a controlled physical count. Every exception will be routed through recount and Finance review.</p>
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="inline-flex items-center space-x-2 rounded-lg bg-orange-500 px-6 py-3 text-white shadow-sm transition-colors hover:bg-orange-600"
-            >
-              <Plus className="h-5 w-5" />
-              <span>Start New Stock Take</span>
-              <Settings className="h-4 w-4 ml-2 opacity-70" />
-            </button>
+        <section className="border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.45fr] lg:items-center">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-teal-700">Count readiness</p>
+              <h2 className="mt-2 text-2xl font-bold text-[#0d2036]">Ready for a controlled count</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Start once the physical count team is ready. PlantControl reads a fresh Sage RM snapshot first, then locks that baseline for the count.</p>
+              <button onClick={() => setShowNewModal(true)} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-teal-700"><Plus className="h-4 w-4" /> Set up stock take</button>
+            </div>
+            <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
+              <div className="bg-slate-50 px-4 py-4"><Database className="h-5 w-5 text-teal-600" /><p className="mt-3 text-sm font-bold text-slate-800">1. Read Sage</p><p className="mt-1 text-xs leading-5 text-slate-500">A live RM baseline is captured through the SDK.</p></div>
+              <div className="bg-slate-50 px-4 py-4"><ClipboardCheck className="h-5 w-5 text-cyan-600" /><p className="mt-3 text-sm font-bold text-slate-800">2. Count stock</p><p className="mt-1 text-xs leading-5 text-slate-500">Enter physical counts or import the approved count file.</p></div>
+              <div className="bg-slate-50 px-4 py-4"><ShieldCheck className="h-5 w-5 text-amber-600" /><p className="mt-3 text-sm font-bold text-slate-800">3. Review variance</p><p className="mt-1 text-xs leading-5 text-slate-500">Resolve recounts and obtain Finance approval.</p></div>
+            </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Stock Take History */}
@@ -459,134 +460,13 @@ export default function StockTakePage() {
         <Modal
           open={showNewModal}
           onClose={() => setShowNewModal(false)}
-          title="Start New Stock Take"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Stock Take Title
-              </label>
-              <input
-                type="text"
-                value={newTakeTitle}
-                onChange={(e) => setNewTakeTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="e.g., Month-end Stock Take, Annual Physical Count"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Person Name
-              </label>
-              <input
-                type="text"
-                value={newTakePersonName}
-                onChange={(e) => setNewTakePersonName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Your name or person responsible"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes (optional)
-              </label>
-              <textarea
-                value={newTakeNotes}
-                onChange={(e) => setNewTakeNotes(e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Additional notes or observations"
-              />
-            </div>
-
-            <div className="flex items-center space-x-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-              <input
-                type="checkbox"
-                id="blindMode"
-                checked={blindMode}
-                onChange={(e) => setBlindMode(e.target.checked)}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label htmlFor="blindMode" className="flex-1 text-sm">
-                <div className="font-medium text-gray-900">Blind Count Mode</div>
-                <div className="text-gray-600">Hide system quantities from counters during entry to prevent bias</div>
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mandatory Items ({mandatoryItems.length} selected)
-              </label>
-              
-              {/* Show selected items */}
-              {mandatoryItems.length > 0 && (
-                <div className="mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                  <div className="text-xs font-medium text-indigo-700 mb-2">Selected Items:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {mandatoryItems.map(id => {
-                      const rm = allRawMaterials.find(r => r.id === id);
-                      return rm ? (
-                        <span key={id} className="inline-flex items-center px-2 py-1 bg-white border border-indigo-300 rounded text-xs text-indigo-900">
-                          {rm.code}
-                          <button
-                            onClick={() => setMandatoryItems(mandatoryItems.filter(i => i !== id))}
-                            className="ml-1 text-indigo-500 hover:text-indigo-700"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-2"
-              />
-              <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
-                {allRawMaterials
-                  .filter(rm => 
-                    searchTerm === '' || 
-                    rm.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    rm.name.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .map((rm) => (
-                  <label
-                    key={rm.id}
-                    className="flex items-center space-x-3 p-2 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={mandatoryItems.includes(rm.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setMandatoryItems([...mandatoryItems, rm.id]);
-                        } else {
-                          setMandatoryItems(mandatoryItems.filter(id => id !== rm.id));
-                        }
-                      }}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                    />
-                    <span className="text-sm text-gray-900">{rm.code} - {rm.name}</span>
-                  </label>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Stock take cannot be closed until all mandatory items are counted
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
+          title="Set Up Stock Take"
+          size="xl"
+          footer={
+            <>
               <button
                 onClick={() => setShowNewModal(false)}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
                 disabled={creating}
               >
                 Cancel
@@ -594,21 +474,41 @@ export default function StockTakePage() {
               <button
                 onClick={handleStartNewStockTake}
                 disabled={creating}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center space-x-2"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#f39200] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {creating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    <span>Start Stock Take</span>
-                  </>
-                )}
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+                {creating ? 'Requesting Sage snapshot...' : 'Start and read live Sage stock'}
               </button>
+            </>
+          }
+        >
+          <div className="space-y-6">
+            <div className="flex items-start gap-3 border border-teal-200 bg-teal-50 px-4 py-3">
+              <Database className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
+              <div><p className="text-sm font-bold text-teal-900">Live Sage baseline</p><p className="mt-1 text-sm text-teal-800">Starting this count first requests every RM quantity from Sage. Counting opens only after the complete snapshot is saved.</p></div>
             </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="block"><span className="text-sm font-bold text-slate-800">Count name</span><span className="mt-1 block text-xs text-slate-500">Use a clear period or purpose.</span><input type="text" value={newTakeTitle} onChange={(e) => setNewTakeTitle(e.target.value)} className="mt-2 w-full border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" placeholder="e.g. RM opening balance - Sep 2026" /></label>
+              <label className="block"><span className="text-sm font-bold text-slate-800">Count lead</span><span className="mt-1 block text-xs text-slate-500">Person responsible for the physical count.</span><input type="text" value={newTakePersonName} onChange={(e) => setNewTakePersonName(e.target.value)} className="mt-2 w-full border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" placeholder="Name of responsible person" /></label>
+            </div>
+
+            <label className="block"><span className="text-sm font-bold text-slate-800">Notes <span className="font-normal text-slate-400">optional</span></span><textarea value={newTakeNotes} onChange={(e) => setNewTakeNotes(e.target.value)} rows={3} className="mt-2 w-full resize-none border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" placeholder="Count cut-off, team members, or observations" /></label>
+
+            <label htmlFor="blindMode" className={`flex cursor-pointer items-start gap-3 border p-4 transition-colors ${blindMode ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+              <input type="checkbox" id="blindMode" checked={blindMode} onChange={(e) => setBlindMode(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+              <div className="flex-1"><div className="flex items-center gap-2"><Eye className="h-4 w-4 text-amber-600" /><p className="text-sm font-bold text-slate-800">Blind count mode</p></div><p className="mt-1 text-sm text-slate-600">Counters enter physical quantities without seeing the Sage baseline. Use this for an independent count.</p></div>
+              <span className={`text-xs font-bold ${blindMode ? 'text-amber-700' : 'text-slate-400'}`}>{blindMode ? 'ON' : 'OFF'}</span>
+            </label>
+
+            <details className="border border-slate-200 bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-800"><span className="inline-flex items-center gap-2"><CircleDot className="h-4 w-4 text-teal-600" /> Mandatory control items</span><span className="text-xs font-semibold text-teal-700">{mandatoryItems.length} selected</span></summary>
+              <div className="border-t border-slate-200 p-4">
+                <p className="text-sm text-slate-600">These items must be counted before the take can close. All active RM materials will still load from the live Sage snapshot.</p>
+                <div className="mt-3 flex flex-wrap gap-2">{mandatoryItems.map(id => { const rm = allRawMaterials.find(r => r.id === id); return rm ? <button type="button" key={id} onClick={() => setMandatoryItems(mandatoryItems.filter(i => i !== id))} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100">{rm.code} <span aria-hidden="true">×</span></button> : null; })}</div>
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1.5fr]"><input type="search" placeholder="Find a material to make mandatory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" /><div className="max-h-44 overflow-y-auto border border-slate-200 divide-y divide-slate-100">{allRawMaterials.filter(rm => searchTerm === '' || rm.code.toLowerCase().includes(searchTerm.toLowerCase()) || rm.name.toLowerCase().includes(searchTerm.toLowerCase())).map((rm) => <label key={rm.id} className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50"><input type="checkbox" checked={mandatoryItems.includes(rm.id)} onChange={(e) => setMandatoryItems(e.target.checked ? [...mandatoryItems, rm.id] : mandatoryItems.filter(id => id !== rm.id))} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" /><span><span className="font-semibold text-slate-800">{rm.code}</span><span className="text-slate-500"> · {rm.name}</span></span></label>)}</div></div>
+              </div>
+            </details>
           </div>
         </Modal>
       )}
