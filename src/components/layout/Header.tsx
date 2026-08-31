@@ -120,6 +120,52 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
   }
 
+  function showSageActivityToast(item: SageQueueItem) {
+    const label = sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ');
+    const isFailed = item.status === 'failed';
+    const isPosted = item.status === 'success';
+    const isProcessing = item.status === 'processing';
+    const title = isFailed ? 'Sage posting needs attention' : isPosted ? 'Posted to Sage' : isProcessing ? 'Processing in Sage' : 'Queued for Sage';
+    const detail = isFailed
+      ? item.message || item.last_failure_message || 'The Sage bridge could not complete this transaction.'
+      : isPosted
+        ? item.message || 'The Sage document is ready.'
+        : item.message || 'Waiting for the Sage bridge.';
+    const tone = isFailed ? 'bg-rose-500' : isPosted ? 'bg-emerald-500' : isProcessing ? 'bg-blue-500' : 'bg-amber-500';
+    const iconTone = isFailed ? 'bg-rose-50 text-rose-700' : isPosted ? 'bg-emerald-50 text-emerald-700' : isProcessing ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700';
+
+    toast.custom((notification) => (
+      <div className="w-[390px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className={`h-1 ${tone}`} />
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${iconTone}`}>
+              {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : isPosted ? <CheckCircle2 className="h-5 w-5" /> : isFailed ? <AlertTriangle className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</p>
+                <button type="button" onClick={() => toast.dismiss(notification.id)} className="text-xs font-medium text-slate-400 hover:text-slate-700">Dismiss</button>
+              </div>
+              <p className="mt-1 text-sm font-bold text-slate-900">{label}</p>
+              <p className="mt-0.5 text-xs text-slate-600">{detail}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              toast.dismiss(notification.id);
+              navigate('/sync-log');
+            }}
+            className="mt-3 flex w-full items-center justify-between rounded-md bg-[#0b0b30] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#171750]"
+          >
+            View Sage activity <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    ), { duration: isProcessing ? 5500 : 7500 });
+  }
+
   useEffect(() => {
     async function checkForUpdates() {
       try {
@@ -285,16 +331,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
           const stage = nextStages.get(item.id);
           if (!stage || knownSageStagesRef.current.get(item.id) === stage) return;
 
-          const label = sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ');
-          if (item.status === 'failed') {
-            toast.error(`${label}: ${item.message || item.last_failure_message || 'Sage posting failed'}`);
-          } else if (item.status === 'success') {
-            toast.success(`${label}: posted to Sage`);
-          } else if (item.status === 'processing') {
-            toast(`${label}: ${item.message || 'Processing in Sage'}`, { duration: 5000 });
-          } else {
-            toast(`${label}: queued for Sage`, { duration: 4000 });
-          }
+          showSageActivityToast(item);
         });
       }
       knownSageStagesRef.current = nextStages;

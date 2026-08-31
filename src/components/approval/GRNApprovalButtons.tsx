@@ -61,6 +61,10 @@ export default function GRNApprovalButtons({
 
       if (approvalError) throw approvalError;
 
+      // Return the operator to the live dashboard immediately. The bridge will
+      // provide queued, processing, and posted updates from this point.
+      onApproved();
+
       // Auto-create rm_cost_register entries when GRN is approved
       try {
         // Fetch GRN details and line items
@@ -118,8 +122,6 @@ export default function GRNApprovalButtons({
       } catch (costError) {
         console.warn('Failed to auto-create RM cost entries:', costError);
       }
-
-      onApproved();
     } catch (error) {
       console.error('Approval error:', error);
       alert('Failed to approve. Please try again.');
