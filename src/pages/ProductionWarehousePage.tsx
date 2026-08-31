@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -250,6 +250,16 @@ export default function ProductionWarehousePage() {
     const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
     return { critical, low, healthy: aggregated.length - critical.length - low.length };
   }, [aggregated]);
+  const floorReadiness = totalMaterials ? Math.round((stockHealth.healthy / totalMaterials) * 100) : 100;
+  const movedThisWeek = transfers
+    .filter((transfer) => Date.now() - new Date(transfer.movement_date || transfer.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000)
+    .reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const topFloorMaterials = [...aggregated]
+    .filter((material) => Number(material.sage_pd_quantity || 0) > 0)
+    .sort((a, b) => Number(b.sage_pd_quantity || 0) - Number(a.sage_pd_quantity || 0))
+    .slice(0, 5);
+  const largestFloorBalance = Math.max(1, ...topFloorMaterials.map((material) => Number(material.sage_pd_quantity || 0)));
+  const recentFloorActivity = transfers.slice(0, 5);
 
   useEffect(() => {
     const signature = [...stockHealth.critical, ...stockHealth.low].map((m) => `${m.raw_material_id}:${m.sage_pd_quantity}`).join('|');
@@ -304,22 +314,23 @@ export default function ProductionWarehousePage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <section className="flex flex-wrap items-center justify-between gap-4 bg-[#101936] px-5 py-5 text-white shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900">Production Warehouse</h1>
-            <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"><Radio className="h-3 w-3" /> Live</span>
+            <span className="border border-amber-400/50 bg-amber-400/10 px-2 py-1 text-xs font-bold text-amber-200">Hyperfeeds Production</span>
+            <span className="inline-flex items-center gap-1 border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-xs font-bold text-emerald-100"><Radio className="h-3 w-3" /> Live Sage</span>
           </div>
-          <p className="mt-1 text-sm text-slate-500">Receive materials from the holding bay and monitor the Sage Production balance.</p>
+          <h1 className="mt-3 text-2xl font-bold">Production Warehouse</h1>
+          <p className="mt-1 text-sm text-slate-300">Inbound materials, floor readiness, and live Sage Warehouse 19 availability.</p>
         </div>
         <button
           onClick={() => fetchTransfers()}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+          className="flex items-center gap-2 border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
-      </div>
+      </section>
 
       {receiptNotice && (
         <div className={`flex items-start justify-between gap-4 border-l-4 px-4 py-3 text-sm shadow-sm ${receiptNotice.tone === 'success' ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-rose-500 bg-rose-50 text-rose-900'}`}>
@@ -440,15 +451,34 @@ export default function ProductionWarehousePage() {
       )}
 
       <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Materials on floor</p><p className="mt-1 text-2xl font-bold text-slate-900">{totalMaterials}</p></div>
-        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><p className="mt-1 text-2xl font-bold text-emerald-700">{totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm">kg</span></p></div>
-        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">MES floor ledger</p><p className="mt-1 text-2xl font-bold text-slate-900">{totalMesLedgerQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">kg</span></p></div>
-        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Transfers this week</p><p className="mt-1 text-2xl font-bold text-slate-900">{recentCount}</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
       </section>
 
       <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
         <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Sage Production 19 last synced {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
         {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <div className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor availability</p><h2 className="mt-1 text-base font-bold text-slate-900">Largest Sage Production balances</h2></div><BarChart3 className="h-5 w-5 text-teal-600" /></div>
+          <div className="divide-y divide-slate-100 px-5">
+            {topFloorMaterials.length ? topFloorMaterials.map((material) => {
+              const quantity = Number(material.sage_pd_quantity || 0);
+              const width = Math.max(3, Math.round((quantity / largestFloorBalance) * 100));
+              return <div key={material.raw_material_id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 py-3"><div className="min-w-0"><div className="flex items-baseline justify-between gap-3"><p className="truncate text-sm font-semibold text-slate-800">{material.name}</p><span className="font-mono text-xs text-slate-500">{material.code}</span></div><div className="mt-2 h-1.5 overflow-hidden bg-slate-100"><div className="h-full bg-teal-600" style={{ width: `${width}%` }} /></div></div><p className="self-center text-right font-mono text-sm font-bold text-emerald-700">{quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-xs font-medium text-slate-500">{material.unit}</span></p></div>;
+            }) : <p className="py-8 text-sm text-slate-500">Awaiting Production Warehouse 19 stock data.</p>}
+          </div>
+        </div>
+        <div className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent activity</p><h2 className="mt-1 text-base font-bold text-slate-900">Latest floor receipts</h2></div><Calendar className="h-5 w-5 text-slate-500" /></div>
+          <div className="divide-y divide-slate-100 px-5">
+            {recentFloorActivity.length ? recentFloorActivity.map((transfer) => <div key={transfer.id} className="flex items-center justify-between gap-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{transfer.raw_materials?.name || 'Raw material'}</p><p className="mt-0.5 font-mono text-xs text-slate-500">{transfer.batch_number || 'No batch'} · {format(new Date(transfer.movement_date || transfer.created_at), 'dd MMM, HH:mm')}</p></div><p className="shrink-0 text-right font-mono text-sm font-bold text-slate-800">{Number(transfer.quantity).toLocaleString()}<span className="ml-1 text-xs font-medium text-slate-500">{transfer.unit}</span></p></div>) : <p className="py-8 text-sm text-slate-500">No floor receipts recorded yet.</p>}
+          </div>
+        </div>
       </section>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
