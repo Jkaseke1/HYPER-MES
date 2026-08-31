@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  Scale, Plus, Search, Eye, CheckCircle, Clock, Link as LinkIcon, X,
-  Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus
+  Scale, Plus, Search, Eye, CheckCircle, X, RefreshCw,
+  Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus, Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -10,7 +10,6 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 import { cacheData, getCachedData } from '../lib/offlineSync';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import OperationsPageHeader from '../components/layout/OperationsPageHeader';
 
 interface WBTicket {
   id: string;
@@ -76,8 +75,8 @@ export default function WeighBridgePage() {
   const [form, setForm] = useState(emptyWBForm);
   const [saving, setSaving] = useState(false);
 
-  async function fetchTickets() {
-    setLoading(true);
+  async function fetchTickets(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('weigh_bridge_tickets')
@@ -99,7 +98,7 @@ export default function WeighBridgePage() {
       const cached = await getCachedData('weigh_bridge_tickets_all');
       if (cached) setTickets(cached);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   async function generateNextTicketNo() {
@@ -126,7 +125,7 @@ export default function WeighBridgePage() {
   useRealtimeRefresh(
     'weighbridge-live',
     ['weigh_bridge_tickets', 'goods_received_notes', 'sync_log'],
-    fetchTickets,
+    () => fetchTickets(true),
   );
 
   async function openNewTicketModal() {
@@ -210,6 +209,12 @@ export default function WeighBridgePage() {
     return d.toDateString() === today.toDateString();
   }).length;
 
+  const thisMonthCount = tickets.filter(t => {
+    const ticketDate = new Date(t.created_at);
+    const today = new Date();
+    return ticketDate.getMonth() === today.getMonth() && ticketDate.getFullYear() === today.getFullYear();
+  }).length;
+
   const totalNettMassKg = tickets.reduce((sum, t) => sum + (Number(t.nett_mass) || 0), 0);
 
   return (
@@ -218,71 +223,43 @@ export default function WeighBridgePage() {
 
         {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
         <div className="shrink-0 space-y-3.5">
-          <OperationsPageHeader
-            eyebrow="Inbound logistics"
-            title="Weigh Bridge"
-            description="Live vehicle intake, ticket status, and GRN handover."
-            icon={Scale}
-            liveLabel="Live intake data"
-            refreshLabel="Updates automatically"
-            onRefresh={fetchTickets}
-            actions={
-              <button
-                onClick={openNewTicketModal}
-                className="inline-flex whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
-              >
-                <Plus className="w-4 h-4" />
-                New WB Ticket
-              </button>
-            }
-          />
-
-          {/* Stats Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white rounded-xl border border-amber-200/80 bg-amber-50/20 p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Open Tickets</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
-                  <Clock className="w-3.5 h-3.5" />
+          <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
+            <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffc36b]">Inbound logistics</span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Live intake connected</span>
                 </div>
+                <h1 className="mt-3 text-2xl font-bold">Weigh Bridge</h1>
+                <p className="mt-1 text-sm text-slate-300">Vehicle weight control before Goods Received Notes and Sage GRV processing.</p>
               </div>
-              <p className="text-xl font-extrabold text-amber-900 mt-1">{openCount}</p>
-              <span className="text-[10px] text-amber-600 font-medium">Ready to link GRN</span>
-            </div>
-
-            <div className="bg-white rounded-xl border border-emerald-200/80 bg-emerald-50/20 p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Linked to GRN</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
-                  <LinkIcon className="w-3.5 h-3.5" />
-                </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchTickets(true)}
+                  className="inline-flex h-12 w-12 items-center justify-center border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20"
+                  title="Refresh weighbridge register"
+                  aria-label="Refresh weighbridge register"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={openNewTicketModal}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-none bg-[#f39200] px-5 text-sm font-bold text-white shadow-lg shadow-black/20 transition-colors hover:bg-[#dc8500]"
+                >
+                  <Plus className="h-5 w-5" />
+                  New WB Ticket
+                </button>
               </div>
-              <p className="text-xl font-extrabold text-emerald-900 mt-1">{linkedCount}</p>
-              <span className="text-[10px] text-emerald-600 font-medium">Stock received</span>
             </div>
-
-            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Today's Weighings</span>
-                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                  <Truck className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-xl font-extrabold text-slate-900 mt-1">{todayCount}</p>
-              <span className="text-[10px] text-slate-400">Trucks weighed today</span>
+            <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Register</p><p className="mt-2 text-3xl font-bold">{tickets.length}</p><p className="mt-1 text-xs text-slate-400">Vehicle tickets</p></div>
+              <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting GRN</p><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{openCount}</p><p className="mt-1 text-xs text-slate-400">Ready to link</p></div>
+              <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Linked to GRN</p><p className="mt-2 text-3xl font-bold text-emerald-300">{linkedCount}</p><p className="mt-1 text-xs text-slate-400">Intake handed over</p></div>
+              <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">This Month</p><p className="mt-2 text-3xl font-bold text-cyan-300">{thisMonthCount}</p><p className="mt-1 text-xs text-slate-400">Vehicles weighed</p></div>
+              <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live intake activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Open {openCount}</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Loader2 className="h-3.5 w-3.5" />Today {todayCount}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Linked {linkedCount}</span></div><p className="mt-2 text-xs text-slate-400">{totalNettMassKg.toLocaleString()} kg recorded</p></div>
             </div>
-
-            <div className="bg-white rounded-xl border border-teal-200/80 bg-teal-50/20 p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Total Weighed Mass</span>
-                <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center text-teal-700">
-                  <Scale className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <p className="text-xl font-extrabold text-teal-900 mt-1">{(totalNettMassKg / 1000).toFixed(2)} <span className="text-xs font-normal text-teal-600">t</span></p>
-              <span className="text-[10px] text-teal-600 font-mono">{totalNettMassKg.toLocaleString()} kg</span>
-            </div>
-          </div>
+          </section>
 
           {/* Search & Filter Bar */}
           <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">

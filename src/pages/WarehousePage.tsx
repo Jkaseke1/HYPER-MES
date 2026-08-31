@@ -235,23 +235,29 @@ export default function WarehousePage() {
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white shadow-sm">
-            <WarehouseIcon className="h-5 w-5" />
-          </div>
+      <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
+        <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Inventory control</p>
-            <h1 className="mt-0.5 text-2xl font-bold text-slate-900">Raw Materials Warehouse</h1>
-            <p className="mt-1 text-sm text-slate-500">Live Sage RM stock, reorder thresholds, and movement history.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffc36b]">Inventory control</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Sage stock synchronized</span>
+            </div>
+            <h1 className="mt-3 text-2xl font-bold">Raw Materials Warehouse</h1>
+            <p className="mt-1 text-sm text-slate-300">Live Sage RM stock, reorder thresholds, and movement history.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex h-12 items-center gap-2 border border-white/20 bg-white/10 px-4 text-xs font-semibold text-slate-100"><Database className="h-4 w-4 text-emerald-300" />Refreshes every 12 sec</span>
+            <button type="button" onClick={() => fetchData(true)} className="inline-flex h-12 w-12 items-center justify-center border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20" title="Refresh Sage RM stock" aria-label="Refresh Sage RM stock"><RefreshCw className="h-5 w-5" /></button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"><span className="h-2 w-2 rounded-full bg-emerald-500" />Live Sage data</span>
-          <span className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600"><Database className="h-3.5 w-3.5 text-slate-400" />Auto-refreshes every 12 sec</span>
-          <button type="button" onClick={() => fetchData()} className="inline-flex h-8 w-8 items-center justify-center border border-slate-300 bg-white text-slate-600 transition-colors hover:border-teal-500 hover:text-teal-700" title="Refresh Sage RM stock" aria-label="Refresh Sage RM stock"><RefreshCw className="h-4 w-4" /></button>
+        <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On-hand value</p><p className="mt-2 text-3xl font-bold">$ {stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-slate-400">Current Sage valuation</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Stock lines</p><p className="mt-2 text-3xl font-bold text-emerald-300">{stats.stockedCount}</p><p className="mt-1 text-xs text-slate-400">Materials on hand</p></div>
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Reorder alerts</p><p className={`mt-2 text-3xl font-bold ${stats.lowCount ? 'text-[#ffc36b]' : 'text-emerald-300'}`}>{stats.lowCount}</p><p className="mt-1 text-xs text-slate-400">At or below threshold</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Tracked materials</p><p className="mt-2 text-3xl font-bold text-cyan-300">{catalogRows.length}</p><p className="mt-1 text-xs text-slate-400">Stocked or managed</p></div>
+          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />RM warehouse 18</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Database className="h-3.5 w-3.5" />Synchronized</span></div><p className="mt-2 text-xs text-slate-400">Sage is the stock authority</p></div>
         </div>
-      </div>
+      </section>
       <div className="flex w-fit gap-1 border border-slate-200 bg-slate-50 p-1">
         {(['stock', 'buffer', 'movements'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === t ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -262,18 +268,6 @@ export default function WarehousePage() {
 
       {tab === 'stock' && (
         <>
-          <section className="overflow-hidden border border-slate-200 bg-white">
-            <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="text-sm font-bold text-slate-900">RM stock position</h2><p className="mt-0.5 text-xs text-slate-500">Warehouse RM (Sage warehouse 18)</p></div>
-              <p className="text-xs font-medium text-slate-500">Last source: Sage stock synchronization</p>
-            </div>
-            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 lg:grid-cols-4 lg:divide-y-0">
-              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">On-hand value</p><p className="mt-2 text-2xl font-bold text-slate-900">$ {stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-slate-500">Current Sage RM valuation</p></div>
-              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stock lines</p><p className="mt-2 text-2xl font-bold text-slate-900">{stats.stockedCount}</p><p className="mt-1 text-xs text-slate-500">Materials with stock on hand</p></div>
-              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reorder alerts</p><p className={`mt-2 text-2xl font-bold ${stats.lowCount ? 'text-rose-600' : 'text-emerald-600'}`}>{stats.lowCount}</p><p className="mt-1 text-xs text-slate-500">At or below their threshold</p></div>
-              <div className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tracked materials</p><p className="mt-2 text-2xl font-bold text-slate-900">{catalogRows.length}</p><p className="mt-1 text-xs text-slate-500">Stocked or threshold-managed</p></div>
-            </div>
-          </section>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
             <div className={`border-l-4 p-5 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
               <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Replenishment watch</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Restock immediately' : stockHealth.low.length ? 'Reorder attention needed' : 'Stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Set each material's reorder point directly in the stock register.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>
