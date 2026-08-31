@@ -205,6 +205,10 @@ async function processPendingEvents() {
         updated_at: new Date().toISOString(),
       };
 
+      if (event.retried_at) {
+        successUpdate.resolved_at = new Date().toISOString();
+      }
+
       if (handlerResult?.message) successUpdate.message = handlerResult.message;
       if (handlerResult?.sage_response) successUpdate.sage_response = handlerResult.sage_response;
       if (handlerResult?.details) successUpdate.details = handlerResult.details;
@@ -281,6 +285,14 @@ async function processPendingEvents() {
             statusCode: err.statusCode || null,
             response: err.response || null,
           },
+          last_failed_at: new Date().toISOString(),
+          last_failure_message: err.message,
+          last_failure_details: {
+            message: err.message,
+            statusCode: err.statusCode || null,
+            response: err.response || null,
+          },
+          resolved_at: null,
           retry_count:   (event.retry_count || 0) + 1,
           next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           updated_at:    new Date().toISOString(),

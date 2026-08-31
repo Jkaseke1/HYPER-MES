@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
@@ -5,67 +6,67 @@ import LoginPage from './pages/LoginPage';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import LiveDataUpdates from './components/system/LiveDataUpdates';
 
-// Eager imports for 100% Offline PWA Compatibility (prevents dynamic import fetch errors when offline)
-import DashboardPage from './pages/DashboardPage';
-import RawMaterialsPage from './pages/RawMaterialsPage';
-import GoodsReceivedPage from './pages/GoodsReceivedPage';
-import QualityInspectionPage from './pages/QualityInspectionPage';
-import FormulationsPage from './pages/FormulationsPage';
-import ProductionPlanningPage from './pages/ProductionPlanningPage';
-import ProductionOrdersPage from './pages/ProductionOrdersPage';
-import WarehousePage from './pages/WarehousePage';
-import DispatchPage from './pages/DispatchPage';
-import ReconciliationPage from './pages/ReconciliationPage';
-import SyncLogPage from './pages/SyncLogPage';
-import ProductionReportPage from './pages/ProductionReportPage';
-import RawMaterialsReportPage from './pages/RawMaterialsReportPage';
-import LabourCostReportPage from './pages/LabourCostReportPage';
-import SimpleTestPage from './pages/SimpleTestPage';
-import DispatchPlanningPage from './pages/DispatchPlanningPage';
-import DailyProductionReportPage from './pages/DailyProductionReportPage';
-import MaterialTransferPage from './pages/MaterialTransferPage';
-import RMCostRegisterPage from './pages/RMCostRegisterPage';
-import MonthlyRMReconciliationPage from './pages/MonthlyRMReconciliationPage';
-import GrossMarginReportPage from './pages/GrossMarginReportPage';
-import MacropackManufacturingPage from './pages/MacropackManufacturingPage';
-import RMStockDashboardPage from './pages/RMStockDashboardPage';
-import RMReceiptsMatrixPage from './pages/RMReceiptsMatrixPage';
-import RMIssuesMatrixPage from './pages/RMIssuesMatrixPage';
-import RMHistoryPage from './pages/RMHistoryPage';
-import ShiftReportsPage from './pages/ShiftReportsPage';
-import ProductionEfficiencyDashboardPage from './pages/ProductionEfficiencyDashboardPage';
-import ReportsPage from './pages/ReportsPage';
-import SettingsPage from './pages/SettingsPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import WeighBridgePage from './pages/WeighBridgePage';
-import FinishedGoodsPage from './pages/FinishedGoodsPage';
-import ProductionWarehousePage from './pages/ProductionWarehousePage';
-import ProcessLossReportPage from './pages/ProcessLossReportPage';
-import ChickDistributionPage from './pages/ChickDistributionPage';
-import ChickHubPage from './pages/ChickHubPage';
-import ChickPurchaseOrders from './pages/chick/ChickPurchaseOrders';
-import ChickNightIntake from './pages/chick/ChickNightIntake';
-import ChickDeliveryDeclaration from './pages/chick/ChickDeliveryDeclaration';
-import ChickInvoiceCapture from './pages/chick/ChickInvoiceCapture';
-import FleetManagementPage from './pages/FleetManagementPage';
-import ChickReconciliationPage from './pages/chick/ChickReconciliationPage';
-import StockTakePage from './pages/StockTakePage';
-import StockTakeDetailPage from './pages/StockTakeDetailPage';
-import MaintenanceSparesPage from './pages/maintenance/MaintenanceSparesPage';
-import MaintenanceTransactionsPage from './pages/maintenance/MaintenanceTransactionsPage';
-import MaintenanceLowStockPage from './pages/maintenance/MaintenanceLowStockPage';
-import MaintenanceWorkOrdersPage from './pages/maintenance/MaintenanceWorkOrdersPage';
-import MaintenancePMSchedulesPage from './pages/maintenance/MaintenancePMSchedulesPage';
-import TempWorkersPage from './pages/payroll/TempWorkersPage';
-import WorkerAttendancePage from './pages/payroll/WorkerAttendancePage';
-import PayrollProcessingPage from './pages/payroll/PayrollProcessingPage';
-import PaymentHistoryPage from './pages/payroll/PaymentHistoryPage';
-import SagePostingReviewPage from './pages/SagePostingReviewPage';
-import PlantIntegrationHubPage from './pages/PlantIntegrationHubPage';
-import ManagementReportingPage from './pages/ManagementReportingPage';
-import ProductionControlCentrePage from './pages/ProductionControlCentrePage';
-import MacropackReconciliationReportPage from './pages/MacropackReconciliationReportPage';
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const RawMaterialsPage = lazy(() => import('./pages/RawMaterialsPage'));
+const GoodsReceivedPage = lazy(() => import('./pages/GoodsReceivedPage'));
+const QualityInspectionPage = lazy(() => import('./pages/QualityInspectionPage'));
+const FormulationsPage = lazy(() => import('./pages/FormulationsPage'));
+const ProductionPlanningPage = lazy(() => import('./pages/ProductionPlanningPage'));
+const ProductionOrdersPage = lazy(() => import('./pages/ProductionOrdersPage'));
+const WarehousePage = lazy(() => import('./pages/WarehousePage'));
+const DispatchPage = lazy(() => import('./pages/DispatchPage'));
+const ReconciliationPage = lazy(() => import('./pages/ReconciliationPage'));
+const SyncLogPage = lazy(() => import('./pages/SyncLogPage'));
+const ProductionReportPage = lazy(() => import('./pages/ProductionReportPage'));
+const RawMaterialsReportPage = lazy(() => import('./pages/RawMaterialsReportPage'));
+const LabourCostReportPage = lazy(() => import('./pages/LabourCostReportPage'));
+const SimpleTestPage = lazy(() => import('./pages/SimpleTestPage'));
+const DispatchPlanningPage = lazy(() => import('./pages/DispatchPlanningPage'));
+const DailyProductionReportPage = lazy(() => import('./pages/DailyProductionReportPage'));
+const MaterialTransferPage = lazy(() => import('./pages/MaterialTransferPage'));
+const RMCostRegisterPage = lazy(() => import('./pages/RMCostRegisterPage'));
+const MonthlyRMReconciliationPage = lazy(() => import('./pages/MonthlyRMReconciliationPage'));
+const GrossMarginReportPage = lazy(() => import('./pages/GrossMarginReportPage'));
+const MacropackManufacturingPage = lazy(() => import('./pages/MacropackManufacturingPage'));
+const RMStockDashboardPage = lazy(() => import('./pages/RMStockDashboardPage'));
+const RMReceiptsMatrixPage = lazy(() => import('./pages/RMReceiptsMatrixPage'));
+const RMIssuesMatrixPage = lazy(() => import('./pages/RMIssuesMatrixPage'));
+const RMHistoryPage = lazy(() => import('./pages/RMHistoryPage'));
+const ShiftReportsPage = lazy(() => import('./pages/ShiftReportsPage'));
+const ProductionEfficiencyDashboardPage = lazy(() => import('./pages/ProductionEfficiencyDashboardPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
+const WeighBridgePage = lazy(() => import('./pages/WeighBridgePage'));
+const FinishedGoodsPage = lazy(() => import('./pages/FinishedGoodsPage'));
+const ProductionWarehousePage = lazy(() => import('./pages/ProductionWarehousePage'));
+const ProcessLossReportPage = lazy(() => import('./pages/ProcessLossReportPage'));
+const ChickDistributionPage = lazy(() => import('./pages/ChickDistributionPage'));
+const ChickHubPage = lazy(() => import('./pages/ChickHubPage'));
+const ChickPurchaseOrders = lazy(() => import('./pages/chick/ChickPurchaseOrders'));
+const ChickNightIntake = lazy(() => import('./pages/chick/ChickNightIntake'));
+const ChickDeliveryDeclaration = lazy(() => import('./pages/chick/ChickDeliveryDeclaration'));
+const ChickInvoiceCapture = lazy(() => import('./pages/chick/ChickInvoiceCapture'));
+const FleetManagementPage = lazy(() => import('./pages/FleetManagementPage'));
+const ChickReconciliationPage = lazy(() => import('./pages/chick/ChickReconciliationPage'));
+const StockTakePage = lazy(() => import('./pages/StockTakePage'));
+const StockTakeDetailPage = lazy(() => import('./pages/StockTakeDetailPage'));
+const MaintenanceSparesPage = lazy(() => import('./pages/maintenance/MaintenanceSparesPage'));
+const MaintenanceTransactionsPage = lazy(() => import('./pages/maintenance/MaintenanceTransactionsPage'));
+const MaintenanceLowStockPage = lazy(() => import('./pages/maintenance/MaintenanceLowStockPage'));
+const MaintenanceWorkOrdersPage = lazy(() => import('./pages/maintenance/MaintenanceWorkOrdersPage'));
+const MaintenancePMSchedulesPage = lazy(() => import('./pages/maintenance/MaintenancePMSchedulesPage'));
+const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
+const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
+const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
+const PaymentHistoryPage = lazy(() => import('./pages/payroll/PaymentHistoryPage'));
+const SagePostingReviewPage = lazy(() => import('./pages/SagePostingReviewPage'));
+const PlantIntegrationHubPage = lazy(() => import('./pages/PlantIntegrationHubPage'));
+const ManagementReportingPage = lazy(() => import('./pages/ManagementReportingPage'));
+const ProductionControlCentrePage = lazy(() => import('./pages/ProductionControlCentrePage'));
+const MacropackReconciliationReportPage = lazy(() => import('./pages/MacropackReconciliationReportPage'));
 import { canAccessPath, defaultPathForRole } from './lib/roleAccess';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -108,6 +109,14 @@ export default function App() {
       <AuthProvider>
         <HashRouter>
           <Toaster position="top-right" />
+          <LiveDataUpdates />
+          <Suspense
+            fallback={
+              <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+              </div>
+            }
+          >
           <Routes>
             <Route
               path="/login"
@@ -188,6 +197,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </HashRouter>
       </AuthProvider>
     </ErrorBoundary>

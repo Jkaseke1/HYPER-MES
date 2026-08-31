@@ -22,6 +22,8 @@ interface WBTicket {
   product_name: string;
   supplier_id: string;
   supplier_name?: string;
+  unregistered_supplier_name?: string;
+  finance_note?: string;
   trailer_number: string;
   time_in: string;
   time_out: string;
@@ -42,6 +44,8 @@ const emptyWBForm = {
   wb_product_code: '',
   wb_product_name: '',
   wb_supplier_id: '',
+  wb_unregistered_supplier_name: '',
+  wb_finance_note: '',
   wb_comment: '',
   wb_trailer_number: '',
   wb_driver_name: '',
@@ -144,8 +148,8 @@ export default function WeighBridgePage() {
       alert('Product is required before saving a weighbridge ticket.');
       return;
     }
-    if (!form.wb_supplier_id) {
-      alert('Supplier is required before saving a weighbridge ticket.');
+    if (!form.wb_supplier_id && !form.wb_unregistered_supplier_name.trim()) {
+      alert('Select a supplier, or record the supplier name for Finance.');
       return;
     }
     setSaving(true);
@@ -159,6 +163,8 @@ export default function WeighBridgePage() {
         product_code: form.wb_product_code,
         product_name: form.wb_product_name,
         supplier_id: form.wb_supplier_id || null,
+        unregistered_supplier_name: form.wb_unregistered_supplier_name.trim() || null,
+        finance_note: form.wb_finance_note.trim() || null,
         trailer_number: form.wb_trailer_number,
         time_in: form.wb_time_in || null,
         time_out: form.wb_time_out || null,
@@ -389,7 +395,7 @@ export default function WeighBridgePage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-slate-600 font-medium">{(t as any).suppliers?.name || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600 font-medium">{(t as any).suppliers?.name || t.unregistered_supplier_name || '—'}</td>
                         <td className="px-5 py-3.5 text-slate-700 text-xs font-medium">{(t as any).created_by_user?.full_name || (t as any).created_by_user?.email || '—'}</td>
                         <td className="px-5 py-3.5 text-right font-extrabold text-slate-900 font-mono text-sm">
                           {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
@@ -567,8 +573,18 @@ export default function WeighBridgePage() {
               <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1 text-xs">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product / Raw Material</span>
                 <p className="font-extrabold text-slate-900 text-sm">{viewTicket.product_name || '—'} <span className="font-mono font-bold text-blue-700">({viewTicket.product_code || '—'})</span></p>
-                <p className="text-[11px] text-slate-500">Supplier: {(viewTicket as any).suppliers?.name || '—'}</p>
+                <p className="text-[11px] text-slate-500">Supplier: {(viewTicket as any).suppliers?.name || viewTicket.unregistered_supplier_name || '—'}</p>
+                {!viewTicket.supplier_id && viewTicket.unregistered_supplier_name && (
+                  <p className="text-[11px] font-semibold text-amber-700">Finance follow-up required before GRN linking</p>
+                )}
               </div>
+
+              {viewTicket.finance_note && (
+                <div className="bg-blue-50 p-3 rounded-2xl border border-blue-200 text-xs text-blue-900">
+                  <span className="font-bold uppercase tracking-wider text-[10px] text-blue-700 block mb-0.5">Finance Follow-up</span>
+                  {viewTicket.finance_note}
+                </div>
+              )}
 
               {/* Comment */}
               {viewTicket.comment && (

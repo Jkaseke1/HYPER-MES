@@ -13,6 +13,12 @@ interface SyncLog {
   details?: any;
   sage_response?: any;
   error_details?: any;
+  last_failed_at?: string | null;
+  last_failure_message?: string | null;
+  last_failure_details?: any;
+  retried_at?: string | null;
+  retry_requested_by?: string | null;
+  resolved_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,14 +95,7 @@ export default function SyncLogPage() {
   async function retrySync(logId: string) {
     setRetrying(prev => new Set(prev).add(logId));
     try {
-      const { error } = await supabase
-        .from('sync_log')
-        .update({ 
-          status: 'pending', 
-          error_details: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', logId);
+      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: logId });
 
       if (error) throw error;
       
@@ -271,6 +270,7 @@ export default function SyncLogPage() {
                   const StatusIcon = currentStatusConfig.icon;
                   const isExpanded = expandedErrors.has(log.id);
                   const isRetrying = retrying.has(log.id);
+                  const isResolvedRetry = log.status === 'success' && !!log.retried_at && !!log.resolved_at;
 
                   return (
                     <React.Fragment key={log.id}>
@@ -290,12 +290,18 @@ export default function SyncLogPage() {
                           <div className="flex items-center gap-2">
                             <StatusIcon className={`w-4 h-4 text-${currentStatusConfig.color}-600`} />
                             <span className={`text-xs font-medium text-${currentStatusConfig.color}-700`}>
-                              {currentStatusConfig.label}
+                              {isResolvedRetry ? 'Retried successfully' : currentStatusConfig.label}
                             </span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <p className="text-sm text-slate-700">{logMessage(log)}</p>
+                          {isResolvedRetry && (
+                            <p className="mt-1 text-xs font-semibold text-emerald-700">Resolved {new Date(log.resolved_at as string).toLocaleString()} after retry</p>
+                          )}
+                          {log.last_failure_message && (
+                            <p className="mt-1 text-xs text-slate-500">Previous failure: {log.last_failure_message}</p>
+                          )}
                           {log.event_type === 'material_transfer_to_production' && log.status === 'success' && (
                             <p className="mt-1 text-xs font-semibold text-emerald-700">
                               Sage warehouse transfer confirmed
@@ -319,7 +325,7 @@ export default function SyncLogPage() {
                                 Retry
                               </button>
                             )}
-                            {(log.error_details || log.sage_response || log.details) && (
+                            {(log.error_details || log.last_failure_details || log.sage_response || log.details) && (
                               <button
                                 onClick={() => toggleErrorExpansion(log.id)}
                                 className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
@@ -331,7 +337,7 @@ export default function SyncLogPage() {
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && (log.error_details || log.sage_response || log.details) && (
+                      {isExpanded && (log.error_details || log.last_failure_details || log.sage_response || log.details) && (
                         <tr className={log.status === 'failed' ? 'bg-red-50' : 'bg-emerald-50'}>
                           <td colSpan={6} className="px-4 py-3">
                             <div className="space-y-2">
@@ -339,6 +345,12 @@ export default function SyncLogPage() {
                                 <>
                                   <p className="text-xs font-semibold text-red-700">Error Details:</p>
                                   <pre className="text-xs text-red-600 bg-red-100 p-2 rounded overflow-x-auto">{formatJson(log.error_details)}</pre>
+                                </>
+                              )}
+                              {log.last_failure_details && (
+                                <>
+                                  <p className="text-xs font-semibold text-amber-700">Previous Failure:</p>
+                                  <pre className="text-xs text-amber-700 bg-amber-100 p-2 rounded overflow-x-auto">{formatJson(log.last_failure_details)}</pre>
                                 </>
                               )}
                               {log.sage_response && (

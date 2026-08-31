@@ -6,22 +6,32 @@ import { useAuth } from '../../context/AuthContext';
 interface GRNApprovalButtonsProps {
   grnId: string;
   currentStatus: string;
+  vatMode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | null;
+  vatReviewedAt?: string | null;
   onApproved: () => void;
   onRejected: () => void;
+  onTaxReviewed?: (vatMode: 'exclusive' | 'inclusive' | 'no_vat') => void;
   className?: string;
 }
 
 export default function GRNApprovalButtons({
   grnId,
   currentStatus,
+  vatMode = 'pending_finance',
+  vatReviewedAt = null,
   onApproved,
   onRejected,
+  onTaxReviewed,
   className = ''
 }: GRNApprovalButtonsProps) {
   const { profile } = useAuth();
   const [processing, setProcessing] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showVatModal, setShowVatModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [selectedVatMode, setSelectedVatMode] = useState<'exclusive' | 'inclusive' | 'no_vat'>(
+    vatMode === 'inclusive' || vatMode === 'no_vat' ? vatMode : 'exclusive'
+  );
 
   // Single-step approval: Finance, Accountant, or Admin can approve
   const canApprove = (
@@ -45,20 +55,11 @@ export default function GRNApprovalButtons({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Single-step approval: pending → approved
-      const updateData = {
-        status: 'approved',
-        approved_by: user.id,
-        approved_at: new Date().toISOString()
-      };
+      const { error: approvalError } = await supabase.rpc('approve_grn_and_queue', {
+        p_grn_id: grnId,
+      });
 
-      // Update GRN status
-      const { error: updateError } = await supabase
-        .from('goods_received_notes')
-        .update(updateData)
-        .eq('id', grnId);
-
-      if (updateError) throw updateError;
+      if (approvalError) throw approvalError;
 
       // Auto-create rm_cost_register entries when GRN is approved
       try {
@@ -114,21 +115,6 @@ export default function GRNApprovalButtons({
           }
         }
 
-        // Write sync_log entry for bridge worker to pick up (Sage integration)
-        const { error: syncError } = await supabase
-          .from('sync_log')
-          .insert({
-            event_type: 'grn_confirmed',
-            reference_type: 'goods_received_notes',
-            reference_id: grnId,
-            status: 'pending',
-            description: `GRN ${grnNumber} approved by Finance`,
-            created_at: new Date().toISOString(),
-          });
-        if (syncError) {
-          console.warn('sync_log write failed:', syncError.message);
-          // Don't throw — GRN is approved, bridge will need manual retry
-        }
       } catch (costError) {
         console.warn('Failed to auto-create RM cost entries:', costError);
       }
@@ -153,18 +139,12 @@ export default function GRNApprovalButtons({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('User not authenticated');
 
-      // Update GRN status to rejected
-      const { error: updateError } = await supabase
-        .from('goods_received_notes')
-        .update({
-          status: 'rejected',
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-          rejection_reason: rejectionReason
-        })
-        .eq('id', grnId);
+      const { error: rejectionError } = await supabase.rpc('reject_grn', {
+        p_grn_id: grnId,
+        p_reason: rejectionReason,
+      });
 
-      if (updateError) throw updateError;
+      if (rejectionError) throw rejectionError;
 
       setShowRejectModal(false);
       setRejectionReason('');
@@ -177,18 +157,45 @@ export default function GRNApprovalButtons({
     }
   }
 
+  async function handleVatReview() {
+    setProcessing(true);
+    try {
+      const { error } = await supabase.rpc('record_grn_vat_review', {
+        p_grn_id: grnId,
+        p_vat_mode: selectedVatMode,
+      });
+      if (error) throw error;
+
+      setShowVatModal(false);
+      onTaxReviewed?.(selectedVatMode);
+    } catch (error) {
+      console.error('VAT review error:', error);
+      alert('Failed to save the Finance VAT review. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
   return (
     <>
       <div className={`space-y-3 ${className}`}>
         {/* Finance Approval - Single Step */}
         {canApprove && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="p-3 bg-[#0b0b30]/5 border border-[#0b0b30]/15 rounded-lg">
             <p className="text-xs font-semibold text-blue-800 mb-2">Finance Approval Required</p>
             <div className="flex items-center gap-2">
               <button
-                onClick={handleApprove}
+                onClick={() => setShowVatModal(true)}
                 disabled={processing}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0b0b30] hover:bg-[#171750] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Finance VAT Review
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={processing || !vatReviewedAt}
+                title={vatReviewedAt ? undefined : 'Complete the Finance VAT review before approval.'}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#ff9100] hover:bg-[#e67f00] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Approve GRN
@@ -205,6 +212,42 @@ export default function GRNApprovalButtons({
           </div>
         )}
       </div>
+
+      {showVatModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full p-6">
+            <h3 className="text-lg font-bold text-[#0b0b30]">Finance VAT Review</h3>
+            <p className="text-sm text-slate-600 mt-1 mb-5">Raw-material GRNs default to Tax Exclusive using Sage Taxable Input 515 at 15.5%.</p>
+            <div className="space-y-3">
+              {[
+                ['exclusive', 'Tax Exclusive', 'Entered unit costs exclude VAT. VAT is added to the supplier payable.'],
+                ['inclusive', 'Tax Inclusive', 'Entered unit costs include VAT. Sage must calculate the net stock value and VAT portion.'],
+                ['no_vat', 'No VAT', 'Use only for an exempt or zero-rated supplier invoice.'],
+              ].map(([value, label, description]) => (
+                <label key={value} className={`block border rounded-lg p-3 cursor-pointer ${selectedVatMode === value ? 'border-[#ff9100] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input
+                    type="radio"
+                    name="vat-mode"
+                    value={value}
+                    checked={selectedVatMode === value}
+                    onChange={() => setSelectedVatMode(value as 'exclusive' | 'inclusive' | 'no_vat')}
+                    className="mr-2 accent-[#ff9100]"
+                  />
+                  <span className="text-sm font-semibold text-slate-800">{label}</span>
+                  <span className="block ml-5 text-xs text-slate-600 mt-1">{description}</span>
+                </label>
+              ))}
+            </div>
+            {selectedVatMode !== 'no_vat' && (
+              <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>515 Taxable Input</strong> at <strong>15.5%</strong>.</p>
+            )}
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowVatModal(false)} disabled={processing} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
+              <button onClick={handleVatReview} disabled={processing} className="px-4 py-2 text-sm font-medium text-white bg-[#ff9100] hover:bg-[#e67f00] rounded-lg disabled:opacity-50">{processing ? 'Saving...' : 'Save VAT Review'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rejection Modal */}
       {showRejectModal && (

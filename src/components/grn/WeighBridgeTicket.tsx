@@ -9,6 +9,8 @@ interface WeighBridgeData {
   wb_product_code: string;
   wb_product_name: string;
   wb_supplier_id: string;
+  wb_unregistered_supplier_name: string;
+  wb_finance_note: string;
   wb_comment: string;
   wb_trailer_number: string;
   wb_driver_name: string;
@@ -209,10 +211,13 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                   <Field title="Supplier *">
                     <select
                       value={data.wb_supplier_id}
-                      onChange={(e) => onChange('wb_supplier_id', e.target.value)}
+                      onChange={(e) => {
+                        onChange('wb_supplier_id', e.target.value);
+                        if (e.target.value) onChange('wb_unregistered_supplier_name', '');
+                      }}
                       className={input}
                     >
-                      <option value="">Select supplier…</option>
+                      <option value="">Supplier not in system / select supplier…</option>
                       {suppliers.map(sup => (
                         <option key={sup.id} value={sup.id}>
                           {sup.name} ({sup.code})
@@ -220,6 +225,28 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       ))}
                     </select>
                   </Field>
+                  {!data.wb_supplier_id && (
+                    <>
+                      <Field title="Supplier Name for Finance *">
+                        <input
+                          type="text"
+                          value={data.wb_unregistered_supplier_name}
+                          onChange={(e) => onChange('wb_unregistered_supplier_name', e.target.value)}
+                          placeholder="Supplier name as provided at gate"
+                          className={input}
+                        />
+                      </Field>
+                      <Field title="Finance Follow-up">
+                        <input
+                          type="text"
+                          value={data.wb_finance_note}
+                          onChange={(e) => onChange('wb_finance_note', e.target.value)}
+                          placeholder="Contact, invoice, or account setup note"
+                          className={input}
+                        />
+                      </Field>
+                    </>
+                  )}
                   <Field title="Trailer No">
                     <input
                       type="text"

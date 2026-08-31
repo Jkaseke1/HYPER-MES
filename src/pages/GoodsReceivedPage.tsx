@@ -251,6 +251,31 @@ export default function GoodsReceivedPage() {
       return;
     }
 
+    if (weighBridgeTicketId) {
+      const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
+      const linkedMaterial = materials.find((material: any) =>
+        material.id === items[0].raw_material_id
+        && (material.code === ticket?.product_code || material.sage_code === ticket?.product_code),
+      );
+
+      if (!ticket || ticket.status !== 'open') {
+        toast.error('Select an open weighbridge ticket. A linked or cancelled ticket cannot be reused.');
+        return;
+      }
+      if (ticket.supplier_id !== supplierId) {
+        toast.error('The weighbridge ticket supplier must match the GRN supplier.');
+        return;
+      }
+      if (!linkedMaterial) {
+        toast.error('The weighbridge ticket material must match the GRN material.');
+        return;
+      }
+      if (!(Number(ticket.nett_mass) > 0) || !ticket.driver_signed) {
+        toast.error('The linked weighbridge ticket needs a positive nett mass and driver sign-off.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const grnNumber = await generateGRNNumber();
@@ -273,29 +298,13 @@ export default function GoodsReceivedPage() {
         supplier_invoice_no: supplierInvoiceNo.trim() || null,
         supplier_delivery_note_no: supplierDeliveryNoteNo.trim() || null,
         supplier_order_no: supplierOrderNo.trim() || null,
-        external_reference: externalReference.trim() || wbForm.transaction_no || null,
+        external_reference: externalReference.trim() || null,
         received_by: profile?.id,
       };
 
       if (weighBridgeTicketId) {
         grnData.weigh_bridge_ticket_id = weighBridgeTicketId;
       }
-
-      // Add weigh bridge fields if any are filled
-      if (wbForm.transaction_no) grnData.wb_transaction_no = wbForm.transaction_no;
-      if (wbForm.vehicle_reg) grnData.wb_vehicle_reg = wbForm.vehicle_reg;
-      if (wbForm.haulier_code) grnData.wb_haulier_code = wbForm.haulier_code;
-      if (wbForm.product_code) grnData.wb_product_code = wbForm.product_code;
-      if (wbForm.comment) grnData.wb_comment = wbForm.comment;
-      if (wbForm.trailer_number) grnData.wb_trailer_number = wbForm.trailer_number;
-      if (wbForm.driver_name) grnData.wb_driver_name = wbForm.driver_name;
-      if (wbForm.driver_id) grnData.wb_driver_id = wbForm.driver_id;
-      if (wbForm.time_in) grnData.wb_time_in = wbForm.time_in;
-      if (wbForm.first_mass) grnData.wb_first_mass = parseFloat(wbForm.first_mass);
-      if (wbForm.time_out) grnData.wb_time_out = wbForm.time_out;
-      if (wbForm.second_mass) grnData.wb_second_mass = parseFloat(wbForm.second_mass);
-      if (wbForm.nett_mass) grnData.wb_nett_mass = parseFloat(wbForm.nett_mass);
-      grnData.wb_driver_signed = wbForm.driver_signed;
 
       const { data: grn, error: grnError } = await supabase
         .from('goods_received_notes')
@@ -304,11 +313,6 @@ export default function GoodsReceivedPage() {
         .single();
 
       if (grnError) throw grnError;
-
-      // Mark WB ticket as linked if selected
-      if (weighBridgeTicketId) {
-        await supabase.from('weigh_bridge_tickets').update({ status: 'linked' }).eq('id', weighBridgeTicketId);
-      }
 
       // Create GRN items
       const grnItems = items.map(item => ({
@@ -550,16 +554,16 @@ export default function GoodsReceivedPage() {
       <StockTakeFrozenBanner />
       
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#063b3a] p-6 rounded-lg text-white shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0b0b30] p-6 rounded-lg text-white shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full border border-teal-500/30 font-mono font-medium">Inbound Logistics</span>
+            <span className="bg-[#ff9100]/15 text-orange-200 text-xs px-2.5 py-0.5 rounded-full border border-[#ff9100]/40 font-mono font-medium">Hyperfeeds Inbound</span>
             <span className="text-slate-400 text-xs">• Sage Synchronized</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Goods Received Notes</h1>
           <p className="text-slate-300 text-sm mt-1">Capture raw material deliveries & automated Sage GRV postings</p>
         </div>
-        <Button onClick={() => setModalOpen(true)} size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/20 shrink-0">
+        <Button onClick={() => setModalOpen(true)} size="lg" className="bg-[#ff9100] hover:bg-[#e67f00] text-white font-bold shadow-lg shadow-orange-500/20 shrink-0">
           <Plus className="mr-2 h-5 w-5" />
           New GRN Delivery
         </Button>
@@ -734,11 +738,11 @@ export default function GoodsReceivedPage() {
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[1280px] w-[96vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-[1280px] flex flex-col overflow-hidden rounded-xl border border-slate-200 shadow-2xl [&>button.absolute]:hidden">
-          <DialogHeader className="shrink-0 bg-[#063b3a] text-white px-6 py-4 relative border-b border-teal-900">
+          <DialogHeader className="shrink-0 bg-[#0b0b30] text-white px-6 py-4 relative border-b border-[#ff9100]/30">
             <div className="flex items-center justify-between pr-10">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-emerald-500/15 border border-emerald-400/30 rounded-lg flex items-center justify-center">
-                  <Package className="w-5 h-5 text-emerald-300" />
+                <div className="w-10 h-10 bg-[#ff9100]/15 border border-[#ff9100]/35 rounded-lg flex items-center justify-center">
+                  <Package className="w-5 h-5 text-orange-200" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -751,8 +755,8 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-400/20 px-3 py-1.5 rounded-lg text-emerald-300 font-semibold">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div className="flex items-center gap-1.5 bg-[#ff9100]/10 border border-[#ff9100]/25 px-3 py-1.5 rounded-lg text-orange-200 font-semibold">
+                  <div className="w-2 h-2 rounded-full bg-[#ff9100]" />
                   Finance review enabled
                 </div>
               </div>
@@ -897,7 +901,7 @@ export default function GoodsReceivedPage() {
                     </div>
                     <div>
                       <p className="text-base font-extrabold text-slate-900">Weighbridge Evidence</p>
-                      <p className="text-xs text-slate-500 font-medium">Link the truck ticket and verify the nett mass before GRN approval.</p>
+                      <p className="text-xs text-slate-500 font-medium">Optional evidence: tickets are captured in PlantControl Weighbridge and linked here only when they match this GRN.</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -908,8 +912,9 @@ export default function GoodsReceivedPage() {
 
                 {wbExpanded && (
                   <div className="p-5 space-y-5">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
-                      <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Link Existing Ticket</Label>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
+                        <Label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Link Existing Ticket</Label>
+                        <p className="text-xs text-slate-500">This screen cannot create or edit weighbridge tickets. Select a matching open ticket captured in PlantControl.</p>
                       <div className="flex flex-col md:flex-row md:items-center gap-2">
                         <Select
                           value={weighBridgeTicketId}
@@ -990,7 +995,7 @@ export default function GoodsReceivedPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <fieldset disabled className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       {/* Vehicle & Driver */}
                       <div className="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
                         <div className="bg-white border-b border-slate-200 px-4 py-3">
@@ -1072,7 +1077,7 @@ export default function GoodsReceivedPage() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </fieldset>
                   </div>
                 )}
               </div>
@@ -1265,7 +1270,7 @@ export default function GoodsReceivedPage() {
               <button
                 onClick={handleSaveGRN}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#ff9100] hover:bg-[#e67f00] rounded-xl shadow-sm transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
@@ -1370,8 +1375,18 @@ export default function GoodsReceivedPage() {
               <GRNApprovalButtons
                 grnId={viewing.id}
                 currentStatus={viewing.status}
+                vatMode={(viewing as any).vat_mode}
+                vatReviewedAt={(viewing as any).vat_reviewed_at}
                 onApproved={() => { setViewModalOpen(false); fetchData(); }}
                 onRejected={() => { setViewModalOpen(false); fetchData(); }}
+                onTaxReviewed={(vatMode) => {
+                  setViewing((current) => current ? {
+                    ...current,
+                    vat_mode: vatMode,
+                    vat_reviewed_at: new Date().toISOString(),
+                  } as any : current);
+                  fetchData();
+                }}
               />
             </div>
           )}

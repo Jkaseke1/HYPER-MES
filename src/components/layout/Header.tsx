@@ -20,9 +20,12 @@ interface SageQueueItem {
   id: string;
   event_type: string;
   reference_id: string | null;
-  status: 'pending' | 'processing' | 'failed';
+  status: 'pending' | 'processing' | 'failed' | 'success';
   message: string | null;
   updated_at: string;
+  last_failure_message?: string | null;
+  retried_at?: string | null;
+  resolved_at?: string | null;
 }
 
 interface IncomingProductionTransfer {
@@ -256,17 +259,23 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     async function loadSageQueue() {
       const { data, error } = await supabase
         .from('sync_log')
-        .select('id, event_type, reference_id, status, message, updated_at')
-        .in('status', ['pending', 'processing', 'failed'])
+        .select('id, event_type, reference_id, status, message, updated_at, last_failure_message, retried_at, resolved_at')
+        .in('status', ['pending', 'processing', 'failed', 'success'])
         .order('updated_at', { ascending: false })
-        .limit(8);
+        .limit(40);
 
       if (error) {
         console.warn('Unable to load Sage posting queue:', error.message);
         return;
       }
       if (!isMounted) return;
-      setSageQueue((data || []) as SageQueueItem[]);
+      const resolvedCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      setSageQueue((data || [])
+        .filter((item: SageQueueItem) =>
+          item.status !== 'success' ||
+          (!!item.retried_at && !!item.resolved_at && new Date(item.resolved_at).getTime() >= resolvedCutoff)
+        )
+        .slice(0, 8) as SageQueueItem[]);
       setLoadingSageQueue(false);
     }
 
@@ -552,22 +561,30 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                 {sageQueue.map((item) => {
                   const isPosting = item.status === 'processing';
                   const isFailed = item.status === 'failed';
+                  const isResolvedRetry = item.status === 'success' && !!item.retried_at && !!item.resolved_at;
                   return (
-                    <div key={item.id} className={`rounded-lg border p-2 ${
-                      isFailed ? 'border-rose-200 bg-rose-50' : isPosting ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'
-                    }`}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        navigate('/sync-log');
+                      }}
+                      className={`w-full rounded-lg border p-2 text-left transition-colors ${
+                        isFailed ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : isResolvedRetry ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : isPosting ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' : 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+                      }`}>
                       <div className="flex items-center justify-between gap-2 text-xs mb-1">
                         <span className={`inline-flex items-center gap-1 font-semibold ${
-                          isFailed ? 'text-rose-700' : isPosting ? 'text-blue-700' : 'text-amber-700'
+                          isFailed ? 'text-rose-700' : isResolvedRetry ? 'text-emerald-700' : isPosting ? 'text-blue-700' : 'text-amber-700'
                         }`}>
-                          {isPosting ? <Loader2 className="h-3 w-3 animate-spin" /> : isFailed ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                          {isPosting ? 'POSTING TO SAGE' : isFailed ? 'SAGE FAILED' : 'QUEUED FOR SAGE'}
+                          {isPosting ? <Loader2 className="h-3 w-3 animate-spin" /> : isFailed ? <AlertTriangle className="h-3 w-3" /> : isResolvedRetry ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                          {isPosting ? 'POSTING TO SAGE' : isFailed ? 'SAGE FAILED' : isResolvedRetry ? 'RETRY SUCCEEDED' : 'QUEUED FOR SAGE'}
                         </span>
                         <span className="text-slate-400">{formatDate(item.updated_at)}</span>
                       </div>
                       <p className="text-sm font-medium text-slate-700">{sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ')}</p>
-                      <p className="text-xs text-slate-600 line-clamp-2">{item.message || 'Waiting for Sage bridge.'}</p>
-                    </div>
+                      <p className="text-xs text-slate-600 line-clamp-2">{isResolvedRetry ? `Resolved after retry. Previous issue: ${item.last_failure_message || 'Sage failure recorded.'}` : item.message || 'Waiting for Sage bridge.'}</p>
+                    </button>
                   );
                 })}
                 {loadingNotifications && (

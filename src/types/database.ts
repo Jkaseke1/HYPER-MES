@@ -110,6 +110,7 @@ export interface GoodsReceivedNote {
   grn_number: string;
   supplier_id: string | null;
   warehouse_id: string | null;
+  weigh_bridge_ticket_id?: string | null;
   received_date: string;
   weigh_bridge_ticket_no?: string | null;
   weigh_bridge_ticket_date?: string | null;
@@ -124,6 +125,12 @@ export interface GoodsReceivedNote {
   supplier_delivery_note_no?: string | null;
   supplier_order_no?: string | null;
   external_reference?: string | null;
+  vat_mode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | null;
+  vat_tax_type_id?: number | null;
+  vat_code?: string | null;
+  vat_rate?: number | null;
+  vat_reviewed_by?: string | null;
+  vat_reviewed_at?: string | null;
   status: 'pending' | 'rm_approved' | 'approved' | 'rejected' | 'inspecting';
   notes: string;
   received_by: string | null;
