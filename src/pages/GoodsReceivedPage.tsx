@@ -51,6 +51,14 @@ const emptyItem: GRNItem = {
 
 const localDateInputValue = () => format(new Date(), 'yyyy-MM-dd');
 
+function formatMoney(value: number | string | null | undefined) {
+  const amount = Number(value || 0);
+  const roundedToCents = Math.round(amount * 100) / 100;
+  return Math.abs(amount - roundedToCents) < 0.000001
+    ? amount.toFixed(2)
+    : amount.toFixed(4);
+}
+
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
@@ -99,8 +107,8 @@ export default function GoodsReceivedPage() {
     driver_signed: false,
   });
 
-  async function fetchData() {
-    setLoading(true);
+  async function fetchData(showLoading = true) {
+    if (showLoading) setLoading(true);
     try {
       const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
         supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name)').order('created_at', { ascending: false }),
@@ -155,7 +163,7 @@ export default function GoodsReceivedPage() {
       if (cachedMaterials) setMaterials(cachedMaterials);
       if (cachedWb) setWbTickets(cachedWb);
     }
-    setLoading(false);
+    if (showLoading) setLoading(false);
   }
 
   useEffect(() => {
@@ -165,7 +173,11 @@ export default function GoodsReceivedPage() {
   useRealtimeRefresh(
     'goods-received-live',
     ['goods_received_notes', 'grn_items', 'weigh_bridge_tickets', 'sync_log'],
-    fetchData,
+    () => {
+      // Do not replace an operator's active capture or review with live data.
+      if (modalOpen || viewModalOpen) return;
+      return fetchData(false);
+    },
   );
 
   useEffect(() => {
@@ -1116,7 +1128,7 @@ export default function GoodsReceivedPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
                             <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
-                            <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">${((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0)).toFixed(4)}</span>
+                            <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
                           </div>
                           {items.length > 1 && (
                             <button
@@ -1567,7 +1579,7 @@ export default function GoodsReceivedPage() {
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
                           <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">${Number(item.unit_cost || 0).toFixed(4)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${(item.received_qty * item.unit_cost).toFixed(4)}</TableCell>
+                          <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${formatMoney(item.received_qty * item.unit_cost)}</TableCell>
                           <TableCell className="text-xs text-slate-600 py-2 px-3">
                             {item.batch_number ? (
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-mono">{item.batch_number}</span>
