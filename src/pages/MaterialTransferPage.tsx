@@ -711,7 +711,7 @@ export default function MaterialTransferPage() {
                             const bal = rmWarehouseBalances[mat.id] ?? 0;
                             return (
                               <option key={mat.id} value={mat.id}>
-                                {mat.name} ({mat.code}) — Sage RM: {bal.toLocaleString()} {mat.unit}
+                                {mat.name} ({mat.code}) — Sage RM available now: {bal.toLocaleString()} {mat.unit}
                               </option>
                             );
                           })}
@@ -731,6 +731,11 @@ export default function MaterialTransferPage() {
                         />
                         {line.raw_material_id && insufficient && (
                           <p className="text-[10px] text-red-600 font-bold mt-0.5">⚠ Exceeds RM Stock ({rmBalance.toLocaleString()} {material?.unit})</p>
+                        )}
+                        {line.raw_material_id && !insufficient && (
+                          <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                            Sage RM now {rmBalance.toLocaleString()} {material?.unit}; after receipt: {(rmBalance - Number(line.quantity || 0)).toLocaleString()} {material?.unit}
+                          </p>
                         )}
                       </div>
                       <div className="col-span-1 flex items-center justify-center pt-4">

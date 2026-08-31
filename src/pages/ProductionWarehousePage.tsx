@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, TrendingDown, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
-import StatCard from '../components/ui/StatCard';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import toast from 'react-hot-toast';
 
 interface TransferRow {
@@ -255,7 +253,25 @@ export default function ProductionWarehousePage() {
 
   useEffect(() => {
     const signature = [...stockHealth.critical, ...stockHealth.low].map((m) => `${m.raw_material_id}:${m.sage_pd_quantity}`).join('|');
-    if (signature && signature !== lastAlertSignature) toast.error(`${stockHealth.critical.length ? `${stockHealth.critical.length} critical, ` : ''}${stockHealth.low.length} low Production stock alert${stockHealth.low.length === 1 ? '' : 's'} need attention.`, { duration: 7000 });
+    if (signature && signature !== lastAlertSignature) {
+      const total = stockHealth.critical.length + stockHealth.low.length;
+      toast.custom((notification) => (
+        <div className="flex w-[360px] items-start gap-3 border border-amber-200 bg-white p-4 shadow-xl" role="status">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-amber-100 text-amber-700">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-900">Production stock needs attention</p>
+            <p className="mt-0.5 text-xs leading-5 text-slate-600">
+              {stockHealth.critical.length > 0 ? `${stockHealth.critical.length} critical` : `${total} below minimum`} in Production Warehouse.
+            </p>
+          </div>
+          <button type="button" onClick={() => toast.dismiss(notification.id)} className="p-1 text-slate-400 hover:text-slate-700" aria-label="Dismiss stock alert">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ), { duration: 8000, position: 'top-right' });
+    }
     setLastAlertSignature(signature);
   }, [stockHealth, lastAlertSignature]);
 
@@ -287,11 +303,14 @@ export default function ProductionWarehousePage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Production Warehouse</h1>
-          <p className="text-sm text-slate-500 mt-1">Raw materials transferred to the production floor — visible to production team</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900">Production Warehouse</h1>
+            <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"><Radio className="h-3 w-3" /> Live</span>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Receive materials from the holding bay and monitor the Sage Production balance.</p>
         </div>
         <button
           onClick={() => fetchTransfers()}
@@ -303,7 +322,7 @@ export default function ProductionWarehousePage() {
       </div>
 
       {receiptNotice && (
-        <div className={`flex items-start justify-between gap-4 border px-4 py-3 text-sm ${receiptNotice.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-200 bg-red-50 text-red-900'}`}>
+        <div className={`flex items-start justify-between gap-4 border-l-4 px-4 py-3 text-sm shadow-sm ${receiptNotice.tone === 'success' ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-rose-500 bg-rose-50 text-rose-900'}`}>
           <div className="flex items-start gap-2">
             {receiptNotice.tone === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />}
             <span className="font-medium">{receiptNotice.message}</span>
@@ -314,8 +333,8 @@ export default function ProductionWarehousePage() {
 
       {/* Live RM inbox for Production receiving */}
       {pendingAcceptanceTransfers.length > 0 && (
-        <section className="border border-teal-200 bg-teal-50/70">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-200 bg-white px-5 py-4">
+        <section className="border border-teal-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
                 <Truck className="h-5 w-5" />
@@ -325,7 +344,7 @@ export default function ProductionWarehousePage() {
                   <h2 className="text-base font-bold text-slate-900">Incoming from Raw Materials</h2>
                   <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
                 </div>
-                <p className="mt-0.5 text-sm text-slate-600">Confirm physical receipt from the Holding Bay into Production Warehouse 19.</p>
+                <p className="mt-0.5 text-sm text-slate-600">Awaiting confirmation into Production Warehouse 19.</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -420,25 +439,17 @@ export default function ProductionWarehousePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Materials on Floor" value={totalMaterials} icon={Boxes} color="teal" />
-        <StatCard title="Sage PD Available" value={`${totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`} icon={Package} color="emerald" />
-        <StatCard title="MES Floor Ledger" value={`${totalMesLedgerQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`} icon={Package} color="blue" />
-        <StatCard title="Transfers (last 7 days)" value={recentCount} icon={TrendingDown} color="emerald" />
-      </div>
+      <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Materials on floor</p><p className="mt-1 text-2xl font-bold text-slate-900">{totalMaterials}</p></div>
+        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><p className="mt-1 text-2xl font-bold text-emerald-700">{totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm">kg</span></p></div>
+        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">MES floor ledger</p><p className="mt-1 text-2xl font-bold text-slate-900">{totalMesLedgerQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">kg</span></p></div>
+        <div className="bg-white px-5 py-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Transfers this week</p><p className="mt-1 text-2xl font-bold text-slate-900">{recentCount}</p></div>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className={`border p-5 ${stockHealth.critical.length ? 'border-rose-200 bg-rose-50' : stockHealth.low.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Production floor replenishment</p><h2 className="mt-1 text-lg font-bold text-slate-900">{stockHealth.critical.length ? 'Material handover needed now' : stockHealth.low.length ? 'Production stock is nearing minimum' : 'Production stock position healthy'}</h2><p className="mt-1 text-sm text-slate-600">Production has its own minimum levels, separate from RM warehouse thresholds.</p></div><AlertTriangle className={`h-6 w-6 shrink-0 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /></div>{(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="mt-4 flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 6).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}</div>
-        <div className="border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor stock health</p><div className="mt-2 h-32"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Healthy', value: Math.max(0, stockHealth.healthy) }, { name: 'Low', value: stockHealth.low.length }, { name: 'Critical', value: stockHealth.critical.length }]} dataKey="value" nameKey="name" innerRadius={32} outerRadius={52} paddingAngle={3}><Cell fill="#10b981" /><Cell fill="#f59e0b" /><Cell fill="#ef4444" /></Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="flex justify-between text-[11px] text-slate-500"><span>Healthy {stockHealth.healthy}</span><span>Low {stockHealth.low.length}</span><span>Critical {stockHealth.critical.length}</span></div></div>
-      </div>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
-        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-amber-800">
-          <strong>Sage PD Available</strong> is the primary Sage warehouse 19 total and updates when the bridge completes a stock sync.
-          <strong> MES Floor Ledger</strong> is an internal operational reconciliation total. Last Sage PD sync: {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM yyyy HH:mm:ss') : 'awaiting first sync'}.
-        </p>
-      </div>
+      <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
+        <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Sage Production 19 last synced {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
+        {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
+      </section>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
