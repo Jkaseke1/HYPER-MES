@@ -343,7 +343,18 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     loadSageQueue();
     const channel = supabase
       .channel('header-sage-posting-queue')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
+        // Use the event payload immediately. A GRN can move from queued to
+        // posted in only a few seconds, before a follow-up query would see the
+        // intermediate validation and posting stages.
+        const item = payload.new as SageQueueItem | undefined;
+        if (sageQueueLoadedRef.current && item?.id && ['pending', 'processing', 'success', 'failed'].includes(item.status)) {
+          const stage = `${item.status}:${item.message || ''}`;
+          if (knownSageStagesRef.current.get(item.id) !== stage) {
+            knownSageStagesRef.current.set(item.id, stage);
+            showSageActivityToast(item);
+          }
+        }
         loadSageQueue();
       })
       .subscribe();
