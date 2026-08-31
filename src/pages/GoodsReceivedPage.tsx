@@ -504,10 +504,11 @@ export default function GoodsReceivedPage() {
     }
 
     if (sync.status === 'pending' || sync.status === 'processing') {
+      const isProcessing = sync.status === 'processing';
       return (
-        <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border border-amber-200 font-semibold">
-          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-          {sync.status === 'processing' ? 'Posting' : 'Queued'}
+        <Badge className={isProcessing ? 'bg-blue-50 text-blue-700 hover:bg-blue-50 border border-blue-200 font-semibold max-w-full' : 'bg-amber-50 text-amber-700 hover:bg-amber-50 border border-amber-200 font-semibold'} title={sync.message || undefined}>
+          {isProcessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin shrink-0" /> : <span className="w-1.5 h-1.5 mr-1 rounded-full bg-amber-500 shrink-0" />}
+          <span className="truncate">{isProcessing ? (sync.message || 'Processing Sage GRV') : 'Queued'}</span>
         </Badge>
       );
     }
@@ -657,7 +658,7 @@ export default function GoodsReceivedPage() {
                   <TableHead className="font-bold text-slate-700">Supplier</TableHead>
                   <TableHead className="hidden xl:table-cell w-[105px] font-bold text-slate-700">Weigh Bridge</TableHead>
                   <TableHead className="w-[118px] font-bold text-slate-700">Received</TableHead>
-                  <TableHead className="w-[104px] font-bold text-slate-700">Approval</TableHead>
+                  <TableHead className="w-[104px] font-bold text-slate-700">Status</TableHead>
                   <TableHead className="w-[180px] font-bold text-slate-700">Sage Live Status</TableHead>
                   <TableHead className="w-[100px] text-right font-bold text-slate-700 pr-5">Inspect</TableHead>
                 </TableRow>

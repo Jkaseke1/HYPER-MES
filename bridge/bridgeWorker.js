@@ -126,7 +126,9 @@ async function processPendingEvents() {
       .from('sync_log')
       .update({
         status: 'processing',
-        message: 'Posting to Sage now',
+        message: event.event_type === 'grn_confirmed'
+          ? 'Validating GRN for Sage'
+          : 'Validating Sage transaction',
         updated_at: new Date().toISOString(),
       })
       .eq('id', event.id)
@@ -168,6 +170,14 @@ async function processPendingEvents() {
 
     try {
       let handlerResult = null;
+
+      if (event.event_type === 'grn_confirmed') {
+        await supabase
+          .from('sync_log')
+          .update({ message: 'Posting GRV to Sage', updated_at: new Date().toISOString() })
+          .eq('id', event.id)
+          .eq('status', 'processing');
+      }
 
       switch (event.event_type) {
         case 'grn_confirmed':
@@ -219,6 +229,13 @@ async function processPendingEvents() {
       // balance immediately after a successful transfer.
       const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
       if (itemCodes.length) {
+        if (event.event_type === 'grn_confirmed') {
+          await supabase
+            .from('sync_log')
+            .update({ message: 'Finalising Sage stock balance', updated_at: new Date().toISOString() })
+            .eq('id', event.id)
+            .eq('status', 'processing');
+        }
         await refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
       }
       if (event.event_type === 'production_completed') {
