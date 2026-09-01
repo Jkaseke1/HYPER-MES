@@ -28,7 +28,7 @@ const ALLOWED_EVENT_TYPES = new Set(
     .map((eventType) => eventType.trim())
     .filter(Boolean),
 );
-let stockSyncInProgress = false;
+let stockSyncQueue = Promise.resolve();
 let eventProcessingInProgress = false;
 
 async function verifySdkConnection() {
@@ -44,17 +44,23 @@ async function verifySdkConnection() {
   console.log(`Sage SDK connection: ${body.sdkConnection || 'verified'}`);
 }
 
-async function refreshSageStock(itemCodes, reason) {
-  if (stockSyncInProgress) return;
-  stockSyncInProgress = true;
-  try {
-    const result = await syncSageStock(itemCodes);
+async function queueSageStockSync(itemCodes, reason, options = {}) {
+  const run = stockSyncQueue.catch(() => undefined).then(async () => {
+    const result = await syncSageStock(itemCodes, options);
     console.log(`  Sage stock sync (${reason}): ${result.synced} warehouse balance(s) refreshed for ${result.materialCount} material(s)`);
     if (result.failures.length) console.warn(`  Sage stock sync warnings: ${result.failures.slice(0, 3).join('; ')}`);
+    return result;
+  });
+  stockSyncQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function refreshSageStock(itemCodes, reason) {
+  try {
+    return await queueSageStockSync(itemCodes, reason);
   } catch (error) {
     console.error(`  Sage stock sync failed (${reason}): ${error.message}`);
-  } finally {
-    stockSyncInProgress = false;
+    return { materialCount: 0, synced: 0, failures: [error.message] };
   }
 }
 
@@ -72,7 +78,7 @@ async function createStockTakeSageSnapshot(event) {
 
     // A stock take requires every active RM item at one point in time. Do not
     // use the rolling cache batch that supports normal operational screens.
-    const result = await syncSageStock(undefined, { fullSync: true, warehouseCodes: ['RM'] });
+    const result = await queueSageStockSync(undefined, 'stock take Sage snapshot', { fullSync: true, warehouseCodes: ['RM'] });
     if (result.failures.length) {
       throw new Error(`Sage snapshot incomplete: ${result.failures.slice(0, 5).join('; ')}`);
     }

@@ -126,7 +126,7 @@ export default function StockTakeDetailPage() {
       // A Sage snapshot can take longer than one normal screen refresh. Poll
       // the header too so the counter sees the bridge result without reload.
       const interval = setInterval(() => {
-        fetchStockTake();
+        void fetchStockTake({ silent: true });
       }, 10000);
       return () => clearInterval(interval);
     }
@@ -138,9 +138,9 @@ export default function StockTakeDetailPage() {
     }
   }, [showAuditTrail, id]);
 
-  const fetchStockTake = async () => {
+  const fetchStockTake = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const { data: take, error: takeError } = await supabase
         .from('stock_takes')
@@ -158,18 +158,19 @@ export default function StockTakeDetailPage() {
 
       await fetchLines();
 
-      // Fetch all users for assignment
-      const { data: usersData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .order('full_name');
-      if (usersData) setUsers(usersData);
+      if (!silent) {
+        const { data: usersData } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .order('full_name');
+        if (usersData) setUsers(usersData);
+      }
 
     } catch (error: any) {
       console.error('Error fetching stock take:', error);
-      toast.error(`Failed to load stock take: ${error.message}`);
+      if (!silent) toast.error(`Failed to load stock take: ${error.message}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
