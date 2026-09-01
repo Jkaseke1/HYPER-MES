@@ -1,0 +1,2 @@
+full_name,email,roles,branch_codes,access_level,status
+Example Administrator,administrator@example.com,admin,ALL,admin,active

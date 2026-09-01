@@ -25,6 +25,27 @@ users, master data, and Sage transaction references remain intact. Test and
 draft records are retained for audit and explicitly excluded from the approved
 opening reconciliation.
 
+## Production user accounts
+
+Production uses the real staff accounts, but they are created afresh in the
+Production Supabase project. Do not copy `auth.users`, password hashes, or UAT
+user UUIDs. New Production user IDs prevent any UAT record relationship from
+being carried into Production.
+
+For each approved staff member, retain only the operational access definition:
+
+- full name and work email
+- PlantControl role or roles
+- branch access and access level
+- active or inactive status
+
+After the clean Production schema is installed, create the first Production
+administrator, verify that their profile and administrator role are linked,
+then invite or create the remaining staff accounts. Every user sets a new
+Production password or receives a password-reset invitation. Do not create
+users before the schema bootstrap, because the `profiles` and role-assignment
+automation will not exist yet.
+
 ## Cutover roles
 
 | Role | Responsibility |
