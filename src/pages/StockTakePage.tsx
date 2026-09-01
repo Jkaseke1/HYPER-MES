@@ -11,7 +11,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 interface StockTake {
   id: string;
   take_number: string;
-  status: 'OPEN' | 'FROZEN' | 'CLOSED';
+  status: 'OPEN' | 'FROZEN' | 'CLOSED' | 'CANCELLED';
   started_by: string;
   started_at: string;
   frozen_at?: string;
@@ -101,14 +101,14 @@ export default function StockTakePage() {
         setActiveStockTake(null);
       }
 
-      // Fetch history (CLOSED only)
+      // Keep completed and cancelled practice runs visible as audit history.
       const { data: history } = await supabase
         .from('stock_takes')
         .select(`
           *,
           started_by_profile:started_by(full_name)
         `)
-        .eq('status', 'CLOSED')
+        .in('status', ['CLOSED', 'CANCELLED'])
         .order('closed_at', { ascending: false })
         .limit(20);
 
@@ -246,7 +246,8 @@ export default function StockTakePage() {
     const statusMap: Record<string, string> = {
       'OPEN': 'in_progress',
       'FROZEN': 'pending',
-      'CLOSED': 'completed'
+      'CLOSED': 'completed',
+      'CANCELLED': 'cancelled'
     };
     return <StatusBadge status={statusMap[status] || status.toLowerCase()} className={status === 'FROZEN' ? 'animate-pulse' : ''} />;
   };

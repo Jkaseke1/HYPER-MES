@@ -23,7 +23,7 @@ import * as XLSX from 'xlsx';
 interface StockTake {
   id: string;
   take_number: string;
-  status: 'OPEN' | 'FROZEN' | 'CLOSED';
+  status: 'OPEN' | 'FROZEN' | 'CLOSED' | 'CANCELLED';
   started_by: string;
   started_at: string;
   frozen_by?: string;
@@ -39,6 +39,8 @@ interface StockTake {
   baseline_snapshot_at?: string;
   baseline_sync_status?: 'SYNCING' | 'READY' | 'FAILED';
   baseline_sync_message?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
 }
 
 interface StockTakeLine {
@@ -772,6 +774,27 @@ export default function StockTakeDetailPage() {
     }
   };
 
+  const handleCancelTestStockTake = async () => {
+    if (!stockTake) return;
+    if (!window.confirm('Cancel this practice stock take? No quantities have been entered and Sage will not be changed.')) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('cancel_stock_take', {
+        p_stock_take_id: stockTake.id,
+        p_reason: 'Practice run cancelled before counts were entered.',
+      });
+      if (error) throw error;
+
+      toast.success('Practice stock take cancelled. You can now start the real count.');
+      navigate('/stock-take');
+    } catch (error: any) {
+      toast.error(`Could not cancel the stock take: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCloseStock = async () => {
     if (!stockTake) return;
     if (!hasReadySageSnapshot) {
@@ -854,6 +877,7 @@ export default function StockTakeDetailPage() {
   const canApproveVariance = ['admin', 'md', 'finance', 'accountant'].includes(profile?.role || '');
   const hasReadySageSnapshot = stockTake?.baseline_source === 'sage_sdk' && stockTake?.baseline_sync_status === 'READY' && Boolean(stockTake?.baseline_snapshot_at);
   const canEdit = hasReadySageSnapshot && (stockTake?.status === 'OPEN' || stockTake?.status === 'FROZEN');
+  const canCancelTestTake = stockTake?.status === 'OPEN' && lines.every((line) => line.counted_qty === null);
   const showSystemQty = canManage || !stockTake?.blind_mode || stockTake?.status === 'CLOSED';
 
   const countedLines = lines.filter(l => l.counted_qty !== null).length;
@@ -971,6 +995,15 @@ export default function StockTakeDetailPage() {
           </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canCancelTestTake && canManage && (
+            <button
+              onClick={handleCancelTestStockTake}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-300/40 px-4 py-2.5 text-sm font-semibold text-red-100 transition-colors hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <XCircle className="h-4 w-4" /> Cancel test
+            </button>
+          )}
           {stockTake.status === 'OPEN' && canManage && hasReadySageSnapshot && (
             <>
               <button
