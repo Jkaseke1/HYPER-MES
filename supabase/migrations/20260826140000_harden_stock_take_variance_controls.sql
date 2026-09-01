@@ -58,7 +58,7 @@ BEGIN
   IF v_line.system_qty > 0
     AND ABS(v_line.variance / v_line.system_qty) > 0.05
     AND v_line.recount_qty IS NULL THEN
-    RAISE EXCEPTION 'A variance above 5% requires a recount before Finance review.';
+    RAISE EXCEPTION 'A variance above 5%% requires a recount before Finance review.';
   END IF;
 
   IF NULLIF(BTRIM(p_reason), '') IS NULL THEN
