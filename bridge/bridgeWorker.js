@@ -325,39 +325,14 @@ async function processPendingEvents() {
       if (handlerResult?.sage_response) successUpdate.sage_response = handlerResult.sage_response;
       if (handlerResult?.details) successUpdate.details = handlerResult.details;
 
-      // A transaction is only ready for MES users once the related Sage stock
-      // balance is refreshed. Keep the visible status as "Posting to Sage"
-      // until that reconciliation finishes, so production never sees a stale
-      // balance immediately after a successful transfer.
-      const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
-      if (itemCodes.length) {
-        if (event.event_type === 'grn_confirmed') {
-          await supabase
-            .from('sync_log')
-            .update({ message: 'Finalising Sage stock balance', updated_at: new Date().toISOString() })
-            .eq('id', event.id)
-            .eq('status', 'processing');
-        }
-        await refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
-      }
-      if (event.event_type === 'production_completed') {
-        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsReceipt?.itemCode;
-        if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after production_completed');
-      }
-      if (event.event_type === 'finished_goods_transfer_to_dispatch') {
-        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsTransfer?.itemCode;
-        if (finishedGoodCode) await refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
-      }
-      if (event.event_type === 'dispatch_delivered') {
-        const transfer = handlerResult?.details?.sdkBranchDispatchTransfer;
-        const itemCodes = transfer?.items?.map((item) => item.itemCode).filter(Boolean) || [];
-        if (itemCodes.length) await refreshFinishedGoodsStock(itemCodes, 'after dispatch_delivered', [transfer.sourceWarehouse, transfer.destinationWarehouse]);
-      }
-
+      // Record Sage's confirmed post before refreshing cached stock. A refresh
+      // can take time or fail for an unrelated item; it must not leave an
+      // already-posted transaction in processing where it could be retried.
       const { error: syncSuccessError } = await supabase
         .from('sync_log')
         .update(successUpdate)
-        .eq('id', event.id);
+        .eq('id', event.id)
+        .eq('status', 'processing');
       if (syncSuccessError) throw new Error(`Sage posted successfully, but MES could not record the Sage result: ${syncSuccessError.message}`);
 
       if (event.event_type === 'production_completed') {
@@ -370,6 +345,27 @@ async function processPendingEvents() {
       }
 
       console.log(`  ✅ ${event.event_type} processed successfully`);
+
+      // Keep the Sage stock cache current without holding up the completed
+      // transaction. Read failures stay visible in bridge logs and the normal
+      // scheduled refresh will retry them.
+      const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
+      if (itemCodes.length) {
+        void refreshSageStock([...new Set(itemCodes)], `after ${event.event_type}`);
+      }
+      if (event.event_type === 'production_completed') {
+        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsReceipt?.itemCode;
+        if (finishedGoodCode) void refreshFinishedGoodsStock([finishedGoodCode], 'after production_completed');
+      }
+      if (event.event_type === 'finished_goods_transfer_to_dispatch') {
+        const finishedGoodCode = handlerResult?.details?.sdkFinishedGoodsTransfer?.itemCode;
+        if (finishedGoodCode) void refreshFinishedGoodsStock([finishedGoodCode], 'after finished_goods_transfer_to_dispatch', ['PD', 'DEB']);
+      }
+      if (event.event_type === 'dispatch_delivered') {
+        const transfer = handlerResult?.details?.sdkBranchDispatchTransfer;
+        const itemCodes = transfer?.items?.map((item) => item.itemCode).filter(Boolean) || [];
+        if (itemCodes.length) void refreshFinishedGoodsStock(itemCodes, 'after dispatch_delivered', [transfer.sourceWarehouse, transfer.destinationWarehouse]);
+      }
 
     } catch (err) {
       console.error(`  ❌ Failed: ${err.message}`);
