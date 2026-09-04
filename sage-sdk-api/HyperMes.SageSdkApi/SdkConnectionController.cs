@@ -24,9 +24,11 @@ namespace SDK_Test
                 return Ok(new
                 {
                     status = "ok",
-                    environment = "UAT",
-                    companyDatabase = "Hyperfeeds 2026 UAT",
-                    commonDatabase = "SageCommon",
+                    environment = SageRuntime.EnvironmentName,
+                    companyDatabase = SageRuntime.CompanyDatabase,
+                    commonDatabase = SageRuntime.CommonDatabase,
+                    writeMode = SageRuntime.WriteMode,
+                    allowedOperations = SageRuntime.AllowedOperations,
                     sdkConnection = "successful",
                     message = "SDK connection verified. No Sage transaction was created."
                 });
@@ -36,7 +38,8 @@ namespace SDK_Test
                 return Content(HttpStatusCode.ServiceUnavailable, new
                 {
                     status = "failed",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
+                    companyDatabase = SageRuntime.CompanyDatabase,
                     sdkConnection = "failed",
                     message = ex.Message
                 });

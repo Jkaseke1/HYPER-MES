@@ -18,6 +18,7 @@ namespace SDK_Test
             );
 
             app.Use<ApiKeyMiddleware>();
+            app.Use<WriteSafetyMiddleware>();
             app.UseWebApi(config);
         }
     }

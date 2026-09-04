@@ -34,11 +34,11 @@ namespace SDK_Test
             return Ok(new
             {
                 status = "validated",
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
                 action = "goods-receipt-grv",
                 sageConnection = "verified",
                 sagePosting = "not performed",
-                message = "Validated against Sage UAT. No GRV was created.",
+                message = "Validated against Sage " + SageRuntime.EnvironmentName + ". No GRV was created.",
                 goodsReceipt = GoodsReceiptSummary(request, null)
             });
         }
@@ -105,9 +105,9 @@ namespace SDK_Test
                 return Content(HttpStatusCode.InternalServerError, new
                 {
                     status = "failed",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "goods-receipt-grv",
-                    message = "Sage UAT could not post this goods receipt GRV.",
+                    message = "Sage " + SageRuntime.EnvironmentName + " could not post this goods receipt GRV.",
                     exception = ex.GetType().FullName,
                     exceptionMessage = ex.Message,
                     detail = ex.ToString()
@@ -125,15 +125,15 @@ namespace SDK_Test
             return new
             {
                 status = status,
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
                 action = "goods-receipt-grv",
                 postingMode = "legacy-standalone-grv",
                 sagePosting = "completed",
                 grvNumber = grvNumber,
                 documentNumber = grvNumber,
                 message = alreadyPosted
-                    ? "Sage UAT already contains this standalone GRV; returning the existing posting."
-                    : "Goods receipt posted to Sage UAT as a standalone GRV.",
+                    ? "Sage " + SageRuntime.EnvironmentName + " already contains this standalone GRV; returning the existing posting."
+                    : "Goods receipt posted to Sage " + SageRuntime.EnvironmentName + " as a standalone GRV.",
                 goodsReceipt = GoodsReceiptSummary(request, grvNumber)
             };
         }

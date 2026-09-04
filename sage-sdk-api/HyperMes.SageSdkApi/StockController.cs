@@ -63,7 +63,7 @@ namespace SDK_Test
             return new
             {
                 status = "ok",
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
                 itemCode = item.Code,
                 warehouse = sageWarehouse.Code,
                 quantity = context.QtyOnHand,

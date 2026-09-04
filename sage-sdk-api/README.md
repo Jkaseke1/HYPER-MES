@@ -22,6 +22,11 @@ Do not commit secrets. Set these on the machine that runs the API:
 
 ```text
 HYPER_SAGE_API_KEY
+HYPER_SAGE_ENVIRONMENT              # UAT or Production
+HYPER_SAGE_API_URL                  # UAT 5088; Production 5090
+HYPER_SAGE_WRITE_MODE               # Disabled by default; Enabled only for an approved posting window
+HYPER_SAGE_ALLOWED_OPERATIONS       # Production GRN phase: goods-receipts
+HYPER_SAGE_LIVE_COMPANY_DATABASE    # Hyperfeeds 2024
 HYPER_SAGE_SERVER                   # fallback when Common and company share a SQL server
 HYPER_SAGE_COMMON_SERVER            # optional: SageCommon SQL server, e.g. 192.168.203.130\HYPERFEEDSSQL
 HYPER_SAGE_COMPANY_SERVER           # optional: company SQL server, e.g. localhost\SQLEXPRESS
@@ -60,6 +65,24 @@ Those package/vendor binaries are intentionally ignored by Git.
 ```
 
 ## Start
+
+Use the environment-specific launcher. The UAT launcher refuses the live
+company database. The Production launcher starts read-only unless the explicit
+GRN write switch is supplied.
+
+```powershell
+# Development/UAT laptop only
+.\sage-sdk-api\Start-SageSdkApi-Uat.ps1
+
+# Live server connection and read-only preflight
+.\sage-sdk-api\Start-SageSdkApi-Production.ps1
+
+# One approved Production GRN posting window only
+.\sage-sdk-api\Start-SageSdkApi-Production.ps1 -EnableGrnWrites
+```
+
+Do not use the Production write switch for health checks, connection checks,
+stock reads, or dry runs.
 
 ```powershell
 Start-Process `

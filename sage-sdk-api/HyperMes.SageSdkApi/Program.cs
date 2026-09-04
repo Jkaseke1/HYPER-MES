@@ -7,12 +7,14 @@ namespace SDK_Test
     {
         private static void Main(string[] args)
         {
-            const string baseAddress = "http://127.0.0.1:5088/";
+            var baseAddress = SageRuntime.ApiUrl;
 
             using (WebApp.Start<Startup>(baseAddress))
             {
-                Console.WriteLine("Hyperfeeds Sage SDK API is running in UAT mode.");
-                Console.WriteLine("Health check: http://127.0.0.1:5088/api/v1/health");
+                Console.WriteLine("Hyperfeeds Sage SDK API is running in " + SageRuntime.EnvironmentName + " mode.");
+                Console.WriteLine("Company database: " + SageRuntime.CompanyDatabase);
+                Console.WriteLine("Write mode: " + SageRuntime.WriteMode);
+                Console.WriteLine("Health check: " + baseAddress.TrimEnd('/') + "/api/v1/health");
                 Console.WriteLine("Press Enter to stop the API.");
                 Console.ReadLine();
             }

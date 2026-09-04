@@ -14,7 +14,10 @@ namespace SDK_Test
             {
                 status = "ok",
                 api = "Hyperfeeds Sage SDK API",
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
+                companyDatabase = SageRuntime.CompanyDatabase,
+                writeMode = SageRuntime.WriteMode,
+                allowedOperations = SageRuntime.AllowedOperations,
                 sageConnection = "not-tested",
                 timestampUtc = DateTime.UtcNow
             });
