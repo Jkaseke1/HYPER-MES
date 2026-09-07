@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, Pencil } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -67,6 +67,7 @@ export default function GoodsReceivedPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingGrnId, setEditingGrnId] = useState<string | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
@@ -290,7 +291,8 @@ export default function GoodsReceivedPage() {
 
     setSaving(true);
     try {
-      const grnNumber = await generateGRNNumber();
+      const grnNumber = editingGrnId ? viewing?.grn_number : await generateGRNNumber();
+      if (!grnNumber) throw new Error('The GRN to edit could not be resolved. Refresh and try again.');
       
       // Get warehouse ID
       const { data: warehouse } = await supabase
@@ -318,17 +320,32 @@ export default function GoodsReceivedPage() {
         grnData.weigh_bridge_ticket_id = weighBridgeTicketId;
       }
 
-      const { data: grn, error: grnError } = await supabase
-        .from('goods_received_notes')
-        .insert(grnData)
-        .select()
-        .single();
+      let grnId = editingGrnId;
+      if (editingGrnId) {
+        const { error: updateError } = await supabase
+          .from('goods_received_notes')
+          .update(grnData)
+          .eq('id', editingGrnId);
+        if (updateError) throw updateError;
 
-      if (grnError) throw grnError;
+        const { error: deleteItemsError } = await supabase
+          .from('grn_items')
+          .delete()
+          .eq('grn_id', editingGrnId);
+        if (deleteItemsError) throw deleteItemsError;
+      } else {
+        const { data: grn, error: grnError } = await supabase
+          .from('goods_received_notes')
+          .insert(grnData)
+          .select('id')
+          .single();
+        if (grnError) throw grnError;
+        grnId = grn.id;
+      }
 
       // Create GRN items
       const grnItems = items.map(item => ({
-        grn_id: grn.id,
+        grn_id: grnId,
         raw_material_id: item.raw_material_id,
         ordered_qty: Number(item.ordered_qty) || 0,
         received_qty: Number(item.received_qty) || 0,
@@ -343,7 +360,7 @@ export default function GoodsReceivedPage() {
 
       if (itemsError) throw itemsError;
 
-      toast.success('GRN created successfully');
+      toast.success(editingGrnId ? 'GRN updated. Finance review is required before approval.' : 'GRN created successfully');
       setModalOpen(false);
       resetForm();
       fetchData();
@@ -356,6 +373,7 @@ export default function GoodsReceivedPage() {
   };
 
   const resetForm = () => {
+    setEditingGrnId(null);
     setSupplierId('');
     setReceivedDate(localDateInputValue());
     setNotes('');
@@ -417,6 +435,58 @@ export default function GoodsReceivedPage() {
     }
   };
 
+  const openEditGRN = (grn: GoodsReceivedNote, lineItems: any[] = viewItems) => {
+    if (grn.status !== 'pending') {
+      toast.error('Reopen this GRN for correction before editing it.');
+      return;
+    }
+    setEditingGrnId(grn.id);
+    setSupplierId(grn.supplier_id || '');
+    setReceivedDate(grn.received_date);
+    setNotes(grn.notes || '');
+    setSupplierInvoiceNo((grn as any).supplier_invoice_no || '');
+    setSupplierDeliveryNoteNo((grn as any).supplier_delivery_note_no || '');
+    setSupplierOrderNo((grn as any).supplier_order_no || '');
+    setExternalReference((grn as any).external_reference || '');
+    setWeighBridgeTicketId((grn as any).weigh_bridge_ticket_id || '');
+    setItems(lineItems.map((item: any) => ({
+      raw_material_id: item.raw_material_id,
+      ordered_qty: Number(item.ordered_qty || 0),
+      received_qty: Number(item.received_qty || 0),
+      unit_cost: Number(item.unit_cost || 0),
+      batch_number: item.batch_number || '',
+      expiry_date: item.expiry_date || '',
+    })));
+    setViewModalOpen(false);
+    setModalOpen(true);
+  };
+
+  const reopenForCorrection = async () => {
+    if (!viewing) return;
+    const reason = window.prompt('Why must this GRN be corrected?');
+    if (!reason?.trim()) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('reopen_grn_for_correction', {
+        p_grn_id: viewing.id,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+
+      const reopened = { ...viewing, status: 'pending' as const };
+      notifiedSyncRef.current[viewing.id] = '';
+      await fetchData(false);
+      toast.success(`${viewing.grn_number} reopened for correction`);
+      openEditGRN(reopened);
+    } catch (error: any) {
+      console.error('Failed to reopen GRN:', error);
+      toast.error(`Could not reopen ${viewing.grn_number}: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const getSageGrvNumber = (sync?: SageSyncStatus) => {
     if (!sync?.sage_response) return '';
     return sync.sage_response.grvNumber ||
@@ -444,7 +514,7 @@ export default function GoodsReceivedPage() {
   const canRetrySagePosting = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
 
   const retryFailedSagePosting = async () => {
-    if (!viewing || !selectedSync || selectedSync.status !== 'failed' || !canRetrySagePosting) return;
+    if (!viewing || viewing.status !== 'approved' || !selectedSync || selectedSync.status !== 'failed' || !canRetrySagePosting) return;
 
     setRetryingSagePost(true);
     try {
@@ -767,8 +837,8 @@ export default function GoodsReceivedPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <DialogTitle className="text-xl font-extrabold tracking-tight text-white">Create GRN Delivery</DialogTitle>
-                    <span className="text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Draft</span>
+                    <DialogTitle className="text-xl font-extrabold tracking-tight text-white">{editingGrnId ? 'Edit GRN Delivery' : 'Create GRN Delivery'}</DialogTitle>
+                    <span className="text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full uppercase tracking-wider">{editingGrnId ? 'Correction' : 'Draft'}</span>
                   </div>
                   <DialogDescription className="text-slate-400 text-xs font-medium mt-0.5">
                     Capture supplier receipt, weighbridge evidence, raw material lines and Sage approval value.
@@ -1296,7 +1366,7 @@ export default function GoodsReceivedPage() {
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
                 ) : (
-                  <><Package className="w-4 h-4" /> Create GRN</>
+                  <><Package className="w-4 h-4" /> {editingGrnId ? 'Save GRN Changes' : 'Create GRN'}</>
                 )}
               </button>
             </div>
@@ -1377,6 +1447,16 @@ export default function GoodsReceivedPage() {
                   >
                     {viewing.status}
                   </Badge>
+                )}
+                {viewing?.status === 'pending' && (
+                  <Button type="button" size="sm" onClick={() => openEditGRN(viewing)} className="bg-white text-slate-900 hover:bg-slate-100">
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit GRN
+                  </Button>
+                )}
+                {viewing?.status === 'approved' && !['success', 'processing'].includes(syncByGrnId[viewing.id]?.status || '') && (
+                  <Button type="button" size="sm" onClick={reopenForCorrection} disabled={saving} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Reopen for correction
+                  </Button>
                 )}
               </div>
             </div>
