@@ -29,10 +29,9 @@ export default function GRNApprovalButtons({
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showVatModal, setShowVatModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
-  const [selectedVatMode, setSelectedVatMode] = useState<'exclusive' | 'inclusive' | 'no_vat'>(
-    vatMode === 'inclusive' || vatMode === 'no_vat' ? vatMode : 'exclusive'
+  const [selectedVatMode, setSelectedVatMode] = useState<'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated'>(
+    vatMode === 'inclusive' || vatMode === 'no_vat' || vatMode === 'zero_rated' ? vatMode : 'exclusive'
   );
-  const [selectedNoVatTreatment, setSelectedNoVatTreatment] = useState<'zero_rated' | 'exempt'>('zero_rated');
 
   // Single-step approval: Finance, Accountant, or Admin can approve
   const canApprove = (
@@ -166,7 +165,7 @@ export default function GRNApprovalButtons({
       const { error } = await supabase.rpc('record_grn_vat_review', {
         p_grn_id: grnId,
         p_vat_mode: selectedVatMode,
-        p_no_vat_treatment: selectedVatMode === 'no_vat' ? selectedNoVatTreatment : null,
+        p_no_vat_treatment: selectedVatMode === 'no_vat' ? 'exempt' : selectedVatMode === 'zero_rated' ? 'zero_rated' : null,
       });
       if (error) throw error;
 
@@ -231,7 +230,8 @@ export default function GRNApprovalButtons({
               {[
                 ['exclusive', 'Tax Exclusive', 'Entered unit costs exclude VAT. VAT is added to the supplier payable.'],
                 ['inclusive', 'Tax Inclusive', 'Entered unit costs include VAT. Sage must calculate the net stock value and VAT portion.'],
-                ['no_vat', 'No VAT', 'Choose whether the supplier invoice is zero-rated or exempt.'],
+                ['no_vat', 'No VAT - Exempt', 'No VAT is recorded as an exempt supply.'],
+                ['zero_rated', 'Tax Exclusive - Zero Rated', 'Entered unit costs exclude VAT. Sage records a zero-rated supply at 0%.'],
               ].map(([value, label, description]) => (
                 <label key={value} className={`block border rounded-lg p-3 cursor-pointer ${selectedVatMode === value ? 'border-[#ff9100] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <input
@@ -239,42 +239,21 @@ export default function GRNApprovalButtons({
                     name="vat-mode"
                     value={value}
                     checked={selectedVatMode === value}
-                    onChange={() => setSelectedVatMode(value as 'exclusive' | 'inclusive' | 'no_vat')}
+                    onChange={() => setSelectedVatMode(value as 'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated')}
                     className="mr-2 accent-[#ff9100]"
                   />
                   <span className="text-sm font-semibold text-slate-800">{label}</span>
                   <span className="block ml-5 text-xs text-slate-600 mt-1">{description}</span>
                 </label>
               ))}
-              {selectedVatMode === 'no_vat' && (
-                <div className="ml-5 space-y-2 border-l-2 border-slate-200 pl-3">
-                  <p className="text-xs font-medium text-slate-700">0% tax classification</p>
-                  <label className="flex items-start gap-2 text-sm text-slate-700">
-                    <input
-                      type="radio"
-                      name="no-vat-treatment"
-                      value="zero_rated"
-                      checked={selectedNoVatTreatment === 'zero_rated'}
-                      onChange={() => setSelectedNoVatTreatment('zero_rated')}
-                      className="mt-1 accent-[#ff9100]"
-                    />
-                    <span><strong>Zero Rate</strong><span className="block text-xs text-slate-600">Sage tax type 02, 0%.</span></span>
-                  </label>
-                  <label className="flex items-start gap-2 text-sm text-slate-700">
-                    <input
-                      type="radio"
-                      name="no-vat-treatment"
-                      value="exempt"
-                      checked={selectedNoVatTreatment === 'exempt'}
-                      onChange={() => setSelectedNoVatTreatment('exempt')}
-                      className="mt-1 accent-[#ff9100]"
-                    />
-                    <span><strong>Exempt</strong><span className="block text-xs text-slate-600">Sage tax type 03, 0%.</span></span>
-                  </label>
-                </div>
-              )}
             </div>
-            {selectedVatMode !== 'no_vat' && (
+            {selectedVatMode === 'zero_rated' && (
+              <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>02 Zero Rate</strong> at <strong>0%</strong>.</p>
+            )}
+            {selectedVatMode === 'no_vat' && (
+              <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>03 Exempt</strong> at <strong>0%</strong>.</p>
+            )}
+            {(selectedVatMode === 'exclusive' || selectedVatMode === 'inclusive') && (
               <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>515 Taxable Input</strong> at <strong>15.5%</strong>.</p>
             )}
             <div className="flex justify-end gap-3 mt-5">
