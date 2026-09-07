@@ -6,8 +6,14 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 // Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL || 'https://appyuqxetlphuxfybmus.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error(
+    'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured in bridge/.env.'
+  );
+}
 
 // Create Supabase client
 const supabase = createClient(supabaseUrl, supabaseKey, {

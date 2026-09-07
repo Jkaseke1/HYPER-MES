@@ -28,6 +28,7 @@ const ALLOWED_EVENT_TYPES = new Set(
     .map((eventType) => eventType.trim())
     .filter(Boolean),
 );
+const ALLOWED_REFERENCE_ID = (process.env.BRIDGE_ALLOWED_REFERENCE_ID || '').trim();
 const ENFORCE_SAGE_IDENTITY = process.env.BRIDGE_ENFORCE_SAGE_IDENTITY === 'true';
 let stockSyncQueue = Promise.resolve();
 let eventProcessingInProgress = false;
@@ -55,6 +56,7 @@ async function verifySdkConnection() {
       throw new Error(`Sage SDK database is ${body.companyDatabase || 'unknown'}, expected ${expectedDatabase}`);
     }
   }
+  console.log(`Sage SDK target: environment=${body.environment || 'unknown'}, database=${body.companyDatabase || 'unknown'}`);
   console.log(`Sage SDK connection: ${body.sdkConnection || 'verified'}`);
 }
 
@@ -197,6 +199,9 @@ async function processPendingEvents() {
   if (ALLOWED_EVENT_TYPES.size > 0) {
     pendingQuery = pendingQuery.in('event_type', [...ALLOWED_EVENT_TYPES]);
   }
+  if (ALLOWED_REFERENCE_ID) {
+    pendingQuery = pendingQuery.eq('reference_id', ALLOWED_REFERENCE_ID);
+  }
 
   const { data: pending, error } = await pendingQuery;
 
@@ -208,6 +213,11 @@ async function processPendingEvents() {
   if (!pending || pending.length === 0) return;
 
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
+
+  if (DRY_RUN) {
+    console.log('[DRY RUN] Events were read only; no queue status or Sage data was changed.');
+    return;
+  }
 
   // Give users a live FIFO position while another Sage transaction is being
   // posted. The first row is claimed immediately; every later row remains
@@ -440,6 +450,7 @@ async function startWorker() {
   console.log(` Mode: ${DRY_RUN ? 'DRY RUN (safe — no Sage writes)' : 'LIVE'}`);
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
+  console.log(` Sage SDK expected target: environment=${process.env.SAGE_EXPECTED_ENVIRONMENT || 'not-set'}, database=${process.env.SAGE_EXPECTED_COMPANY_DATABASE || 'not-set'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');

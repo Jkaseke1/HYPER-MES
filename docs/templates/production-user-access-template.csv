@@ -1,2 +1,11 @@
 full_name,email,roles,branch_codes,access_level,status
-Example Administrator,administrator@example.com,admin,ALL,admin,active
+Admin,admin@hyperfeeds.com,admin,ALL,admin,active
+Chamu Mupondera,production01@hyperfeeds.co.zw,production_manager,no,read,active
+Cliff,weighbridge@hyperfeeds.co.zw,weighbridge,no,read,active
+Jonga ,account05@hyperfeeds.co.zw,finance,ALL,read,active
+Kudakwashe Ndindana,kudakwashe@hyperfeeds.co.zw,md,ALL,read,active
+Mano Govere,accounts02@hyperfeeds.co.zw,procurement,ALL,read,active
+Nigel Chirisa,stores@hyperfeeds.co.zw,warehouse_manager,no,read,active
+Owen Chipepe,accounts04@hyperfeeds.co.zw,finance,ALL,read,active
+Sowela ,logistics01@hyperfeeds.co.zw,logistics,ALL,read,active
+Tatenda Torobei,accounts03@hyperfeeds.co.zw,finance,ALL,read,active
