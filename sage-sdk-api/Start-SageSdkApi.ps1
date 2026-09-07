@@ -26,6 +26,9 @@ Start-Process `
   -WindowStyle Hidden
 
 Start-Sleep -Seconds 1
-$apiUrl = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_URL", "User")
+$apiUrl = $env:HYPER_SAGE_API_URL
+if ([string]::IsNullOrWhiteSpace($apiUrl)) {
+  $apiUrl = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_URL", "User")
+}
 if ([string]::IsNullOrWhiteSpace($apiUrl)) { $apiUrl = "http://127.0.0.1:5088/" }
 Invoke-RestMethod -Method Get -Uri ($apiUrl.TrimEnd('/') + "/api/v1/health")

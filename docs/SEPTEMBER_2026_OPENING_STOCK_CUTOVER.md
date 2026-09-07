@@ -3,7 +3,7 @@
 ## Purpose
 
 Establish PlantControl's September opening stock from the Finance-approved
-physical count at the close of business on 31 August 2026. This procedure does
+Sage valuation baseline at the close of business on 30 August 2026. This procedure does
 not delete PlantControl records and does not write inventory adjustments to
 Sage automatically.
 
@@ -60,7 +60,7 @@ automation will not exist yet.
 Complete and retain all of the following before touching the production workflow:
 
 1. Confirm the Sage company is the intended production company and the current period is September 2026.
-2. Export Sage RM warehouse (`RM`) stock-on-hand and valuation reports as at 31 August close.
+2. Export Sage RM warehouse (`RM`) stock-on-hand and valuation reports as at 30 August close.
 3. Export the Finance physical-count workbook with item code, item description, counted quantity, unit, count sheet reference, variance reason, and approver.
 4. Verify the latest Supabase managed backup or a tested independent backup. Follow `docs/supabase-backup-runbook.md`.
 5. Export the PlantControl reconciliation and pending Sage-posting lists.
@@ -131,7 +131,9 @@ Release only when all gates are true:
 - The snapshot status is `READY` with a complete line count.
 - Finance has signed the reconciliation.
 - There are no unapproved variances.
-- The final Sage RM report and PlantControl opening balance agree.
+- The final Sage RM report and PlantControl opening balance agree. This must be
+  the same cutover point: do not load a balance that already includes later GRNs
+  and then replay those GRNs through the bridge.
 - Pending production, GRN, transfer, and dispatch events have been reviewed.
 
 Then stop the restricted bridge (`Ctrl+C`), clear the PowerShell session
@@ -142,6 +144,18 @@ approved for rollout. For example, to activate GRN only:
 Remove-Item Env:BRIDGE_ALLOWED_EVENT_TYPES -ErrorAction SilentlyContinue
 $env:BRIDGE_ALLOWED_EVENT_TYPES = 'grn_confirmed'
 node .\bridgeWorker.js
+```
+
+Start the production SDK API in validation-only mode first. Enable live GRN
+posting only after Finance signs the reconciliation and the production bridge
+is limited to `grn_confirmed`:
+
+```powershell
+cd "C:\Users\Joseph Kaseke\CascadeProjects\HYPER MES\sage-sdk-api"
+.\Start-SageSdkApi-Production.ps1
+
+# Authorized production GRN release only
+.\Start-SageSdkApi-Production.ps1 -EnableGrnWrites -EnableFullGrnWorkflow
 ```
 
 Do not leave the event scope blank until every Sage workflow has been approved

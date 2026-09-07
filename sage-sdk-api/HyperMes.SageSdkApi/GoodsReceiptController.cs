@@ -32,11 +32,11 @@ namespace SDK_Test
             return Ok(new
             {
                 status = "validated",
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
                 action = "goods-receipt-grv",
                 sageConnection = "verified",
                 sagePosting = "not performed",
-                message = "Validated against Sage UAT. No GRV was created.",
+                message = "Validated against the configured Sage company. No GRV was created.",
                 goodsReceipt = GoodsReceiptSummary(request, null)
             });
         }
@@ -102,7 +102,7 @@ namespace SDK_Test
                 return Ok(new
                 {
                     status = outcome,
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "goods-receipt-grv",
                     sagePosting = "completed",
                     grvNumber = grvNumber,
@@ -110,7 +110,7 @@ namespace SDK_Test
                     supplierInvoiceNumber = supplierInvoiceNumber,
                     message = outcome == "already-posted"
                         ? "Sage already contains this GRN's GRV and supplier invoice."
-                        : "Goods receipt and supplier invoice posted to Sage UAT.",
+                        : "Goods receipt and supplier invoice posted to the configured Sage company.",
                     goodsReceipt = GoodsReceiptSummary(request, grvNumber)
                 });
             }
@@ -122,9 +122,9 @@ namespace SDK_Test
                 return Content(HttpStatusCode.InternalServerError, new
                 {
                     status = "failed",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "goods-receipt-grv",
-                    message = "Sage UAT could not post this goods receipt GRV.",
+                    message = "Sage could not post this goods receipt GRV.",
                     exception = ex.GetType().FullName,
                     exceptionMessage = ex.Message,
                     detail = ex.ToString()
@@ -149,13 +149,20 @@ namespace SDK_Test
             if (allowUatBatchWrites && string.Equals(environment, "UAT", StringComparison.OrdinalIgnoreCase))
                 return;
 
+            var allowProductionGrnWrites = string.Equals(
+                Environment.GetEnvironmentVariable("HYPER_SAGE_PRODUCTION_GRN_WRITES"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+            if (allowProductionGrnWrites && string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase))
+                return;
+
             var allowedReferences = (Environment.GetEnvironmentVariable("HYPER_SAGE_ALLOWED_GRN_REFERENCES") ?? "")
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(value => value.Trim());
             if (!allowedReferences.Contains(request.Reference.Trim(), StringComparer.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    "This GRN is not in the explicit UAT posting allow-list.");
+                    "This GRN is not in the explicit posting allow-list for the configured Sage environment.");
             }
         }
 
@@ -338,7 +345,8 @@ namespace SDK_Test
             if (request.Lines == null || request.Lines.Length == 0)
                 return "At least one goods-receipt line is required.";
 
-            if (request.VatMode != "exclusive" && request.VatMode != "inclusive" && request.VatMode != "no_vat")
+            if (request.VatMode != "exclusive" && request.VatMode != "inclusive" &&
+                request.VatMode != "no_vat" && request.VatMode != "zero_rated")
                 return "Finance VAT review is required before Sage posting.";
 
             if (request.VatMode != "no_vat" && (!request.VatTaxTypeId.HasValue || request.VatTaxTypeId.Value <= 0))
@@ -376,9 +384,11 @@ namespace SDK_Test
             {
                 var configuredId = Environment.GetEnvironmentVariable("HYPER_SAGE_NO_VAT_TAX_TYPE_ID");
                 int noVatTaxTypeId;
-                if (!int.TryParse(configuredId, out noVatTaxTypeId) || noVatTaxTypeId <= 0)
+                if (request.VatTaxTypeId.HasValue && request.VatTaxTypeId.Value > 0)
+                    noVatTaxTypeId = request.VatTaxTypeId.Value;
+                else if (!int.TryParse(configuredId, out noVatTaxTypeId) || noVatTaxTypeId <= 0)
                     throw new InvalidOperationException(
-                        "No-VAT GRN posting is blocked until a Sage zero-rate tax type is configured for this UAT test.");
+                        "No-VAT GRN posting is blocked until a Sage exempt tax type is configured.");
 
                 var noVatTaxType = new TaxRate(noVatTaxTypeId);
                 if (Math.Abs((decimal)noVatTaxType.Rate) > 0.0001m)
