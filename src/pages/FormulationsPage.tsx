@@ -349,7 +349,8 @@ export default function FormulationsPage() {
       status: f.status,
     });
     const { data } = await supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order');
-    setIngs((data || []).map(i => ({ raw_material_id: i.raw_material_id, quantity: i.quantity, unit: i.unit, percentage: i.percentage, is_critical: i.is_critical })));
+    const loadedIngredients = (data || []).map(i => ({ raw_material_id: i.raw_material_id, quantity: Number(i.quantity), unit: i.unit, percentage: Number(i.percentage), is_critical: i.is_critical }));
+    setIngs(loadedIngredients);
     setDetailOpen(false);
     setEditOpen(true);
   }
@@ -374,6 +375,9 @@ export default function FormulationsPage() {
       setToastMessage(`Draft v${newVersion.version} created for ${newVersion.code}. The previous version was preserved.`);
       setTimeout(() => setToastMessage(null), 4500);
       await openEdit(newVersion as Formulation);
+      const { data: copiedIngredients, error: ingredientError } = await supabase.from('formulation_ingredients').select('*').eq('formulation_id', newId).order('sort_order');
+      if (ingredientError) throw ingredientError;
+      setIngs(recalculateQuantities(copiedIngredients || [], Number(newVersion.batch_size)));
       await fetchFormulations();
     } catch (error: any) {
       console.error('Error creating formulation version:', error);
@@ -405,6 +409,15 @@ export default function FormulationsPage() {
     const ingredientTotal = ings
       .filter((ingredient) => ingredient.raw_material_id)
       .reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
+    const entered = ings.filter(i => i.raw_material_id);
+    if (entered.some(i => !Number.isFinite(i.quantity) || i.quantity <= 0 || !Number.isFinite(i.percentage) || i.percentage < 0 || i.percentage > 100)) {
+      alert('Each ingredient needs a positive quantity and a percentage between 0 and 100.');
+      return;
+    }
+    if (Math.abs(entered.reduce((sum, i) => sum + i.percentage, 0) - 100) > 0.01) {
+      alert('Ingredient percentages must total 100% before saving the formula and BOM.');
+      return;
+    }
     if (Math.abs(ingredientTotal - resolvedBatchSize) > 0.01) {
       alert(`Formula mass balance must equal the reference batch size. Ingredients total ${ingredientTotal.toFixed(2)} kg; reference batch is ${resolvedBatchSize.toFixed(2)} kg.`);
       return;
@@ -449,19 +462,21 @@ export default function FormulationsPage() {
           raw_material_id: i.raw_material_id,
           quantity: i.quantity,
           unit: i.unit,
-          percentage: i.percentage,
+          percentage: Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000,
           is_critical: i.is_critical,
           notes: '',
           sort_order: idx,
         }));
 
-      await supabase.from('formulation_ingredients').delete().eq('formulation_id', fId);
+      const { error: deleteError } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', fId);
+      if (deleteError) throw deleteError;
       if (rows.length) {
         const { error } = await supabase.from('formulation_ingredients').insert(rows);
         if (error) throw error;
       }
 
       setEditOpen(false);
+      setToastMessage(`Formula ${form.code} v${form.version} and its calculated BOM saved.`);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving formulation:', error);
@@ -553,7 +568,7 @@ export default function FormulationsPage() {
     if (batchSize <= 0) return updatedIngs;
     return updatedIngs.map(i => ({
       ...i,
-      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100 * 100) / 100 : 0,
+      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100000000) / 1000000 : 0,
     }));
   };
 
@@ -573,18 +588,7 @@ export default function FormulationsPage() {
     variants[0] = { ...(variants[0] || { size: '', batch_size: 0 }), batch_size: nextBatchSize };
     setForm({ ...form, batch_size: batchSize, unit_size_variants: variants });
 
-    if (copiedBatchSize && nextBatchSize > 0) {
-      const scale = nextBatchSize / copiedBatchSize;
-      const scaledIngredients = ings.map((ingredient) => ({
-        ...ingredient,
-        quantity: Math.round((Number(ingredient.quantity) || 0) * scale * 10000) / 10000,
-      }));
-      setIngs(recalculatePercentages(scaledIngredients, nextBatchSize));
-      setCopiedBatchSize(nextBatchSize);
-      return;
-    }
-
-    setIngs(recalculatePercentages(ings, nextBatchSize));
+    setIngs(recalculateQuantities(ings, nextBatchSize));
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
@@ -1560,15 +1564,14 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? 'Edit Formula' : 'New Formula'} size="xl">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? `Formula ${form.code} / Version ${form.version}` : 'Create Formula & BOM'} size="xl">
         <div className="space-y-5">
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants (Required)</h4>
-            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
+            <h4 className="text-sm font-semibold text-slate-700">Formula details</h4>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="col-span-2">
+            {!editId && <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Copy ingredients from an existing BOM (optional)</label>
               <select
                 value=""
@@ -1585,7 +1588,7 @@ export default function FormulationsPage() {
               {!editId && copiedBatchSize && (
                 <p className="text-[11px] text-amber-600 mt-1">Copied ingredients are in a new draft. Enter a new name, formula code, and Sage code.</p>
               )}
-            </div>
+            </div>}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., Broiler Grower Crumbs 50kg" />
@@ -1600,7 +1603,7 @@ export default function FormulationsPage() {
             </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference Formula Batch Size (kg) *</label>
               <input type="number" min="0.01" step="0.01" value={form.batch_size} onChange={e => updateReferenceBatchSize(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000.00" />
@@ -1670,7 +1673,7 @@ export default function FormulationsPage() {
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="number" min="0" max="100" step="0.01" value={Number(ing.percentage || 0).toFixed(2)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], percentage: Number(e.target.value) || 0 }; setIngs(recalculateQuantities(u)); }} className="w-full px-2 py-1.5 border border-teal-200 rounded text-sm bg-teal-50/40 focus:outline-none focus:border-teal-500" title="Enter the percentage of the reference batch; quantity is calculated automatically" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" min="0" max="100" step="any" value={ing.percentage} onChange={e => { const percentage = Number(e.target.value) || 0; const u = [...ings]; u[idx] = { ...u[idx], percentage, quantity: Math.round(percentage / 100 * formulaBatchSize * 10000) / 10000 }; setIngs(u); }} className="w-full px-2 py-1.5 border border-teal-200 rounded text-sm bg-teal-50/40 focus:outline-none focus:border-teal-500" title="Enter the percentage of the reference batch; quantity is calculated automatically" /></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
                   <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>
@@ -1679,7 +1682,8 @@ export default function FormulationsPage() {
           </div>
           <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
             <button onClick={() => setEditOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
-            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-5 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save Formula'}</button>
+            <button type="button" onClick={() => setIngs(recalculateQuantities(ings))} disabled={formulaBatchSize <= 0} className="px-4 py-2 text-sm font-medium text-teal-700 border border-teal-300 rounded-lg disabled:opacity-50">Recalculate BOM from %</button>
+            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-5 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save Formula & BOM'}</button>
           </div>
         </div>
       </Modal>
