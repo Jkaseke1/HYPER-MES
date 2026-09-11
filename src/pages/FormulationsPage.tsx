@@ -1183,7 +1183,7 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="xl">
+      <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="2xl" className="max-h-[96vh]">
         {selected && (
           <div className="space-y-5">
             {isFinanceUser && (
@@ -1221,18 +1221,18 @@ export default function FormulationsPage() {
               </div>
               {detailTab === 'ingredients' && detailIngs.length === 0 && <p className="text-sm text-slate-400">No ingredients added</p>}
               {detailTab === 'ingredients' && detailIngs.length > 0 && (
-                <div className="max-h-[55vh] overflow-auto border border-slate-200 rounded-lg">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 z-10"><tr className="border-b border-slate-200 text-left bg-slate-50">
-                      <th className="px-3 py-2 font-medium text-slate-600">Material Name</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Type Code</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Qty</th>
-                      <th className="px-3 py-2 font-medium text-slate-600">Unit</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">%</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Unit Cost</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Total Cost</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Stock</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Critical</th>
+                <div className="overflow-hidden border border-slate-200 rounded-lg">
+                  <table className="w-full text-[11px] leading-tight">
+                    <thead><tr className="border-b border-slate-200 text-left bg-slate-50">
+                      <th className="px-2 py-1.5 font-medium text-slate-600">Material Name</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-center">Type</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Qty</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600">Unit</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">%</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Unit Cost</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Total Cost</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Stock</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-center">Critical</th>
                       {bomEditMode && <th className="px-3 py-2 font-medium text-red-400 text-center">Remove</th>}
                     </tr></thead>
                     <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => {
@@ -1276,12 +1276,12 @@ export default function FormulationsPage() {
                                 </optgroup>
                               </select>
                             ) : (
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="flex items-center gap-1 whitespace-nowrap">
                                 <span className="text-slate-800 font-bold">{i.raw_materials?.name || 'Unknown'}</span>
-                                <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">({i.raw_materials?.code})</span>
+                                <span className="font-mono text-[9px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded">({i.raw_materials?.code})</span>
                                 {typeInfo.isPremix && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-2 py-0.5 rounded-full shadow-sm">
-                                    ⭐️ {typeInfo.badgeLabel}
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-1.5 py-0.5 rounded-full">
+                                    {typeInfo.badgeLabel}
                                   </span>
                                 )}
                               </div>
