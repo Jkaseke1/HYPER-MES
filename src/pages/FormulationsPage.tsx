@@ -652,10 +652,12 @@ export default function FormulationsPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="overflow-hidden rounded-lg bg-[#0c2035] text-white shadow-lg">
+      <div className="flex flex-wrap items-center justify-between gap-5 px-6 py-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Formulations & BOM</h1>
-          <p className="text-sm text-slate-500 mt-1">Formula register</p>
+          <span className="inline-block border border-amber-500/50 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">FORMULA CONTROL</span>
+          <h1 className="mt-3 text-2xl font-bold text-white">Formulations & BOM</h1>
+          <p className="mt-1 text-sm text-slate-300">Master recipes, batch quantities and approved versions</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -673,21 +675,22 @@ export default function FormulationsPage() {
             </button>
           )}
           {isFinanceUser && (
-            <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors">
+            <button onClick={openNew} className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold transition-colors whitespace-nowrap">
               <Plus className="w-4 h-4" /> New Formula
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 border-y border-slate-200 bg-white">
+      <div className="grid grid-cols-2 lg:grid-cols-4 border-t border-white/10">
         {[
-          { label: 'Total formulas', value: totalFormulas, color: 'text-slate-800' },
-          { label: 'Active', value: activeCount, color: 'text-emerald-700' },
-          { label: 'Draft', value: draftCount, color: 'text-amber-700' },
-          { label: 'Archived', value: archivedCount, color: 'text-slate-500' },
-        ].map(stat => <div key={stat.label} className="px-5 py-3 border-r border-slate-100 last:border-0"><p className="text-xs font-medium text-slate-500">{stat.label}</p><p className={`mt-1 text-xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
+          { label: 'Total formulas', value: totalFormulas, color: 'text-white', icon: FlaskConical },
+          { label: 'Active', value: activeCount, color: 'text-emerald-300', icon: CheckCircle2 },
+          { label: 'Draft', value: draftCount, color: 'text-amber-300', icon: FileText },
+          { label: 'Archived', value: archivedCount, color: 'text-cyan-300', icon: Archive },
+        ].map(stat => <div key={stat.label} className="px-6 py-4 border-r border-white/10 last:border-0"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase text-slate-400">{stat.label}</p><stat.icon className={`h-4 w-4 ${stat.color}`} /></div><p className={`mt-2 text-3xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
       </div>
+      </section>
 
       <div role="tablist" aria-label="Formula views" className="flex gap-5 border-b border-slate-200">
         <button role="tab" aria-selected={registerView === 'formulas'} onClick={() => setRegisterView('formulas')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'formulas' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>All formulas <span className="ml-2 text-xs tabular-nums">{totalFormulas}</span></button>
@@ -812,8 +815,8 @@ export default function FormulationsPage() {
               </div>
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-emerald-50 border-b border-emerald-200">
+                  <table className="w-full min-w-[1120px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle [&_td:not(:first-child)]:whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-200 [&_th]:text-slate-600 [&_th]:tracking-normal [&_th]:normal-case">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
                         <th className="px-4 py-3 text-left text-xs font-semibold text-emerald-700 uppercase tracking-wider">Formula</th>
@@ -851,7 +854,7 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => compareMode ? toggleCompareSelect(f) : openDetail(f)}
-                              className="flex items-center gap-2 hover:text-emerald-600 transition-colors"
+                              className="flex min-w-48 items-center gap-2 text-left hover:text-emerald-600 transition-colors"
                             >
                               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
                                 <FlaskConical className="w-4 h-4 text-emerald-600" />
@@ -863,7 +866,7 @@ export default function FormulationsPage() {
                             <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">{f.code}</code>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2.5 py-1 text-xs rounded-full inline-block ${catColor[getFormulationCategory(f.name, f.category)] || catColor['Other']}`}>
+                            <span className="text-xs font-medium text-slate-600">
                               {getFormulationCategory(f.name, f.category)}
                             </span>
                           </td>
@@ -983,10 +986,10 @@ export default function FormulationsPage() {
                                         await fetchFormulations();
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md transition-all shadow-sm active:scale-95 cursor-pointer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-md transition-colors whitespace-nowrap"
                                     title="Set as Finance-Approved Active Formulation for Today"
                                   >
-                                    ✨ Set Active Today
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate
                                   </button>
                                 );
                               })()}
@@ -1017,7 +1020,7 @@ export default function FormulationsPage() {
               </div>
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[1000px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle">
                     <thead className="bg-amber-50 border-b border-amber-200">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
