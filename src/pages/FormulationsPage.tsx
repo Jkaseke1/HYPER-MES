@@ -557,6 +557,16 @@ export default function FormulationsPage() {
     }));
   };
 
+  const recalculateQuantities = (updatedIngs: IngRow[], batchSize = Number(form.batch_size) || 0) => {
+    if (batchSize <= 0) return updatedIngs;
+    return updatedIngs.map(i => ({
+      ...i,
+      quantity: i.raw_material_id
+        ? Math.round(((Number(i.percentage) || 0) / 100) * batchSize * 10000) / 10000
+        : 0,
+    }));
+  };
+
   const updateReferenceBatchSize = (batchSize: string) => {
     const nextBatchSize = Number(batchSize) || 0;
     const variants = [...form.unit_size_variants];
@@ -1318,7 +1328,7 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-3 py-2 text-right">
                             {bomEditMode ? (
-                              <input type="number" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], percentage: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                              <input type="number" min="0" max="100" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; const percentage = parseFloat(e.target.value) || 0; u[idx] = { ...u[idx], percentage, quantity: Math.round((percentage / 100) * Number(selected.batch_size || 0) * 10000) / 10000 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-teal-200 bg-teal-50/40 rounded text-sm focus:outline-none focus:border-teal-500" title="Enter percentage; quantity recalculates from the formula batch size" />
                             ) : (
                               <span>{i.percentage.toFixed(1)}%</span>
                             )}
@@ -1619,7 +1629,7 @@ export default function FormulationsPage() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Each quantity is for the approved {form.batch_size || '—'} kg formula batch and will scale proportionally on production orders.</p></div>
+              <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Enter either quantity or percentage. Changing one recalculates the other for the {form.batch_size || '—'} kg reference batch.</p></div>
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
                 <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Total: {totalPct.toFixed(1)}%</span>
@@ -1633,7 +1643,7 @@ export default function FormulationsPage() {
               <tbody>{ings.map((ing, idx) => (
                 <tr key={idx} className="border-b border-slate-50">
                   <td className="py-1.5 pr-2">
-                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
+                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(recalculateQuantities(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
                       <option value="">Select component / material...</option>
                       {draftFormulaMaterialIds.size > 0 && <optgroup label="✓ Materials already in this formula / BOM (shown first)">
                         {materials.filter(m => draftFormulaMaterialIds.has(m.id)).map(m => (
@@ -1654,7 +1664,7 @@ export default function FormulationsPage() {
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantity divided by the standard batch size" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" min="0" max="100" step="0.01" value={Number(ing.percentage || 0).toFixed(2)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], percentage: Number(e.target.value) || 0 }; setIngs(recalculateQuantities(u)); }} className="w-full px-2 py-1.5 border border-teal-200 rounded text-sm bg-teal-50/40 focus:outline-none focus:border-teal-500" title="Enter the percentage of the reference batch; quantity is calculated automatically" /></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
                   <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>
