@@ -1221,9 +1221,9 @@ export default function FormulationsPage() {
               </div>
               {detailTab === 'ingredients' && detailIngs.length === 0 && <p className="text-sm text-slate-400">No ingredients added</p>}
               {detailTab === 'ingredients' && detailIngs.length > 0 && (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="max-h-[55vh] overflow-auto border border-slate-200 rounded-lg">
                   <table className="w-full text-xs">
-                    <thead><tr className="border-b border-slate-200 text-left bg-slate-50">
+                    <thead className="sticky top-0 z-10"><tr className="border-b border-slate-200 text-left bg-slate-50">
                       <th className="px-3 py-2 font-medium text-slate-600">Material Name</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-center">Type Code</th>
                       <th className="px-3 py-2 font-medium text-slate-600 text-right">Qty</th>
