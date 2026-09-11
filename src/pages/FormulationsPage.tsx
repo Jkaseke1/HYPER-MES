@@ -4,7 +4,6 @@ import { Formulation, FormulationIngredient, RawMaterial } from '../types/databa
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
-import StatCard from '../components/ui/StatCard';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
@@ -140,6 +139,7 @@ export default function FormulationsPage() {
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
   const [search, setSearch] = useState('');
+  const [registerView, setRegisterView] = useState<'formulas' | 'review'>('formulas');
   const [loading, setLoading] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -652,10 +652,10 @@ export default function FormulationsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Formulations & BOM Master</h1>
-          <p className="text-sm text-slate-500 mt-1">Bill of Materials with Premix & Micro-Ingredient Highlighting (Finance Controlled)</p>
+          <h1 className="text-2xl font-bold text-slate-800">Formulations & BOM</h1>
+          <p className="text-sm text-slate-500 mt-1">Formula register</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -680,15 +680,22 @@ export default function FormulationsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Formulas" value={totalFormulas} icon={FlaskConical} color="teal" />
-        <StatCard title="Active" value={activeCount} icon={CheckCircle2} color="emerald" />
-        <StatCard title="Draft" value={draftCount} icon={FileText} color="amber" />
-        <StatCard title="Archived" value={archivedCount} icon={Archive} color="slate" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 border-y border-slate-200 bg-white">
+        {[
+          { label: 'Total formulas', value: totalFormulas, color: 'text-slate-800' },
+          { label: 'Active', value: activeCount, color: 'text-emerald-700' },
+          { label: 'Draft', value: draftCount, color: 'text-amber-700' },
+          { label: 'Archived', value: archivedCount, color: 'text-slate-500' },
+        ].map(stat => <div key={stat.label} className="px-5 py-3 border-r border-slate-100 last:border-0"><p className="text-xs font-medium text-slate-500">{stat.label}</p><p className={`mt-1 text-xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
       </div>
 
-      {isFinanceUser && !loading && (
-        <section className="border border-amber-200 bg-amber-50/60 rounded-lg overflow-hidden">
+      <div role="tablist" aria-label="Formula views" className="flex gap-5 border-b border-slate-200">
+        <button role="tab" aria-selected={registerView === 'formulas'} onClick={() => setRegisterView('formulas')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'formulas' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>All formulas <span className="ml-2 text-xs tabular-nums">{totalFormulas}</span></button>
+        {isFinanceUser && <button role="tab" aria-selected={registerView === 'review'} onClick={() => setRegisterView('review')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'review' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>Finance review <span className="ml-2 text-xs tabular-nums text-amber-700">{financeReviewQueue.length}</span></button>}
+      </div>
+
+      {isFinanceUser && registerView === 'review' && !loading && (
+        <section className="border-y border-slate-200 bg-white">
           <div className="flex flex-col gap-3 px-5 py-4 border-b border-amber-200 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
@@ -696,7 +703,6 @@ export default function FormulationsPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-slate-800">Finance Formula Review</h2>
-                <p className="text-sm text-slate-600">A formula can be used in production only when its active BOM totals its reference batch quantity.</p>
               </div>
             </div>
             <span className={`self-start rounded-md px-3 py-1 text-sm font-semibold sm:self-auto ${financeReviewQueue.length ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
@@ -704,7 +710,7 @@ export default function FormulationsPage() {
             </span>
           </div>
           {financeReviewQueue.length > 0 ? (
-            <div className="max-h-80 overflow-auto bg-white">
+            <div className="overflow-x-auto bg-white">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                   <tr>
@@ -751,25 +757,14 @@ export default function FormulationsPage() {
         </section>
       )}
 
-      <div className="flex flex-col gap-4">
+      {registerView === 'formulas' && <>
+      <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-1 flex-wrap">
-            <button
-              key="All"
-              onClick={() => setFilter('All')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === 'All' ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-            >
-              All
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.code}
-                onClick={() => setFilter(c.code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === c.code ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-              >
-                {c.name}
-              </button>
-            ))}
+          <div className="w-full sm:w-60">
+            <select aria-label="Formula category" value={filter} onChange={e => setFilter(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              <option value="All">All categories</option>
+              {categories.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+            </select>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -777,7 +772,7 @@ export default function FormulationsPage() {
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIngredientFilter('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
@@ -1107,6 +1102,7 @@ export default function FormulationsPage() {
         </div>
       )}
 
+      </>}
       {/* BOM Comparison Modal */}
       <Modal open={compareOpen} onClose={() => setCompareOpen(false)} title="BOM Comparison" size="xl">
         {compareSelected.length === 2 && (
