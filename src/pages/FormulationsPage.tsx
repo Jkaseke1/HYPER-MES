@@ -3,6 +3,7 @@ import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, 
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
+import './formula-editor.css';
 import StatusBadge from '../components/ui/StatusBadge';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
@@ -1564,13 +1565,20 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? `Formula ${form.code} / Version ${form.version}` : 'Create Formula & BOM'} size="xl">
-        <div className="space-y-5">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? `Formula ${form.code} / Version ${form.version}` : 'Create Formula & BOM'} size="4xl" className="formula-editor" footer={
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <button onClick={() => setEditOpen(false)} className="px-3 py-2 text-sm font-medium text-slate-600 rounded-md hover:bg-slate-100">Cancel</button>
+          <button type="button" onClick={() => setIngs(recalculateQuantities(ings))} disabled={formulaBatchSize <= 0} className="px-3 py-2 text-sm font-medium text-teal-700 border border-teal-300 rounded-md disabled:opacity-50">Recalculate BOM from %</button>
+          <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{saving ? 'Saving...' : 'Save Formula & BOM'}</button>
+        </div>
+      }>
+        <div className="formula-editor-layout">
+          <aside className="formula-editor-details">
           <div>
             <h4 className="text-sm font-semibold text-slate-700">Formula details</h4>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             {!editId && <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Copy ingredients from an existing BOM (optional)</label>
               <select
@@ -1589,7 +1597,7 @@ export default function FormulationsPage() {
                 <p className="text-[11px] text-amber-600 mt-1">Copied ingredients are in a new draft. Enter a new name, formula code, and Sage code.</p>
               )}
             </div>}
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., Broiler Grower Crumbs 50kg" />
             </div>
@@ -1605,9 +1613,9 @@ export default function FormulationsPage() {
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference Formula Batch Size (kg) *</label>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference batch (kg) *</label>
               <input type="number" min="0.01" step="0.01" value={form.batch_size} onChange={e => updateReferenceBatchSize(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000.00" />
-              <p className="mt-1 text-xs text-slate-500">Copied BOM quantities scale proportionally when you change this size. Production orders can use any planned quantity and scale automatically.</p></div>
+              </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
@@ -1629,23 +1637,25 @@ export default function FormulationsPage() {
 
           <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nutritional Targets</h4>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {[['Protein %', 'target_protein'], ['Fat %', 'target_fat'], ['Fiber %', 'target_fiber'], ['Moisture %', 'target_moisture']].map(([l, k]) => (
                 <div key={k}><label className="block text-xs font-medium text-slate-600 mb-1">{l}</label>
                   <input type="number" step="0.1" value={(form as any)[k]} onChange={e => setForm({ ...form, [k]: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
               ))}
             </div>
           </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Enter either quantity or percentage. Changing one recalculates the other for the {form.batch_size || '—'} kg reference batch.</p></div>
-              <div className="flex items-center gap-3">
+          </aside>
+          <section className="formula-editor-ingredients">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h4 className="text-sm font-semibold text-slate-800">Ingredients <span className="ml-1 text-slate-400">({ings.length})</span></h4>
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
                 <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Total: {totalPct.toFixed(1)}%</span>
                 <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>
               </div>
             </div>
-            <table className="w-full text-sm">
+            <div className="formula-editor-table">
+            <table className="w-full text-sm table-fixed">
               <thead><tr className="border-b border-slate-200 text-left">
                 <th className="pb-2 font-medium text-slate-500 text-xs">Raw Material</th><th className="pb-2 font-medium text-slate-500 text-xs w-24">Qty</th><th className="pb-2 font-medium text-slate-500 text-xs w-20">Unit</th><th className="pb-2 font-medium text-slate-500 text-xs w-20">%</th><th className="pb-2 font-medium text-slate-500 text-xs w-16">Critical</th><th className="pb-2 w-10"></th>
               </tr></thead>
@@ -1679,12 +1689,8 @@ export default function FormulationsPage() {
                 </tr>
               ))}</tbody>
             </table>
-          </div>
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
-            <button onClick={() => setEditOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
-            <button type="button" onClick={() => setIngs(recalculateQuantities(ings))} disabled={formulaBatchSize <= 0} className="px-4 py-2 text-sm font-medium text-teal-700 border border-teal-300 rounded-lg disabled:opacity-50">Recalculate BOM from %</button>
-            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-5 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save Formula & BOM'}</button>
-          </div>
+            </div>
+          </section>
         </div>
       </Modal>
     </div>
