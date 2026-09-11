@@ -354,6 +354,35 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
+  async function createVersion(source: Formulation) {
+    setSaving(true);
+    try {
+      const { data: newId, error } = await supabase.rpc('create_formulation_version', {
+        p_source_formulation_id: source.id,
+      });
+      if (error) throw error;
+      if (!newId) throw new Error('The new formulation version was not returned.');
+
+      const { data: newVersion, error: loadError } = await supabase
+        .from('formulations')
+        .select('*')
+        .eq('id', newId)
+        .single();
+      if (loadError || !newVersion) throw loadError || new Error('Could not load the new formulation version.');
+
+      setDetailOpen(false);
+      setToastMessage(`Draft v${newVersion.version} created for ${newVersion.code}. The previous version was preserved.`);
+      setTimeout(() => setToastMessage(null), 4500);
+      await openEdit(newVersion as Formulation);
+      await fetchFormulations();
+    } catch (error: any) {
+      console.error('Error creating formulation version:', error);
+      alert(`Failed to create formula version: ${error.message || error}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSave() {
     if (!form.name.trim() || !form.code.trim()) {
       alert('Name and Code are required.');
@@ -401,10 +430,9 @@ export default function FormulationsPage() {
 
       let fId = editId;
       if (editId) {
-        // Increment version number on formula edit
-        const nextVersion = (form.version || 1) + 1;
-        const payloadWithVersion = { ...payload, version: nextVersion };
-        const { error } = await supabase.from('formulations').update(payloadWithVersion).eq('id', editId);
+        // Draft edits stay on the same version. New versions are created only
+        // through the explicit Create New Version action, preserving history.
+        const { error } = await supabase.from('formulations').update(payload).eq('id', editId);
         if (error) throw error;
       } else {
         const { data, error } = await supabase.from('formulations').insert(payload).select('id').single();
@@ -507,21 +535,10 @@ export default function FormulationsPage() {
         if (insErr) throw insErr;
       }
 
-      // Increment formulation version number on BOM edit
-      const nextVersion = (selected.version || 1) + 1;
-      const { error: verErr } = await supabase
-        .from('formulations')
-        .update({ version: nextVersion, updated_at: new Date().toISOString() })
-        .eq('id', selected.id);
-      
-      if (!verErr) {
-        setSelected(prev => prev ? { ...prev, version: nextVersion } : null);
-      }
-
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
-      setToastMessage(`✨ BOM updated to v${nextVersion}! Total formulation percentage normalized to 100%.`);
+      setToastMessage(`BOM updated on draft v${selected.version}. Total formulation percentage normalized to 100%.`);
       setTimeout(() => setToastMessage(null), 4000);
       fetchFormulations();
     } catch (error: any) {
@@ -1161,8 +1178,11 @@ export default function FormulationsPage() {
           <div className="space-y-5">
             {isFinanceUser && (
               <div className="flex gap-2">
-                <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
-                <button onClick={() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> {bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM'}</button>
+                <button onClick={() => createVersion(selected)} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors disabled:opacity-50"><GitCompare className="w-3.5 h-3.5" /> Create New Version</button>
+                {selected.status !== 'active' && (
+                  <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
+                )}
+                <button onClick={() => selected.status === 'active' ? createVersion(selected) : (() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); })()} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"><Edit2 className="w-3.5 h-3.5" /> {selected.status === 'active' ? 'Edit BOM in New Version' : (bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM')}</button>
                 <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
               </div>
             )}
