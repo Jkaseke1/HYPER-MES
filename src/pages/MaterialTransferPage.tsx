@@ -282,6 +282,20 @@ export default function MaterialTransferPage() {
         return;
       }
 
+      const seenMaterials = new Set<string>();
+      const duplicateLine = validLines.find((line) => {
+        if (seenMaterials.has(line.raw_material_id)) return true;
+        seenMaterials.add(line.raw_material_id);
+        return false;
+      });
+      if (duplicateLine) {
+        const material = rawMaterials.find((m) => m.id === duplicateLine.raw_material_id);
+        alert(`${material?.name || 'This raw material'} has already been picked up in this transfer. Enter it once and combine the quantity.`);
+        setSaving(false);
+        return;
+      }
+      const transferBatchKey = crypto.randomUUID();
+
       // Sage is the stock authority for RM transfers. The bridge refreshes this
       // balance from Sage UAT and the worker verifies it again when posting.
       for (const line of validLines) {
@@ -308,6 +322,7 @@ export default function MaterialTransferPage() {
           p_notes: sharedForm.notes || null,
           p_production_order_id: sharedForm.production_order_id || null,
           p_requested_by: user.id,
+          p_transfer_batch_key: transferBatchKey,
         });
 
         if (error) {
@@ -356,7 +371,29 @@ export default function MaterialTransferPage() {
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
-  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant'].includes(profile?.role || '');
+  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
+  const canCreateTransfer = !['production_receiver'].includes(profile?.role || '');
+  const canReverseTransfer = profile?.role === 'admin';
+  async function reverseTransfer(transfer: MaterialTransfer) {
+    if (!canReverseTransfer) return;
+    const reason = window.prompt(`Reason for reversing ${transfer.transfer_number}?`, 'Duplicate material transfer');
+    if (reason === null) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) { alert('User not authenticated'); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('reverse_material_transfer', {
+        p_transfer_id: transfer.id, p_reversed_by: user.id, p_reason: reason,
+      });
+      if (error) throw error;
+      setViewTransfer(null);
+      setSuccessMessage(`${transfer.raw_materials?.name || 'Material transfer'} reversed and returned to RM Warehouse.`);
+      window.setTimeout(() => setSuccessMessage(''), 4000);
+      await fetchData();
+    } catch (error: any) {
+      alert(`Could not reverse transfer: ${error.message}`);
+    } finally { setSaving(false); }
+  }
   const activeSagePosts = transfers.filter((transfer) => {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
@@ -405,12 +442,14 @@ export default function MaterialTransferPage() {
                 <CheckCircle2 className="h-4 w-4" /> Production Receiving ({statusCounts.in_buffer})
               </Link>
             )}
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
-            >
-              <Plus className="h-4 w-4" /> New Transfer
-            </button>
+            {canCreateTransfer && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
+              >
+                <Plus className="h-4 w-4" /> New Transfer
+              </button>
+            )}
           </div>
         </div>
         <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
@@ -799,6 +838,14 @@ export default function MaterialTransferPage() {
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={viewTransfer?.status || 'pending'} />
+              {viewTransfer && canReverseTransfer && viewTransfer.status === 'in_buffer' && (
+                <button onClick={() => reverseTransfer(viewTransfer)} disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  title="Return this transfer from Buffer to RM Warehouse">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Reverse transfer
+                </button>
+              )}
               <button
                 onClick={() => setViewTransfer(null)}
                 className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors text-slate-400 hover:text-white"
