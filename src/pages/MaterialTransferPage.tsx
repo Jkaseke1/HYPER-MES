@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -365,6 +365,15 @@ export default function MaterialTransferPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const transferGroups = Object.values(filteredTransfers.reduce<Record<string, { key: string; transfers: MaterialTransfer[] }>>((groups, transfer) => {
+    const groupDate = transfer.transfer_date || transfer.created_at || 'undated';
+    const key = [groupDate.slice(0, 10), transfer.purpose || 'No purpose', transfer.requested_by || 'unknown', transfer.production_order_id || 'no-order'].join('|');
+    if (!groups[key]) groups[key] = { key, transfers: [] };
+    groups[key].transfers.push(transfer);
+    return groups;
+  }, {}));
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
   const statusCounts = {
     all: transfers.length,
     in_buffer: transfers.filter(t => t.status === 'in_buffer').length,
@@ -506,6 +515,36 @@ export default function MaterialTransferPage() {
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100"><tr>{['Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => <th key={header} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">{header}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {transferGroups.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">No material transfers found</td></tr> : transferGroups.map((group) => {
+                const first = group.transfers[0];
+                const expanded = expandedGroups[group.key] || false;
+                const total = group.transfers.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
+                const statuses = [...new Set(group.transfers.map((item) => item.status))];
+                const logs = group.transfers.map((item) => sageSyncLogs[item.id]).filter(Boolean);
+                const posted = logs.length === group.transfers.length && logs.every((log) => log.status === 'success');
+                return <Fragment key={group.key}>
+                  <tr className="cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroups((current) => ({ ...current, [group.key]: !expanded }))}>
+                    <td className="px-3 py-3 text-sm text-slate-600">{first.transfer_date ? format(new Date(first.transfer_date), 'dd MMM yyyy') : '-'}</td>
+                    <td className="px-3 py-3"><p className="font-bold text-slate-800">{first.warehouses?.name || 'Raw Materials'} <span className="font-normal text-slate-400">to</span> Production</p><p className="text-xs text-slate-500">{group.transfers.length} material line{group.transfers.length === 1 ? '' : 's'}</p></td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{group.transfers.length}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{total.toLocaleString()} kg</td>
+                    <td className="px-3 py-3 text-xs text-slate-700">{(first as any).requester?.full_name || (first as any).requester?.email || '-'}</td>
+                    <td className="px-3 py-3 text-sm text-slate-600">{first.purpose || '-'}</td>
+                    <td className="px-3 py-3">{statuses.length === 1 ? <StatusBadge status={statuses[0]} /> : <span className="rounded-full border px-2 py-1 text-[11px] font-bold text-slate-600">Mixed</span>}</td>
+                    <td className="px-3 py-3 text-xs font-bold">{posted ? <span className="text-emerald-700">Posted to Sage</span> : <span className="text-slate-500">{logs.some((log) => ['pending', 'processing', 'retry'].includes(log.status)) ? 'Posting' : 'Not queued'}</span>}</td>
+                    <td className="px-3 py-3 text-right"><button onClick={(event) => { event.stopPropagation(); setExpandedGroups((current) => ({ ...current, [group.key]: !expanded })); }} className="rounded-lg p-1.5 hover:bg-slate-100" title={expanded ? 'Hide materials' : 'Show materials'}><Eye className="h-4 w-4 text-slate-500" /></button></td>
+                  </tr>
+                  {expanded && <tr><td colSpan={9} className="bg-slate-50 px-5 py-3"><div className="overflow-x-auto rounded-lg border border-slate-200 bg-white"><table className="w-full text-xs"><thead className="bg-slate-50 text-left uppercase text-slate-500"><tr><th className="px-3 py-2">Material</th><th className="px-3 py-2">Quantity</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{group.transfers.map((transfer) => <tr key={transfer.id}><td className="px-3 py-2 font-semibold">{transfer.raw_materials?.name || '-'} <span className="font-mono text-slate-400">{transfer.raw_materials?.code || ''}</span></td><td className="px-3 py-2">{Math.abs(transfer.quantity || 0).toLocaleString()} {transfer.unit || 'kg'}</td><td className="px-3 py-2"><StatusBadge status={transfer.status} /></td><td className="px-3 py-2"><button onClick={() => setViewTransfer(transfer)} className="rounded-lg p-1.5 hover:bg-slate-100" title="View transfer audit"><Eye className="h-4 w-4 text-slate-500" /></button></td></tr>)}</tbody></table></div></td></tr>}
+                </Fragment>;
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
