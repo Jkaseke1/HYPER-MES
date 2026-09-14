@@ -525,8 +525,9 @@ export default function MaterialTransferPage() {
                 const total = group.transfers.filter((item) => item.status !== 'rejected').reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
                 const reversed = group.transfers.filter((item) => item.status === 'rejected').reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
                 const statuses = [...new Set(group.transfers.map((item) => item.status))];
-                const logs = group.transfers.map((item) => sageSyncLogs[item.id]).filter(Boolean);
-                const posted = logs.length === group.transfers.length && logs.every((log) => log.status === 'success');
+                const activeItems = group.transfers.filter((item) => item.status !== 'rejected');
+                const logs = activeItems.map((item) => sageSyncLogs[item.id]).filter(Boolean);
+                const posted = activeItems.length > 0 && logs.length === activeItems.length && logs.every((log) => log.status === 'success');
                 return <Fragment key={group.key}>
                   <tr className="cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroups((current) => ({ ...current, [group.key]: !expanded }))}>
                     <td className="px-3 py-3 text-sm text-slate-600">{first.transfer_date ? format(new Date(first.transfer_date), 'dd MMM yyyy') : '-'}</td>
