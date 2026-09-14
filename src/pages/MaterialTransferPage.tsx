@@ -173,7 +173,22 @@ export default function MaterialTransferPage() {
   };
 
   const updateTransferLine = (id: string, field: string, value: any) => {
-    setTransferLines(transferLines.map(line =>
+    if (field === 'raw_material_id' && value) {
+      const duplicateMaterial = transferLines.some(line =>
+        line.id !== id && line.raw_material_id === value
+      );
+
+      if (duplicateMaterial) {
+        const material = rawMaterials.find((m) => m.id === value);
+        alert(`${material?.name || 'This raw material'} is already on another line. Combine the quantity on the existing line.`);
+        setTransferLines((lines) => lines.map(line =>
+          line.id === id ? { ...line, raw_material_id: '', quantity: 0 } : line
+        ));
+        return;
+      }
+    }
+
+    setTransferLines((lines) => lines.map(line =>
       line.id === id ? { ...line, [field]: value } : line
     ));
   };
