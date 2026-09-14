@@ -375,7 +375,7 @@ export default function MaterialTransferPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const statusCounts = {
-    all: transfers.length,
+    all: transfers.filter(t => t.status !== 'rejected').length,
     in_buffer: transfers.filter(t => t.status === 'in_buffer').length,
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
@@ -408,6 +408,7 @@ export default function MaterialTransferPage() {
     return status === 'pending' || status === 'processing' || status === 'retry';
   });
   const thisMonthCount = transfers.filter((transfer) => {
+    if (transfer.status === 'rejected') return false;
     const transferDate = new Date(transfer.transfer_date || transfer.created_at);
     const now = new Date();
     return transferDate.getFullYear() === now.getFullYear() && transferDate.getMonth() === now.getMonth();
@@ -521,15 +522,16 @@ export default function MaterialTransferPage() {
               {transferGroups.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">No material transfers found</td></tr> : transferGroups.map((group) => {
                 const first = group.transfers[0];
                 const expanded = expandedGroups[group.key] || false;
-                const total = group.transfers.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
+                const total = group.transfers.filter((item) => item.status !== 'rejected').reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
+                const reversed = group.transfers.filter((item) => item.status === 'rejected').reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
                 const statuses = [...new Set(group.transfers.map((item) => item.status))];
                 const logs = group.transfers.map((item) => sageSyncLogs[item.id]).filter(Boolean);
                 const posted = logs.length === group.transfers.length && logs.every((log) => log.status === 'success');
                 return <Fragment key={group.key}>
                   <tr className="cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroups((current) => ({ ...current, [group.key]: !expanded }))}>
                     <td className="px-3 py-3 text-sm text-slate-600">{first.transfer_date ? format(new Date(first.transfer_date), 'dd MMM yyyy') : '-'}</td>
-                    <td className="px-3 py-3"><p className="font-bold text-slate-800">{first.warehouses?.name || 'Raw Materials'} <span className="font-normal text-slate-400">to</span> Production</p><p className="text-xs text-slate-500">{group.transfers.length} material line{group.transfers.length === 1 ? '' : 's'}</p></td>
-                    <td className="px-3 py-3 font-bold text-slate-700">{group.transfers.length}</td>
+                    <td className="px-3 py-3"><p className="font-bold text-slate-800">{first.warehouses?.name || 'Raw Materials'} <span className="font-normal text-slate-400">to</span> Production</p><p className="text-xs text-slate-500">{group.transfers.filter((item) => item.status !== 'rejected').length} active material line{group.transfers.filter((item) => item.status !== 'rejected').length === 1 ? '' : 's'}</p>{reversed > 0 && <p className="text-[11px] font-semibold text-red-600">{reversed.toLocaleString()} kg reversed</p>}</td>
+                    <td className="px-3 py-3 font-bold text-slate-700">{group.transfers.filter((item) => item.status !== 'rejected').length}</td>
                     <td className="px-3 py-3 font-bold text-slate-700">{total.toLocaleString()} kg</td>
                     <td className="px-3 py-3 text-xs text-slate-700">{(first as any).requester?.full_name || (first as any).requester?.email || '-'}</td>
                     <td className="px-3 py-3 text-sm text-slate-600">{first.purpose || '-'}</td>
