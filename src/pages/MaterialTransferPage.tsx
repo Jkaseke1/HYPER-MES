@@ -112,6 +112,7 @@ export default function MaterialTransferPage() {
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [validationMessage, setValidationMessage] = useState<string>('');
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -180,7 +181,7 @@ export default function MaterialTransferPage() {
 
       if (duplicateMaterial) {
         const material = rawMaterials.find((m) => m.id === value);
-        alert(`${material?.name || 'This raw material'} is already on another line. Combine the quantity on the existing line.`);
+        setValidationMessage(`${material?.name || 'This raw material'} is already on another line. Combine the quantity on the existing line.`);
         setTransferLines((lines) => lines.map(line =>
           line.id === id ? { ...line, raw_material_id: '', quantity: 0 } : line
         ));
@@ -877,6 +878,29 @@ export default function MaterialTransferPage() {
         <div className="fixed top-4 right-4 bg-emerald-500 text-slate-950 font-bold border border-emerald-400 rounded-2xl p-4 flex items-center gap-3 shadow-2xl z-50">
           <CheckCircle className="w-5 h-5 text-slate-950" />
           <p className="text-xs">{successMessage}</p>
+        </div>
+      )}
+
+      {validationMessage && (
+        <div
+          role="alert"
+          className="fixed right-4 top-4 z-[60] flex w-[min(92vw,420px)] items-start gap-3 rounded-2xl border border-amber-200 bg-white p-4 text-slate-800 shadow-2xl ring-1 ring-black/5"
+        >
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold">Material already added</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">{validationMessage}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setValidationMessage('')}
+            className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Dismiss validation message"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
