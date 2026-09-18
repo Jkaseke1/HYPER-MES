@@ -1478,8 +1478,16 @@ export default function GoodsReceivedPage() {
                   </Button>
                 )}
                 {viewing?.status === 'approved' && !['success', 'processing'].includes(syncByGrnId[viewing.id]?.status || '') && (
-                  <Button type="button" size="sm" onClick={reopenForCorrection} disabled={saving} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Reopen for correction
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={reopenForCorrection}
+                    disabled={saving}
+                    className="bg-amber-400 text-slate-950 hover:bg-amber-300"
+                    title="Admin/Finance correction: reopen this GRN and select the correct supplier"
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    {profile?.role === 'admin' ? 'Admin edit supplier' : 'Reopen for correction'}
                   </Button>
                 )}
               </div>
