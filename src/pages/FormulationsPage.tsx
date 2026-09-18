@@ -651,6 +651,32 @@ export default function FormulationsPage() {
     }));
   };
 
+  const recalculateFromFormula = (updatedIngs: IngRow[], batchSize: number) => {
+    const formulaTotal = updatedIngs
+      .filter(i => i.raw_material_id)
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    if (formulaTotal <= 0 || batchSize <= 0) return updatedIngs;
+
+    const populatedIndexes = updatedIngs
+      .map((item, index) => item.raw_material_id ? index : -1)
+      .filter(index => index >= 0);
+    const lastIndex = populatedIndexes[populatedIndexes.length - 1];
+    let allocated = 0;
+
+    return updatedIngs.map((item, index) => {
+      if (!item.raw_material_id) return { ...item, quantity: 0, percentage: 0 };
+      const quantity = index === lastIndex
+        ? Math.round((batchSize - allocated) * 10000) / 10000
+        : Math.round(((Number(item.quantity) || 0) / formulaTotal) * batchSize * 10000) / 10000;
+      allocated += quantity;
+      return {
+        ...item,
+        quantity,
+        percentage: Math.round((quantity / batchSize) * 1000000) / 10000,
+      };
+    });
+  };
+
   const updateReferenceBatchSize = (batchSize: string) => {
     const nextBatchSize = Number(batchSize) || 0;
     const variants = [...form.unit_size_variants];
@@ -676,7 +702,15 @@ export default function FormulationsPage() {
       return;
     }
     if (Math.abs(formulaIngredientTotal - formulaBatchSize) > 0.01) {
-      alert(`The formula total must equal the reference batch size before generating the BOM. Current total: ${formulaIngredientTotal.toFixed(2)} kg; reference batch: ${formulaBatchSize.toFixed(2)} kg.`);
+      if (!editId || !legacyBomNotice) {
+        alert(`The formula total must equal the reference batch size before generating the BOM. Current total: ${formulaIngredientTotal.toFixed(2)} kg; reference batch: ${formulaBatchSize.toFixed(2)} kg.`);
+        return;
+      }
+      // Legacy BOMs may have been stored against the wrong batch size. Preserve
+      // their ingredient ratios, scale them to the corrected reference batch,
+      // and let Finance review the generated result before saving.
+      setIngs(recalculateFromFormula(ings, formulaBatchSize));
+      setFormulaStage('bom');
       return;
     }
     setIngs(recalculatePercentages(ings, formulaBatchSize));
@@ -1680,7 +1714,7 @@ export default function FormulationsPage() {
               <p className="text-xs font-extrabold uppercase tracking-wide">Legacy BOM needs formula confirmation</p>
               <p className="mt-1 text-xs leading-5 text-amber-800">
                 This existing BOM totals <strong>{legacyBomNotice.bomTotal.toFixed(2)} kg</strong>, while its reference batch is <strong>{legacyBomNotice.referenceBatch.toFixed(2)} kg</strong>.
-                Correct the formula quantities above, then use <strong>Recalculate BOM from Formula</strong>. The existing BOM is not changed until you save the generated result.
+                Review the ingredient ratios above, then use <strong>Recalculate BOM from Formula</strong>. The system will scale those ratios to the reference batch; the existing BOM is not changed until you save the generated result.
               </p>
             </div>
           </div>
