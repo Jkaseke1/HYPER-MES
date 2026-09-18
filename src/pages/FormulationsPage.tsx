@@ -1630,15 +1630,22 @@ export default function FormulationsPage() {
           )}
         </div>
       }>
-        <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
-          <span className={`rounded-full px-3 py-1 ${formulaStage === 'formula' ? 'bg-teal-600 text-white' : 'bg-teal-100 text-teal-700'}`}>1. Formula Input</span>
-          <span className="text-slate-400">→</span>
-          <span className={`rounded-full px-3 py-1 ${formulaStage === 'bom' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>2. Generated BOM</span>
+        <div className="formula-editor-stepper">
+          <div className="formula-editor-stepper-copy">
+            <p className="formula-editor-stepper-title">{formulaStage === 'formula' ? 'Build the formula specification' : 'Review the generated BOM'}</p>
+            <p className="formula-editor-stepper-subtitle">{formulaStage === 'formula' ? 'Enter the reference-batch quantities from the signed formula sheet.' : 'Confirm the calculated quantities before saving this production BOM.'}</p>
+          </div>
+          <div className="formula-editor-stepper-badges" aria-label="Formula workflow progress">
+            <span className={`formula-editor-step ${formulaStage === 'formula' ? 'active' : 'done'}`}>1&nbsp; Formula Input</span>
+            <span className="formula-editor-step-arrow">›</span>
+            <span className={`formula-editor-step ${formulaStage === 'bom' ? 'active' : ''}`}>2&nbsp; Generated BOM</span>
+          </div>
         </div>
         <div className="formula-editor-layout">
           <aside className="formula-editor-details">
           <div>
-            <h4 className="text-sm font-semibold text-slate-700">Formula details</h4>
+            <h4 className="formula-editor-section-title">Formula details</h4>
+            <p className="formula-editor-section-help">Identify the finished product and define the standard batch used for the formula.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1711,8 +1718,8 @@ export default function FormulationsPage() {
           <section className="formula-editor-ingredients">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
-                <h4 className="text-sm font-semibold text-slate-800">{formulaStage === 'formula' ? 'Formula ingredients' : 'Generated BOM'} <span className="ml-1 text-slate-400">({ings.length})</span></h4>
-                <p className="mt-1 text-xs text-slate-500">{formulaStage === 'formula' ? 'Enter the ingredient quantities from the specification sheet.' : 'Calculated from the saved formula input. Review before saving.'}</p>
+                <h4 className="formula-editor-section-title">{formulaStage === 'formula' ? 'Formula ingredients' : 'Generated BOM'} <span className="ml-1 text-slate-400">({ings.length})</span></h4>
+                <p className="formula-editor-section-help">{formulaStage === 'formula' ? 'Use the full raw-material names from the master list. The initials on the paper sheet are only shorthand.' : 'Calculated directly from the formula quantities and locked for review.'}</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
