@@ -284,8 +284,9 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Copy the technical BOM only. Identity fields stay blank so the result is
-  // always a new, independent formula instead of an apparent linked record.
+  // Copy an existing formula/BOM into a new independent draft. Preserve the
+  // recognizable product name and Sage code, but make the local formula code
+  // distinct so the draft can be saved without a duplicate-code collision.
   async function prefillFromFormulation(sourceId: string) {
     if (!sourceId) {
       // Reset to blank
@@ -308,10 +309,17 @@ export default function FormulationsPage() {
       return;
     }
     // Keep editId = null (always New mode)
+    const copyCodeBase = `${src.code}-COPY`;
+    let copyCode = copyCodeBase;
+    let copyNumber = 2;
+    while (formulations.some(f => f.code === copyCode)) {
+      copyCode = `${copyCodeBase}-${copyNumber}`;
+      copyNumber += 1;
+    }
     setForm({
-      name: '',
-      code: '',
-      sage_code: '',
+      name: `${src.name} (Copy)`,
+      code: copyCode,
+      sage_code: (src as any).sage_code || src.code,
       version: 1,
       category: src.category || '',
       description: src.description || '',
@@ -1743,7 +1751,7 @@ export default function FormulationsPage() {
                 ))}
               </select>
               {!editId && copiedBatchSize && (
-                <p className="text-[11px] text-amber-600 mt-1">Copied ingredients are in a new draft. Enter a new name, formula code, and Sage code.</p>
+                <p className="text-[11px] text-emerald-700 mt-1">Copied into a new draft. Name and Sage Code were carried over; the formula Code was made unique for saving.</p>
               )}
             </div>}
             <div className="col-span-2">
