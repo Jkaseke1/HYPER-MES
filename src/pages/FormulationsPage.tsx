@@ -49,6 +49,7 @@ const emptyForm: FormState = {
 type IngRow = { raw_material_id: string; quantity: number; unit: string; percentage: number; is_critical: boolean };
 const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', percentage: 0, is_critical: false });
 type FormulaStage = 'formula' | 'bom';
+type LegacyBomNotice = { bomTotal: number; referenceBatch: number; variance: number };
 
 type FormulaReadiness = {
   ingredientTotalKg: number;
@@ -146,6 +147,7 @@ export default function FormulationsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [formulaStage, setFormulaStage] = useState<FormulaStage>('formula');
+  const [legacyBomNotice, setLegacyBomNotice] = useState<LegacyBomNotice | null>(null);
   const [selected, setSelected] = useState<Formulation | null>(null);
   const [detailIngs, setDetailIngs] = useState<FormulationIngredient[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -276,6 +278,7 @@ export default function FormulationsPage() {
     setForm({ ...emptyForm });
     setIngs([emptyIng()]);
     setFormulaStage('formula');
+    setLegacyBomNotice(null);
     setCopiedBatchSize(null);
     setEditOpen(true);
   }
@@ -288,6 +291,7 @@ export default function FormulationsPage() {
       setForm({ ...emptyForm });
       setIngs([emptyIng()]);
       setCopiedBatchSize(null);
+      setLegacyBomNotice(null);
       return;
     }
     const src = formulations.find(f => f.id === sourceId);
@@ -321,13 +325,15 @@ export default function FormulationsPage() {
       status: 'draft',
     });
     setCopiedBatchSize(Number(src.batch_size) || null);
-    setIngs((srcIngs || []).length > 0 ? (srcIngs || []).map(i => ({
+    const sourceIngredients = (srcIngs || []).map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
       unit: i.unit || 'kg',
-      percentage: Number(i.percentage) || 0,
+      percentage: src.batch_size > 0 ? Math.round(((Number(i.quantity) || 0) / Number(src.batch_size)) * 1000000) / 10000 : 0,
       is_critical: !!i.is_critical,
-    })) : [emptyIng()]);
+    }));
+    setIngs(sourceIngredients.length > 0 ? sourceIngredients : [emptyIng()]);
+    setLegacyBomNotice(null);
   }
 
   async function openEdit(f: Formulation) {
@@ -352,8 +358,34 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: f.estimated_cost_per_unit,
       status: f.status,
     });
-    const { data } = await supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order');
-    const loadedIngredients = (data || []).map(i => ({ raw_material_id: i.raw_material_id, quantity: Number(i.quantity), unit: i.unit, percentage: Number(i.percentage), is_critical: i.is_critical }));
+    const [specRes, bomRes] = await Promise.all([
+      supabase.from('formula_specs').select('id, reference_batch_size').eq('formulation_id', f.id).maybeSingle(),
+      supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order'),
+    ]);
+    let formulaLines: any[] = [];
+    if (!specRes.error && specRes.data?.id) {
+      const { data: specLines } = await supabase
+        .from('formula_spec_lines')
+        .select('raw_material_id, quantity, unit')
+        .eq('formula_spec_id', specRes.data.id)
+        .order('sort_order');
+      formulaLines = specLines || [];
+    }
+    const sourceLines = formulaLines.length > 0 ? formulaLines : (bomRes.data || []);
+    const formulaReferenceBatch = Number(f.batch_size) || Number(specRes.data?.reference_batch_size) || 0;
+    const bomTotal = sourceLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+    setLegacyBomNotice(
+      bomTotal > 0 && formulaReferenceBatch > 0 && Math.abs(bomTotal - formulaReferenceBatch) > 0.01
+        ? { bomTotal, referenceBatch: formulaReferenceBatch, variance: bomTotal - formulaReferenceBatch }
+        : null,
+    );
+    const loadedIngredients = sourceLines.map(i => ({
+      raw_material_id: i.raw_material_id,
+      quantity: Number(i.quantity) || 0,
+      unit: i.unit || 'kg',
+      percentage: formulaReferenceBatch > 0 ? Math.round(((Number(i.quantity) || 0) / formulaReferenceBatch) * 1000000) / 10000 : 0,
+      is_critical: !!i.is_critical,
+    }));
     setIngs(loadedIngredients);
     setFormulaStage('formula');
     setDetailOpen(false);
@@ -1624,7 +1656,7 @@ export default function FormulationsPage() {
           <button onClick={() => setEditOpen(false)} className="px-3 py-2 text-sm font-medium text-slate-600 rounded-md hover:bg-slate-100">Cancel</button>
           {formulaStage === 'bom' && <button type="button" onClick={() => setFormulaStage('formula')} className="px-3 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-md">Back to Formula</button>}
           {formulaStage === 'formula' ? (
-            <button type="button" onClick={continueToBom} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">Continue to BOM</button>
+            <button type="button" onClick={continueToBom} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{editId ? 'Recalculate BOM from Formula' : 'Generate BOM from Formula'}</button>
           ) : (
             <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{saving ? 'Saving...' : 'Generate & Save BOM'}</button>
           )}
@@ -1641,6 +1673,18 @@ export default function FormulationsPage() {
             <span className={`formula-editor-step ${formulaStage === 'bom' ? 'active' : ''}`}>2&nbsp; Generated BOM</span>
           </div>
         </div>
+        {legacyBomNotice && formulaStage === 'formula' && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wide">Legacy BOM needs formula confirmation</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                This existing BOM totals <strong>{legacyBomNotice.bomTotal.toFixed(2)} kg</strong>, while its reference batch is <strong>{legacyBomNotice.referenceBatch.toFixed(2)} kg</strong>.
+                Correct the formula quantities above, then use <strong>Recalculate BOM from Formula</strong>. The existing BOM is not changed until you save the generated result.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="formula-editor-layout">
           <aside className="formula-editor-details">
           <div>
