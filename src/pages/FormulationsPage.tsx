@@ -9,6 +9,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 type UnitSizeVariant = { size: string; batch_size: number };
+const STANDARD_FORMULA_BATCH_KG = 1000;
 
 type FormState = {
   name: string;
@@ -35,9 +36,9 @@ const emptyForm: FormState = {
   version: 1,
   category: '',
   description: '',
-  batch_size: '',
+  batch_size: String(STANDARD_FORMULA_BATCH_KG),
   batch_unit: 'kg',
-  unit_size_variants: [{ size: '', batch_size: 0 }],
+  unit_size_variants: [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }],
   target_protein: '',
   target_fat: '',
   target_fiber: '',
