@@ -316,6 +316,11 @@ export default function FormulationsPage() {
       copyCode = `${copyCodeBase}-${copyNumber}`;
       copyNumber += 1;
     }
+    const copiedVariants = Array.isArray(variants) && variants.length > 0
+      ? variants.map((variant: UnitSizeVariant, index: number) => index === 0
+        ? { ...variant, batch_size: STANDARD_FORMULA_BATCH_KG }
+        : variant)
+      : [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }];
     setForm({
       name: `${src.name} (Copy)`,
       code: copyCode,
@@ -323,9 +328,9 @@ export default function FormulationsPage() {
       version: 1,
       category: src.category || '',
       description: src.description || '',
-      batch_size: src.batch_size.toString(),
+      batch_size: String(STANDARD_FORMULA_BATCH_KG),
       batch_unit: src.batch_unit,
-      unit_size_variants: Array.isArray(variants) ? variants : [{ size: '', batch_size: 0 }],
+      unit_size_variants: copiedVariants,
       target_protein: src.target_protein.toString(),
       target_fat: src.target_fat.toString(),
       target_fiber: src.target_fiber.toString(),
@@ -333,7 +338,7 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: 0,
       status: 'draft',
     });
-    setCopiedBatchSize(Number(src.batch_size) || null);
+    setCopiedBatchSize(STANDARD_FORMULA_BATCH_KG);
     const sourceIngredients = (srcIngs || []).map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
@@ -342,7 +347,12 @@ export default function FormulationsPage() {
       is_critical: !!i.is_critical,
     }));
     setIngs(sourceIngredients.length > 0 ? sourceIngredients : [emptyIng()]);
-    setLegacyBomNotice(null);
+    const copiedTotal = sourceIngredients.reduce((sum, ingredient) => sum + ingredient.quantity, 0);
+    setLegacyBomNotice(
+      copiedTotal > 0 && Math.abs(copiedTotal - STANDARD_FORMULA_BATCH_KG) > 0.01
+        ? { bomTotal: copiedTotal, referenceBatch: STANDARD_FORMULA_BATCH_KG, variance: copiedTotal - STANDARD_FORMULA_BATCH_KG }
+        : null,
+    );
   }
 
   async function openEdit(f: Formulation) {
@@ -693,6 +703,9 @@ export default function FormulationsPage() {
     setForm({ ...form, batch_size: batchSize, unit_size_variants: variants });
 
     setIngs(recalculateQuantities(ings, nextBatchSize));
+    setLegacyBomNotice(previous => previous
+      ? { ...previous, referenceBatch: nextBatchSize, variance: previous.bomTotal - nextBatchSize }
+      : previous);
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
@@ -711,7 +724,7 @@ export default function FormulationsPage() {
       return;
     }
     if (Math.abs(formulaIngredientTotal - formulaBatchSize) > 0.01) {
-      if (!editId || !legacyBomNotice) {
+      if (!legacyBomNotice) {
         alert(`The formula total must equal the reference batch size before generating the BOM. Current total: ${formulaIngredientTotal.toFixed(2)} kg; reference batch: ${formulaBatchSize.toFixed(2)} kg.`);
         return;
       }
