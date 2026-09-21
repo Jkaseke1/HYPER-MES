@@ -2340,7 +2340,8 @@ export default function ProductionOrdersPage() {
                         const bagSize = bagSizeKg(form.unit_size, 50);
                         const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSize;
                         const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                        const lineTotal = qtyRequired * ing.unitCost;
+                        // BOM preview cost is quoted per bag: ingredient kg per bag × unit cost.
+                        const lineTotal = qtyPerBag * ing.unitCost;
                         const isPremix = /premix/i.test(`${ing.code || ''} ${ing.name || ''}`);
                         return (
                           <tr key={ing.index} className={`hover:bg-slate-50 ${isPremix ? 'bg-fuchsia-50/60' : ''}`}>
@@ -2366,8 +2367,8 @@ export default function ProductionOrdersPage() {
                         <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
                           ${bomPreview.reduce((sum: number, ing: any) => {
-                            const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                            return sum + (qtyRequired * ing.unitCost);
+                            const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
+                            return sum + (qtyPerBag * ing.unitCost);
                           }, 0).toFixed(4)}
                         </td>
                       </tr>
@@ -2379,14 +2380,13 @@ export default function ProductionOrdersPage() {
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {(() => {
-                  const totalCost = bomPreview.reduce((sum: number, ing: any) => {
-                    const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                    return sum + (qtyRequired * ing.unitCost);
+                  const costPerBag = bomPreview.reduce((sum: number, ing: any) => {
+                    const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
+                    return sum + (qtyPerBag * ing.unitCost);
                   }, 0);
                   const bagSize = parseInt(form.unit_size) || 25;
                   const numBags = Math.ceil(form.planned_qty / bagSize);
-                  const costPerBag = numBags > 0 ? totalCost / numBags : 0;
-                  const costPerKg = form.planned_qty > 0 ? totalCost / form.planned_qty : 0;
+                  const costPerKg = bagSize > 0 ? costPerBag / bagSize : 0;
                   
                   return (
                     <>
