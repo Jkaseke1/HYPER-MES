@@ -1704,12 +1704,12 @@ export default function FormulationsPage() {
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? `Formula ${form.code} / Version ${form.version}` : 'Create Formula & BOM'} size="4xl" className="formula-editor" footer={
         <div className="flex w-full flex-wrap items-center justify-end gap-2">
-          <button onClick={() => setEditOpen(false)} className="px-3 py-2 text-sm font-medium text-slate-600 rounded-md hover:bg-slate-100">Cancel</button>
-          {formulaStage === 'bom' && <button type="button" onClick={() => setFormulaStage('formula')} className="px-3 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-md">Back to Formula</button>}
+          <button onClick={() => setEditOpen(false)} className="formula-editor-secondary-action px-3 py-2 text-sm font-medium text-slate-600 rounded-md hover:bg-slate-100">Cancel</button>
+          {formulaStage === 'bom' && <button type="button" onClick={() => setFormulaStage('formula')} className="formula-editor-secondary-action px-3 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-md">Back to Formula</button>}
           {formulaStage === 'formula' ? (
-            <button type="button" onClick={continueToBom} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{editId ? 'Recalculate BOM from Formula' : 'Generate BOM from Formula'}</button>
+            <button type="button" onClick={continueToBom} disabled={saving || !form.name || !form.code} className="formula-editor-primary-action px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{editId ? 'Recalculate BOM from Formula' : 'Generate BOM from Formula'}</button>
           ) : (
-            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{saving ? 'Saving...' : 'Generate & Save BOM'}</button>
+            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="formula-editor-primary-action px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{saving ? 'Saving...' : 'Generate & Save BOM'}</button>
           )}
         </div>
       }>
@@ -1817,8 +1817,8 @@ export default function FormulationsPage() {
                 <p className="formula-editor-section-help">{formulaStage === 'formula' ? 'Use the full raw-material names from the master list. The initials on the paper sheet are only shorthand.' : 'Calculated directly from the formula quantities and locked for review.'}</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
-                <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Total: {totalPct.toFixed(1)}%</span>
+                <span className={`formula-editor-metric ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'is-valid' : 'is-warning'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
+                <span className={`formula-editor-metric ${Math.abs(totalPct - 100) < 0.01 ? 'is-valid' : 'is-warning'}`}>Total: {totalPct.toFixed(1)}%</span>
                 {formulaStage === 'formula' && <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>}
               </div>
             </div>
