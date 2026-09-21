@@ -284,9 +284,8 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Copy an existing formula/BOM into a new independent draft. Preserve the
-  // recognizable product name and Sage code, but make the local formula code
-  // distinct so the draft can be saved without a duplicate-code collision.
+  // Start a new draft version from an existing formula/BOM. The formula
+  // identity stays the same; only the version increments.
   async function prefillFromFormulation(sourceId: string) {
     if (!sourceId) {
       // Reset to blank
@@ -309,23 +308,19 @@ export default function FormulationsPage() {
       return;
     }
     // Keep editId = null (always New mode)
-    const copyCodeBase = `${src.code}-COPY`;
-    let copyCode = copyCodeBase;
-    let copyNumber = 2;
-    while (formulations.some(f => f.code === copyCode)) {
-      copyCode = `${copyCodeBase}-${copyNumber}`;
-      copyNumber += 1;
-    }
+    const nextVersion = formulations
+      .filter(f => f.code === src.code)
+      .reduce((max, f) => Math.max(max, Number(f.version) || 0), 0) + 1;
     const copiedVariants = Array.isArray(variants) && variants.length > 0
       ? variants.map((variant: UnitSizeVariant, index: number) => index === 0
         ? { ...variant, batch_size: STANDARD_FORMULA_BATCH_KG }
         : variant)
       : [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }];
     setForm({
-      name: `${src.name} (Copy)`,
-      code: copyCode,
+      name: src.name,
+      code: src.code,
       sage_code: (src as any).sage_code || src.code,
-      version: 1,
+      version: nextVersion,
       category: src.category || '',
       description: src.description || '',
       batch_size: String(STANDARD_FORMULA_BATCH_KG),
@@ -1750,21 +1745,21 @@ export default function FormulationsPage() {
 
           <div className="grid grid-cols-2 gap-2">
             {!editId && <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Copy ingredients from an existing BOM (optional)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Start a new version from an existing formula (optional)</label>
               <select
                 value=""
                 onChange={e => { const v = e.target.value; e.target.value = ''; prefillFromFormulation(v); }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
                 disabled={!!editId}
-                title={editId ? 'Not available in Edit mode' : 'Copies ingredients and technical settings into a new independent draft.'}
+                title={editId ? 'Not available in Edit mode' : 'Starts the next draft version with the existing formula and BOM.'}
               >
                 <option value="">— Start independent formula —</option>
                 {formulations.map(f => (
-                  <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
+                  <option key={f.id} value={f.id}>{f.name} ({f.code}) · v{f.version}</option>
                 ))}
               </select>
               {!editId && copiedBatchSize && (
-                <p className="text-[11px] text-emerald-700 mt-1">Copied into a new draft. Name and Sage Code were carried over; the formula Code was made unique for saving.</p>
+                <p className="text-[11px] text-emerald-700 mt-1">New draft version v{form.version} started from the existing formula. The original version remains unchanged.</p>
               )}
             </div>}
             <div className="col-span-2">
