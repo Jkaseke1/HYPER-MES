@@ -142,6 +142,7 @@ export default function FormulationsPage() {
   const [formulaReadiness, setFormulaReadiness] = useState<Record<string, FormulaReadiness>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
   const [registerView, setRegisterView] = useState<'formulas' | 'review'>('formulas');
   const [loading, setLoading] = useState(true);
@@ -170,6 +171,7 @@ export default function FormulationsPage() {
   const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
 
   const filtered = formulations.filter(f => {
+    if (!showArchived && f.status === 'archived') return false;
     const categoryName = getFormulationCategory(f.name, f.category);
     if (filter !== 'All' && categoryName.toLowerCase() !== filter.toLowerCase() && f.category?.toLowerCase() !== filter.toLowerCase()) return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !f.code.toLowerCase().includes(search.toLowerCase())) return false;
@@ -935,6 +937,13 @@ export default function FormulationsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'without' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             Without Ingredients ({withoutIngredients.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowArchived(current => !current)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showArchived ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+          >
+            {showArchived ? 'Hide Archived' : 'Show Archived'} ({archivedCount})
           </button>
         </div>
       </div>
