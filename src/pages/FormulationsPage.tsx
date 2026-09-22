@@ -58,6 +58,12 @@ type FormulaReadiness = {
   isBalanced: boolean;
 };
 
+type FormulaGroup = {
+  key: string;
+  current: Formulation;
+  versions: Formulation[];
+};
+
 export function getFormulationCategory(name: string, existingCategory?: string | null): string {
   if (existingCategory && existingCategory.trim() !== '' && existingCategory.toLowerCase() !== 'null' && existingCategory.toLowerCase() !== 'other') {
     return existingCategory.trim();
@@ -244,8 +250,21 @@ export default function FormulationsPage() {
 
   useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
   
-  const withIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) > 0);
-  const withoutIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) === 0);
+  const formulaGroups: FormulaGroup[] = Array.from(
+    filtered.reduce((groups, formulation) => {
+      const key = formulation.code || formulation.name;
+      const group = groups.get(key) || { key, current: formulation, versions: [] };
+      group.versions.push(formulation);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, FormulaGroup>()).values(),
+  ).map(group => {
+    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    return { ...group, current: versions[0], versions };
+  });
+
+  const withIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) > 0);
+  const withoutIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) === 0);
 
   function toggleCompareSelect(f: Formulation) {
     setCompareSelected(prev => {
@@ -420,36 +439,18 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  async function createVersion(source: Formulation) {
-    setSaving(true);
-    try {
-      const { data: newId, error } = await supabase.rpc('create_formulation_version', {
-        p_source_formulation_id: source.id,
-      });
-      if (error) throw error;
-      if (!newId) throw new Error('The new formulation version was not returned.');
-
-      const { data: newVersion, error: loadError } = await supabase
-        .from('formulations')
-        .select('*')
-        .eq('id', newId)
-        .single();
-      if (loadError || !newVersion) throw loadError || new Error('Could not load the new formulation version.');
-
-      setDetailOpen(false);
-      setToastMessage(`Draft v${newVersion.version} created for ${newVersion.code}. The previous version was preserved.`);
-      setTimeout(() => setToastMessage(null), 4500);
-      await openEdit(newVersion as Formulation);
-      const { data: copiedIngredients, error: ingredientError } = await supabase.from('formulation_ingredients').select('*').eq('formulation_id', newId).order('sort_order');
-      if (ingredientError) throw ingredientError;
-      setIngs(recalculateQuantities(copiedIngredients || [], Number(newVersion.batch_size)));
-      await fetchFormulations();
-    } catch (error: any) {
-      console.error('Error creating formulation version:', error);
-      alert(`Failed to create formula version: ${error.message || error}`);
-    } finally {
-      setSaving(false);
-    }
+  function createVersion(source: Formulation) {
+    // Do not insert a database version just because the user opened the
+    // version workflow. The draft is created only after a changed formula is
+    // actually saved, so cancelling leaves history untouched.
+    setDetailOpen(false);
+    setBomEditMode(false);
+    setEditId(null);
+    setSourceFormulaSearch(`${source.name} (${source.code}) · v${source.version} · ${(formulationIngredientCounts[source.id] || 0)} BOM items · ${source.status}`);
+    void prefillFromFormulation(source.id).then(() => {
+      setFormulaStage('formula');
+      setEditOpen(true);
+    });
   }
 
   async function handleSave() {
@@ -995,7 +996,9 @@ export default function FormulationsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {withIngredients.map(f => (
+                      {withIngredients.map(group => {
+                        const f = group.current;
+                        return (
                         <tr 
                           key={f.id}
                           className={`hover:bg-emerald-50 transition-colors ${
@@ -1039,7 +1042,21 @@ export default function FormulationsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm font-semibold text-slate-700">v{f.version}</span>
+                            <select
+                              value={f.id}
+                              onChange={e => {
+                                const version = group.versions.find(item => item.id === e.target.value);
+                                if (version) openDetail(version);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                              aria-label={`Version history for ${f.name}`}
+                            >
+                              {group.versions.map(version => (
+                                <option key={version.id} value={version.id}>
+                                  v{version.version}{version.id === f.id ? ' · Current' : ''}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
@@ -1166,7 +1183,8 @@ export default function FormulationsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1198,7 +1216,9 @@ export default function FormulationsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {withoutIngredients.map(f => (
+                      {withoutIngredients.map(group => {
+                        const f = group.current;
+                        return (
                         <tr 
                           key={f.id}
                           className={`hover:bg-amber-50 transition-colors ${
@@ -1237,7 +1257,21 @@ export default function FormulationsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm font-semibold text-slate-700">v{f.version}</span>
+                            <select
+                              value={f.id}
+                              onChange={e => {
+                                const version = group.versions.find(item => item.id === e.target.value);
+                                if (version) openDetail(version);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                              aria-label={`Version history for ${f.name}`}
+                            >
+                              {group.versions.map(version => (
+                                <option key={version.id} value={version.id}>
+                                  v{version.version}{version.id === f.id ? ' · Current' : ''}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
@@ -1258,7 +1292,8 @@ export default function FormulationsPage() {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
