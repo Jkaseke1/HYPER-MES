@@ -384,18 +384,34 @@ export default function FormulationsPage() {
       formulaLines = specLines || [];
     }
     const sourceLines = formulaLines.length > 0 ? formulaLines : (bomRes.data || []);
-    const formulaReferenceBatch = Number(f.batch_size) || Number(specRes.data?.reference_batch_size) || 0;
     const bomTotal = sourceLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
-    setLegacyBomNotice(
-      bomTotal > 0 && formulaReferenceBatch > 0 && Math.abs(bomTotal - formulaReferenceBatch) > 0.01
-        ? { bomTotal, referenceBatch: formulaReferenceBatch, variance: bomTotal - formulaReferenceBatch }
-        : null,
-    );
-    const loadedIngredients = sourceLines.map(i => ({
+    const standardBatch = STANDARD_FORMULA_BATCH_KG;
+    const scaleToStandardBatch = bomTotal > 0 && Math.abs(bomTotal - standardBatch) > 0.01;
+    const normalizedLines = scaleToStandardBatch
+      ? sourceLines.map(line => ({
+          ...line,
+          quantity: Math.round(((Number(line.quantity) || 0) / bomTotal) * standardBatch * 10000) / 10000,
+        }))
+      : sourceLines;
+
+    // All production formulas are maintained against the standard 1,000 kg
+    // batch. Older records may carry a 50 kg reference or a BOM whose total
+    // is already 1,000 kg; normalize both cases before calculating % values.
+    setForm(current => ({
+      ...current,
+      batch_size: String(standardBatch),
+      unit_size_variants: (current.unit_size_variants?.length
+        ? current.unit_size_variants
+        : [{ size: '', batch_size: standardBatch }]).map((variant, index) => index === 0
+          ? { ...variant, batch_size: standardBatch }
+          : variant),
+    }));
+    setLegacyBomNotice(null);
+    const loadedIngredients = normalizedLines.map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
       unit: i.unit || 'kg',
-      percentage: formulaReferenceBatch > 0 ? Math.round(((Number(i.quantity) || 0) / formulaReferenceBatch) * 1000000) / 10000 : 0,
+      percentage: standardBatch > 0 ? Math.round(((Number(i.quantity) || 0) / standardBatch) * 1000000) / 10000 : 0,
       is_critical: !!i.is_critical,
     }));
     setIngs(loadedIngredients);
