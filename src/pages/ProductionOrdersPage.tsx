@@ -1899,7 +1899,6 @@ export default function ProductionOrdersPage() {
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Batch Number</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Formulation</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Production Line</th>
-                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Planned Qty</th>
                     <th className="text-right px-4 py-3.5 font-bold text-slate-700">Actual Qty</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Status</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Sage</th>
@@ -1911,11 +1910,10 @@ export default function ProductionOrdersPage() {
                     <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="font-mono font-bold text-slate-900">{order.batch_number}</div>
-                        {order.profiles?.full_name && (
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            Created by <span className="font-medium text-slate-700">{order.profiles.full_name}</span>
-                          </div>
-                        )}
+                        <div className="mt-1 text-[10px] leading-4 text-slate-400">
+                          <div>{order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy HH:mm') : 'Date unavailable'}</div>
+                          <div>By {order.creator?.full_name || order.creator?.email || order.profiles?.full_name || 'Unknown user'}</div>
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="font-medium text-slate-800">{order.formulations?.name || '-'}</div>
@@ -1923,9 +1921,6 @@ export default function ProductionOrdersPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="text-slate-700 font-medium">{order.machines?.name || '-'}</div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty.toLocaleString()} kg)</span>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
                         {order.actual_qty ? <>{formatBags(order.actual_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty.toLocaleString()} kg)</span></> : '-'}
@@ -1970,13 +1965,9 @@ export default function ProductionOrdersPage() {
                     <p className="text-xs text-slate-500 mt-0.5">Line: {order.machines?.name || 'Main Plant'}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
+                  <div className="bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Planned</span>
-                      <span className="font-bold text-slate-800">{formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty} kg)</span></span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Actual</span>
+                      <span className="text-slate-400 block text-[10px] uppercase">Actual Qty</span>
                       <span className="font-bold text-slate-800">{formatBags(order.actual_qty || 0, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty || 0} kg)</span></span>
                     </div>
                   </div>
@@ -1988,7 +1979,7 @@ export default function ProductionOrdersPage() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                     <span className="text-[11px] text-slate-400">
-                      {order.profiles?.full_name ? `Operator: ${order.profiles.full_name}` : ''}
+                      {order.created_at ? `${format(new Date(order.created_at), 'dd MMM yyyy HH:mm')} · By ${order.creator?.full_name || order.creator?.email || order.profiles?.full_name || 'Unknown user'}` : ''}
                     </span>
                     <button
                       onClick={() => openDetail(order)}

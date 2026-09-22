@@ -281,6 +281,7 @@ export interface ProductionOrder {
   formulations?: Formulation;
   machines?: Machine;
   profiles?: Profile;
+  creator?: Profile;
 }
 
 export interface ProductionOrderMaterial {
