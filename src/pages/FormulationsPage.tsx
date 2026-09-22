@@ -1791,13 +1791,14 @@ export default function FormulationsPage() {
               >
                 <option value="">— Start independent formula —</option>
                 {formulations
-                  .filter(f => f.status !== 'archived')
                   .filter(f => {
                     const q = sourceFormulaSearch.trim().toLowerCase();
                     return !q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) || ((f as any).sage_code || '').toLowerCase().includes(q);
                   })
                   .map(f => (
-                  <option key={f.id} value={f.id}>{f.name} ({f.code}) · v{f.version}</option>
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({f.code}) · v{f.version} · {(formulationIngredientCounts[f.id] || 0)} BOM items · {f.status}
+                  </option>
                   ))}
               </select>
               {sourceFormulaId && !form.name && (
