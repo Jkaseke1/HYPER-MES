@@ -1751,36 +1751,37 @@ export default function FormulationsPage() {
           <div className="grid grid-cols-2 gap-2">
             {!editId && <div className="col-span-2">
                 <label className="block text-xs font-medium text-slate-600 mb-1">Start a new version from an existing formula (optional)</label>
-              <div className="relative mb-2">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="search"
-                  value={sourceFormulaSearch}
-                  onChange={e => setSourceFormulaSearch(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                  placeholder="Search existing formula by name or code..."
-                  aria-label="Search existing formulas"
-                />
-              </div>
-              <select
-                value={sourceFormulaId}
-                onChange={e => handleSourceFormulaChange(e.target.value)}
+              <input
+                list="existing-formula-options"
+                value={sourceFormulaSearch}
+                onChange={e => {
+                  const value = e.target.value;
+                  setSourceFormulaSearch(value);
+                  const selected = formulations.find(f => {
+                    const label = `${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`;
+                    return label === value;
+                  });
+                  if (selected) handleSourceFormulaChange(selected.id);
+                  else if (!value) handleSourceFormulaChange('');
+                }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
-                disabled={!!editId}
-                title={editId ? 'Not available in Edit mode' : 'Starts the next draft version with the existing product identity and a blank formula.'}
+                placeholder="Search and select an existing formula..."
+                aria-label="Search and select an existing formula"
+              />
+              <datalist id="existing-formula-options">
+                <option value="— Start independent formula —" />
+                {formulations.map(f => (
+                  <option key={f.id} value={`${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`} />
+                ))}
+              </datalist>
+              {/* Keep the independent option explicit and reset the picker to blank. */}
+              <button
+                type="button"
+                onClick={() => handleSourceFormulaChange('')}
+                className="mt-2 text-left text-xs font-semibold text-slate-600 hover:text-teal-700"
               >
-                <option value="">— Start independent formula —</option>
-                {formulations
-                  .filter(f => {
-                    const q = sourceFormulaSearch.trim().toLowerCase();
-                    return !q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) || ((f as any).sage_code || '').toLowerCase().includes(q);
-                  })
-                  .map(f => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} ({f.code}) · v{f.version} · {(formulationIngredientCounts[f.id] || 0)} BOM items · {f.status}
-                  </option>
-                  ))}
-              </select>
+                Start independent formula
+              </button>
               {sourceFormulaId && !form.name && (
                 <p className="text-[11px] text-amber-700 mt-1">Loading the selected formula and its ingredient specification...</p>
               )}
