@@ -290,8 +290,9 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Start a new draft version from an existing formula/BOM. The formula
-  // identity stays the same; only the version increments.
+  // Start a new blank draft version from an existing formula. The product
+  // identity and version history are carried forward, but ingredients/BOM
+  // lines are intentionally not copied into the new formulation workspace.
   async function prefillFromFormulation(sourceId: string) {
     setSourceFormulaId(sourceId);
     if (!sourceId) {
@@ -305,15 +306,6 @@ export default function FormulationsPage() {
     const src = formulations.find(f => f.id === sourceId);
     if (!src) return;
     const variants = (src as any).unit_size_variants;
-    const { data: srcIngs, error } = await supabase
-      .from('formulation_ingredients')
-      .select('raw_material_id, quantity, unit, percentage, is_critical')
-      .eq('formulation_id', src.id)
-      .order('sort_order');
-    if (error) {
-      alert('Failed to load BOM from source formulation: ' + error.message);
-      return;
-    }
     // Keep editId = null (always New mode)
     const nextVersion = formulations
       .filter(f => f.code === src.code)
@@ -341,20 +333,8 @@ export default function FormulationsPage() {
       status: 'draft',
     });
     setCopiedBatchSize(STANDARD_FORMULA_BATCH_KG);
-    const sourceIngredients = (srcIngs || []).map(i => ({
-      raw_material_id: i.raw_material_id,
-      quantity: Number(i.quantity) || 0,
-      unit: i.unit || 'kg',
-      percentage: src.batch_size > 0 ? Math.round(((Number(i.quantity) || 0) / Number(src.batch_size)) * 1000000) / 10000 : 0,
-      is_critical: !!i.is_critical,
-    }));
-    setIngs(sourceIngredients.length > 0 ? sourceIngredients : [emptyIng()]);
-    const copiedTotal = sourceIngredients.reduce((sum, ingredient) => sum + ingredient.quantity, 0);
-    setLegacyBomNotice(
-      copiedTotal > 0 && Math.abs(copiedTotal - STANDARD_FORMULA_BATCH_KG) > 0.01
-        ? { bomTotal: copiedTotal, referenceBatch: STANDARD_FORMULA_BATCH_KG, variance: copiedTotal - STANDARD_FORMULA_BATCH_KG }
-        : null,
-    );
+    setIngs([emptyIng()]);
+    setLegacyBomNotice(null);
   }
 
   function handleSourceFormulaChange(sourceId: string) {
@@ -1787,7 +1767,7 @@ export default function FormulationsPage() {
                 onChange={e => handleSourceFormulaChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
                 disabled={!!editId}
-                title={editId ? 'Not available in Edit mode' : 'Starts the next draft version with the existing formula and BOM.'}
+                title={editId ? 'Not available in Edit mode' : 'Starts the next draft version with the existing product identity and a blank formula.'}
               >
                 <option value="">— Start independent formula —</option>
                 {formulations
