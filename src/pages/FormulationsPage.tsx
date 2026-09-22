@@ -156,6 +156,8 @@ export default function FormulationsPage() {
   const [ings, setIngs] = useState<IngRow[]>([emptyIng()]);
   const [editingIngredientQuantity, setEditingIngredientQuantity] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [sourceFormulaId, setSourceFormulaId] = useState('');
+  const [sourceFormulaSearch, setSourceFormulaSearch] = useState('');
   const [copiedBatchSize, setCopiedBatchSize] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -278,6 +280,8 @@ export default function FormulationsPage() {
 
   function openNew() {
     setEditId(null);
+    setSourceFormulaId('');
+    setSourceFormulaSearch('');
     setForm({ ...emptyForm });
     setIngs([emptyIng()]);
     setFormulaStage('formula');
@@ -289,6 +293,7 @@ export default function FormulationsPage() {
   // Start a new draft version from an existing formula/BOM. The formula
   // identity stays the same; only the version increments.
   async function prefillFromFormulation(sourceId: string) {
+    setSourceFormulaId(sourceId);
     if (!sourceId) {
       // Reset to blank
       setForm({ ...emptyForm });
@@ -350,6 +355,17 @@ export default function FormulationsPage() {
         ? { bomTotal: copiedTotal, referenceBatch: STANDARD_FORMULA_BATCH_KG, variance: copiedTotal - STANDARD_FORMULA_BATCH_KG }
         : null,
     );
+  }
+
+  function handleSourceFormulaChange(sourceId: string) {
+    // An empty source always means a genuinely independent, blank formula.
+    // Keeping this as an explicit state transition prevents stale metadata or
+    // ingredients from a previously selected source leaking into a new draft.
+    if (!sourceId) {
+      setSourceFormulaId('');
+      setSourceFormulaSearch('');
+    }
+    void prefillFromFormulation(sourceId);
   }
 
   async function openEdit(f: Formulation) {
@@ -1755,18 +1771,38 @@ export default function FormulationsPage() {
           <div className="grid grid-cols-2 gap-2">
             {!editId && <div className="col-span-2">
                 <label className="block text-xs font-medium text-slate-600 mb-1">Start a new version from an existing formula (optional)</label>
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={sourceFormulaSearch}
+                  onChange={e => setSourceFormulaSearch(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  placeholder="Search existing formula by name or code..."
+                  aria-label="Search existing formulas"
+                />
+              </div>
               <select
-                value=""
-                onChange={e => { const v = e.target.value; e.target.value = ''; prefillFromFormulation(v); }}
+                value={sourceFormulaId}
+                onChange={e => handleSourceFormulaChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
                 disabled={!!editId}
                 title={editId ? 'Not available in Edit mode' : 'Starts the next draft version with the existing formula and BOM.'}
               >
                 <option value="">— Start independent formula —</option>
-                {formulations.map(f => (
+                {formulations
+                  .filter(f => f.status !== 'archived')
+                  .filter(f => {
+                    const q = sourceFormulaSearch.trim().toLowerCase();
+                    return !q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) || ((f as any).sage_code || '').toLowerCase().includes(q);
+                  })
+                  .map(f => (
                   <option key={f.id} value={f.id}>{f.name} ({f.code}) · v{f.version}</option>
-                ))}
+                  ))}
               </select>
+              {sourceFormulaId && !form.name && (
+                <p className="text-[11px] text-amber-700 mt-1">Loading the selected formula and its ingredient specification...</p>
+              )}
               {!editId && copiedBatchSize && (
                 <p className="text-[11px] text-emerald-700 mt-1">New draft version v{form.version} started from the existing formula. The original version remains unchanged.</p>
               )}
