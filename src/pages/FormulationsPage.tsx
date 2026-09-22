@@ -263,6 +263,22 @@ export default function FormulationsPage() {
     return { ...group, current: versions[0], versions };
   });
 
+  // The version picker should show one product/formula entry at a time. Older
+  // versions remain available from the history control after a formula is
+  // opened, instead of making the initial list difficult to use.
+  const allFormulaGroups: FormulaGroup[] = Array.from(
+    formulations.reduce((groups, formulation) => {
+      const key = formulation.code || formulation.name;
+      const group = groups.get(key) || { key, current: formulation, versions: [] };
+      group.versions.push(formulation);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, FormulaGroup>()).values(),
+  ).map(group => {
+    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    return { ...group, current: versions[0], versions };
+  });
+
   const withIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) > 0);
   const withoutIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) === 0);
 
@@ -1808,7 +1824,7 @@ export default function FormulationsPage() {
                 onChange={e => {
                   const value = e.target.value;
                   setSourceFormulaSearch(value);
-                  const selected = formulations.find(f => {
+                  const selected = allFormulaGroups.map(group => group.current).find(f => {
                     const label = `${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`;
                     return label === value;
                   });
@@ -1821,10 +1837,41 @@ export default function FormulationsPage() {
               />
               <datalist id="existing-formula-options">
                 <option value="— Start independent formula —" />
-                {formulations.map(f => (
+                {allFormulaGroups.map(group => {
+                  const f = group.current;
+                  return (
                   <option key={f.id} value={`${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`} />
-                ))}
+                  );
+                })}
               </datalist>
+              {sourceFormulaId && (() => {
+                const source = formulations.find(f => f.id === sourceFormulaId);
+                const sourceGroup = source && allFormulaGroups.find(group => group.key === (source.code || source.name));
+                if (!sourceGroup || sourceGroup.versions.length < 2) return null;
+                return (
+                  <div className="mt-2">
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Choose version from history</label>
+                    <select
+                      value={sourceFormulaId}
+                      onChange={e => {
+                        const version = sourceGroup.versions.find(item => item.id === e.target.value);
+                        if (!version) return;
+                        const label = `${version.name} (${version.code}) · v${version.version} · ${(formulationIngredientCounts[version.id] || 0)} BOM items · ${version.status}`;
+                        setSourceFormulaSearch(label);
+                        handleSourceFormulaChange(version.id);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                      aria-label="Choose formula version from history"
+                    >
+                      {sourceGroup.versions.map(version => (
+                        <option key={version.id} value={version.id}>
+                          v{version.version}{version.id === sourceGroup.current.id ? ' · Current' : ` · ${version.status}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
               {/* Keep the independent option explicit and reset the picker to blank. */}
               <button
                 type="button"
