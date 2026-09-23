@@ -89,6 +89,35 @@
   background: #fff;
 }
 
+.formula-category-filter select {
+  font-weight: 650;
+  color: #294d61;
+}
+
+.formula-search {
+  min-width: 280px;
+}
+
+.formula-search::placeholder {
+  color: #8aa0b1;
+}
+
+.formula-filter-pill {
+  min-height: 36px;
+  border-radius: 999px;
+  font-weight: 750;
+  letter-spacing: -.01em;
+}
+
+.formula-section-heading {
+  padding: 0 4px;
+}
+
+.formula-section-heading h3 {
+  color: #173b50;
+  letter-spacing: -.015em;
+}
+
 .formula-table-card {
   border-color: #d8e6ea;
   box-shadow: 0 10px 24px rgba(18, 55, 73, .055);
@@ -102,6 +131,21 @@
   color: #376274;
   letter-spacing: .08em;
   font-size: 10px;
+}
+
+.formula-table-card table tbody td {
+  border-color: #edf3f4;
+}
+
+.formula-table-card table tbody td:first-child {
+  font-weight: 600;
+}
+
+.formula-table-card table select {
+  border-color: #cfe0e5;
+  border-radius: 999px;
+  background: #f8fcfc;
+  color: #245365;
 }
 
 .formula-table-card table tbody tr {
@@ -118,4 +162,5 @@
   .formula-hero > div:first-child { padding: 22px 20px; }
   .formula-stat { min-height: 78px; padding: 14px 16px; }
   .formula-stat p:last-child { font-size: 1.6rem; }
+  .formula-search { min-width: 0; width: 100%; }
 }

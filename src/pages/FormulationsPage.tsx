@@ -937,7 +937,7 @@ export default function FormulationsPage() {
       {registerView === 'formulas' && <>
       <div className="formula-toolbar flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="w-full sm:w-60">
+              <div className="formula-category-filter w-full sm:w-60">
             <select aria-label="Formula category" value={filter} onChange={e => setFilter(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
               <option value="All">All categories</option>
               {categories.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
@@ -945,33 +945,33 @@ export default function FormulationsPage() {
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search formulas..." className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 w-64" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search formulas..." className="formula-search pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 w-64" />
           </div>
         </div>
         
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIngredientFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             All Formulas
           </button>
           <button
             onClick={() => setIngredientFilter('with')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'with' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'with' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             With Ingredients ({withIngredients.length})
           </button>
           <button
             onClick={() => setIngredientFilter('without')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'without' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'without' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             Without Ingredients ({withoutIngredients.length})
           </button>
           <button
             type="button"
             onClick={() => setShowArchived(current => !current)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showArchived ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showArchived ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             {showArchived ? 'Hide Archived' : 'Show Archived'} ({archivedCount})
           </button>
@@ -990,7 +990,7 @@ export default function FormulationsPage() {
           {/* Formulations WITH Ingredients */}
           {(ingredientFilter === 'all' || ingredientFilter === 'with') && withIngredients.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="formula-section-heading flex items-center gap-2 mb-3">
                 <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas with Ingredients ({withIngredients.length})</h3>
               </div>
@@ -1212,7 +1212,7 @@ export default function FormulationsPage() {
           {/* Formulations WITHOUT Ingredients */}
           {(ingredientFilter === 'all' || ingredientFilter === 'without') && withoutIngredients.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="formula-section-heading flex items-center gap-2 mb-3">
                 <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas without Ingredients ({withoutIngredients.length})</h3>
               </div>
