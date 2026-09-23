@@ -4,6 +4,7 @@ import { Formulation, FormulationIngredient, RawMaterial } from '../types/databa
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
 import './formula-editor.css';
+import './formulations-page.css';
 import StatusBadge from '../components/ui/StatusBadge';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
@@ -797,7 +798,7 @@ export default function FormulationsPage() {
   const isFinanceUser = userRole.includes('admin') || userRole.includes('finance') || userRole === 'finance_manager' || userEmail.includes('jonga') || userRole === 'administrator';
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="formula-page p-6 space-y-6">
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 border border-emerald-500 animate-bounce">
           <CheckCircle2 className="w-5 h-5 text-emerald-200" />
@@ -825,7 +826,7 @@ export default function FormulationsPage() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-lg bg-[#0c2035] text-white shadow-lg">
+      <section className="formula-hero overflow-hidden rounded-2xl bg-[#0c2035] text-white shadow-lg">
       <div className="flex flex-wrap items-center justify-between gap-5 px-6 py-6">
         <div>
           <span className="inline-block border border-amber-500/50 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">FORMULA CONTROL</span>
@@ -855,17 +856,17 @@ export default function FormulationsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 border-t border-white/10">
+      <div className="formula-stat-grid grid grid-cols-2 lg:grid-cols-4 border-t border-white/10">
         {[
           { label: 'Total formulas', value: totalFormulas, color: 'text-white', icon: FlaskConical },
           { label: 'Active', value: activeCount, color: 'text-emerald-300', icon: CheckCircle2 },
           { label: 'Draft', value: draftCount, color: 'text-amber-300', icon: FileText },
           { label: 'Archived', value: archivedCount, color: 'text-cyan-300', icon: Archive },
-        ].map(stat => <div key={stat.label} className="px-6 py-4 border-r border-white/10 last:border-0"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase text-slate-400">{stat.label}</p><stat.icon className={`h-4 w-4 ${stat.color}`} /></div><p className={`mt-2 text-3xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
+        ].map(stat => <div key={stat.label} className="formula-stat px-6 py-4 border-r border-white/10 last:border-0"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase text-slate-400">{stat.label}</p><stat.icon className={`h-4 w-4 ${stat.color}`} /></div><p className={`mt-2 text-3xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
       </div>
       </section>
 
-      <div role="tablist" aria-label="Formula views" className="flex gap-5 border-b border-slate-200">
+      <div role="tablist" aria-label="Formula views" className="formula-tabs flex gap-5 border-b border-slate-200">
         <button role="tab" aria-selected={registerView === 'formulas'} onClick={() => setRegisterView('formulas')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'formulas' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>All formulas <span className="ml-2 text-xs tabular-nums">{totalFormulas}</span></button>
         {isFinanceUser && <button role="tab" aria-selected={registerView === 'review'} onClick={() => setRegisterView('review')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'review' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>Finance review <span className="ml-2 text-xs tabular-nums text-amber-700">{financeReviewQueue.length}</span></button>}
       </div>
@@ -934,7 +935,7 @@ export default function FormulationsPage() {
       )}
 
       {registerView === 'formulas' && <>
-      <div className="flex flex-col gap-3">
+      <div className="formula-toolbar flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="w-full sm:w-60">
             <select aria-label="Formula category" value={filter} onChange={e => setFilter(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
@@ -993,7 +994,7 @@ export default function FormulationsPage() {
                 <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas with Ingredients ({withIngredients.length})</h3>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1120px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle [&_td:not(:first-child)]:whitespace-nowrap">
                     <thead className="bg-slate-50 border-b border-slate-200 [&_th]:text-slate-600 [&_th]:tracking-normal [&_th]:normal-case">
@@ -1215,7 +1216,7 @@ export default function FormulationsPage() {
                 <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas without Ingredients ({withoutIngredients.length})</h3>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1000px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle">
                     <thead className="bg-amber-50 border-b border-amber-200">
