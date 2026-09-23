@@ -22,12 +22,12 @@
 }
 
 .formula-hero > div:first-child {
-  padding: 30px 32px 28px;
+  padding: 22px 28px 20px;
 }
 
 .formula-hero h1 {
   letter-spacing: -.035em;
-  font-size: clamp(1.65rem, 2vw, 2.25rem);
+  font-size: clamp(1.5rem, 2vw, 2rem);
 }
 
 .formula-hero button:last-child {
@@ -40,9 +40,12 @@
 }
 
 .formula-stat {
-  min-height: 104px;
+  min-height: 78px;
   transition: background-color .2s ease;
 }
+
+.formula-stat > div { margin-bottom: 0; }
+.formula-stat p:last-child { margin-top: 4px; }
 
 .formula-stat:hover {
   background: rgba(255, 255, 255, .045);
@@ -113,6 +116,6 @@
 @media (max-width: 640px) {
   .formula-page { padding: 14px; }
   .formula-hero > div:first-child { padding: 22px 20px; }
-  .formula-stat { min-height: 88px; padding: 16px; }
+  .formula-stat { min-height: 78px; padding: 14px 16px; }
   .formula-stat p:last-child { font-size: 1.6rem; }
 }
