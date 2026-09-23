@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
+import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 
@@ -1817,7 +1818,7 @@ export default function ProductionOrdersPage() {
   const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
 
   return (
-    <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="production-orders-page p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
       <StickyOperationsPanel>
         <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
           <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1849,10 +1850,10 @@ export default function ProductionOrdersPage() {
       </section>
 
       {/* Filter & Search Bar */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="production-order-register overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 bg-white p-3.5">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            <div className="production-order-tabs flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -1874,7 +1875,7 @@ export default function ProductionOrdersPage() {
                 placeholder="Search batch number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-sm focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                className="production-order-search w-full rounded-md border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-sm focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
               />
             </div>
           </div>
@@ -1893,7 +1894,7 @@ export default function ProductionOrdersPage() {
           <div>
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="production-order-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100/70">
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Batch Number</th>
@@ -1907,7 +1908,7 @@ export default function ProductionOrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={order.id} className="production-order-row hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="font-mono font-bold text-slate-900">{order.batch_number}</div>
                         <div className="mt-1 text-[10px] leading-4 text-slate-400">
