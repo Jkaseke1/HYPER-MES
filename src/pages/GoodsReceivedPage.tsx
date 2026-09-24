@@ -991,14 +991,14 @@ export default function GoodsReceivedPage() {
                     <p className="text-[10px] text-slate-500">Maps to Sage OrderNum when the bridge posts the GRV.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-slate-600">External / Weighbridge Ref</Label>
+                    <Label className="text-xs font-bold text-teal-800">Manual GRV No (HFGRV)</Label>
                     <Input
                       value={externalReference}
                       onChange={(e) => setExternalReference(e.target.value)}
-                      placeholder="Defaults to WB ticket if left blank"
-                      className="bg-white border-blue-200 font-mono"
+                      placeholder="e.g. HFGRV10368"
+                      className="bg-white border-teal-300 font-mono focus:border-teal-600"
                     />
-                    <p className="text-[10px] text-slate-500">Used for load, weighbridge or other external trace references.</p>
+                    <p className="text-[10px] text-teal-800">Finance reference saved to the Sage GRV description and Message 3. This does not replace the PlantControl GRN number.</p>
                   </div>
                 </div>
               </div>
