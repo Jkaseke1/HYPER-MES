@@ -270,7 +270,14 @@ namespace SDK_Test
                 InvoiceDate = txDate,
                 DeliveryDate = txDate,
                 DueDate = txDate,
-                Description = "MES Goods Received Voucher",
+                // Description is the writable document-level reference shown on
+                // the Sage GRV. Keep the manual HFGRV here for Finance search,
+                // while MessageLine3 remains the audit backup. ExternalOrderNo
+                // remains the PlantControl GRN and must not be changed because
+                // it is the duplicate/idempotency key.
+                Description = Trim(
+                    FirstNonBlank(request.ExternalReference, "MES Goods Received Voucher"),
+                    50),
                 ExternalOrderNo = Trim(request.Reference, 50),
                 SupplierInvoiceNo = Trim(FirstNonBlank(request.SupplierInvoiceNo, request.Reference), 50),
                 MessageLine1 = Trim("MES GRN " + request.Reference, 50),
