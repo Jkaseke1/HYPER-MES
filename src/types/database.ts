@@ -124,6 +124,7 @@ export interface GoodsReceivedNote {
   supplier_invoice_no?: string | null;
   supplier_delivery_note_no?: string | null;
   supplier_order_no?: string | null;
+  manual_grv_number?: string | null;
   external_reference?: string | null;
   vat_mode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | null;
   vat_treatment?: 'taxable' | 'zero_rated' | 'exempt' | null;

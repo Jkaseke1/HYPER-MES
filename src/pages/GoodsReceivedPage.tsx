@@ -84,6 +84,7 @@ export default function GoodsReceivedPage() {
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
   const [supplierDeliveryNoteNo, setSupplierDeliveryNoteNo] = useState('');
   const [supplierOrderNo, setSupplierOrderNo] = useState('');
+  const [manualGrvDigits, setManualGrvDigits] = useState('');
   const [externalReference, setExternalReference] = useState('');
   const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
   const [wbTickets, setWbTickets] = useState<any[]>([]);
@@ -264,6 +265,11 @@ export default function GoodsReceivedPage() {
       return;
     }
 
+    if (!manualGrvDigits) {
+      toast.error('Enter the numeric Manual GRV Number before creating or sending this GRN to Finance.');
+      return;
+    }
+
     if (weighBridgeTicketId) {
       const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
       const linkedMaterial = materials.find((material: any) =>
@@ -312,6 +318,7 @@ export default function GoodsReceivedPage() {
         supplier_invoice_no: supplierInvoiceNo.trim() || null,
         supplier_delivery_note_no: supplierDeliveryNoteNo.trim() || null,
         supplier_order_no: supplierOrderNo.trim() || null,
+        manual_grv_number: `HFGRV${manualGrvDigits}`,
         external_reference: externalReference.trim() || null,
         received_by: profile?.id,
       };
@@ -380,6 +387,7 @@ export default function GoodsReceivedPage() {
     setSupplierInvoiceNo('');
     setSupplierDeliveryNoteNo('');
     setSupplierOrderNo('');
+    setManualGrvDigits('');
     setExternalReference('');
     setWeighBridgeTicketId('');
     setItems([emptyItem]);
@@ -447,6 +455,7 @@ export default function GoodsReceivedPage() {
     setSupplierInvoiceNo((grn as any).supplier_invoice_no || '');
     setSupplierDeliveryNoteNo((grn as any).supplier_delivery_note_no || '');
     setSupplierOrderNo((grn as any).supplier_order_no || '');
+    setManualGrvDigits(String((grn as any).manual_grv_number || (grn as any).external_reference || '').replace(/^HFGRV/i, '').replace(/\D/g, ''));
     setExternalReference((grn as any).external_reference || '');
     setWeighBridgeTicketId((grn as any).weigh_bridge_ticket_id || '');
     setItems(lineItems.map((item: any) => ({
@@ -932,6 +941,24 @@ export default function GoodsReceivedPage() {
                         />
                       </div>
                     </div>
+                    <div className="space-y-1.5 mt-4 max-w-xl">
+                      <Label htmlFor="manual_grv_number" className="text-xs font-bold text-slate-700 uppercase tracking-wide">MANUAL GRV NUMBER *</Label>
+                      <div className="flex h-10 rounded-md border border-slate-300 bg-white overflow-hidden focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20">
+                        <span className="flex items-center px-3 text-slate-400 bg-slate-50 border-r border-slate-200 font-mono text-sm select-none" aria-hidden="true">HFGRV</span>
+                        <Input
+                          id="manual_grv_number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={manualGrvDigits}
+                          onChange={(e) => setManualGrvDigits(e.target.value.replace(/\D/g, ''))}
+                          placeholder="e.g. 10346"
+                          className="h-full border-0 rounded-none bg-white font-mono focus-visible:ring-0"
+                          aria-describedby="manual-grv-help"
+                          required
+                        />
+                      </div>
+                      <p id="manual-grv-help" className="text-[10px] text-slate-500">Enter the numeric GRV number only</p>
+                    </div>
                     <div className="space-y-1.5 mt-4">
                       <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Notes</Label>
                       <Textarea
@@ -991,14 +1018,14 @@ export default function GoodsReceivedPage() {
                     <p className="text-[10px] text-slate-500">Maps to Sage OrderNum when the bridge posts the GRV.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-teal-800">Manual GRV No (HFGRV)</Label>
+                    <Label className="text-xs font-semibold text-slate-600">External / Weighbridge Ref</Label>
                     <Input
                       value={externalReference}
                       onChange={(e) => setExternalReference(e.target.value)}
-                      placeholder="e.g. HFGRV10368"
-                      className="bg-white border-teal-300 font-mono focus:border-teal-600"
+                      placeholder="Defaults to WB ticket if left blank"
+                      className="bg-white border-blue-200 font-mono"
                     />
-                    <p className="text-[10px] text-teal-800">Finance reference saved to the Sage GRV description and Message 3. This does not replace the PlantControl GRN number.</p>
+                    <p className="text-[10px] text-slate-500">Used for load, weighbridge or other external trace references.</p>
                   </div>
                 </div>
               </div>
@@ -1600,13 +1627,14 @@ export default function GoodsReceivedPage() {
                   <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{selectedGrvNumber || '-'}</p>
                 </div>
 
-                {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
+                {(viewing as any)?.manual_grv_number || (viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
                   <div className="bg-blue-50/70 rounded-lg border border-blue-200 p-2.5">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <FileText className="w-3.5 h-3.5 text-blue-600" />
                       <h3 className="text-xs font-semibold text-slate-700">Sage / Finance References</h3>
                     </div>
                     <div className="grid grid-cols-1 gap-y-1 text-xs">
+                      <div><span className="text-slate-400">Manual GRV:</span> <span className="font-mono font-semibold text-slate-800">{(viewing as any).manual_grv_number || '-'}</span></div>
                       <div><span className="text-slate-400">Supplier Invoice:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_invoice_no || '-'}</span></div>
                       <div><span className="text-slate-400">Delivery Note:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_delivery_note_no || '-'}</span></div>
                       <div><span className="text-slate-400">Order / PO:</span> <span className="font-mono text-slate-800">{(viewing as any).supplier_order_no || '-'}</span></div>
