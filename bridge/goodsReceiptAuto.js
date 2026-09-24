@@ -91,6 +91,7 @@ async function handleGoodsReceipt(syncEvent) {
       supplier_invoice_no,
       supplier_delivery_note_no,
       supplier_order_no,
+      manual_grv_number,
       external_reference,
       wb_transaction_no,
       vat_mode,
@@ -169,7 +170,9 @@ async function handleGoodsReceipt(syncEvent) {
     supplierInvoiceNo: grn.supplier_invoice_no || '',
     supplierDeliveryNoteNo: grn.supplier_delivery_note_no || '',
     supplierOrderNo: grn.supplier_order_no || '',
-    externalReference: grn.external_reference || grn.wb_transaction_no || '',
+    // The manual HFGRV is the Sage finance reference. Keep the PlantControl
+    // GRN in `reference` because that remains the idempotency key.
+    externalReference: grn.manual_grv_number || grn.external_reference || grn.wb_transaction_no || '',
     warehouse: warehouseCode,
     receivedDate: grn.received_date,
     vatMode: grn.vat_mode || '',
