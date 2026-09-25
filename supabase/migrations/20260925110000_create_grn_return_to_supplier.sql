@@ -84,8 +84,8 @@ CREATE POLICY "Authenticated users can create RTS items" ON public.return_to_sup
 
 CREATE OR REPLACE FUNCTION public.request_grn_return(
   p_grn_id uuid,
-  p_reason text,
-  p_lines jsonb
+  p_lines jsonb,
+  p_reason text
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -191,5 +191,5 @@ $$;
 
 COMMENT ON TABLE public.return_to_supplier_requests IS 'Separate, auditable RTS documents. Original GRNs remain unchanged.';
 
-GRANT EXECUTE ON FUNCTION public.request_grn_return(uuid, text, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.request_grn_return(uuid, jsonb, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.approve_grn_return(uuid) TO authenticated;
