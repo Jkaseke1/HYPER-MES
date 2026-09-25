@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, Pencil } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, Pencil, RotateCcw } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
+import ReturnToSupplierModal from '../components/grn/ReturnToSupplierModal';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -76,6 +77,7 @@ export default function GoodsReceivedPage() {
   const [saving, setSaving] = useState(false);
   const [retryingSagePost, setRetryingSagePost] = useState(false);
   const [showRetrySageDialog, setShowRetrySageDialog] = useState(false);
+  const [showReturnToSupplierModal, setShowReturnToSupplierModal] = useState(false);
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
@@ -1517,6 +1519,17 @@ export default function GoodsReceivedPage() {
                     {profile?.role === 'admin' ? 'Admin edit supplier' : 'Reopen for correction'}
                   </Button>
                 )}
+                {viewing?.status === 'approved' && selectedSync?.status === 'success' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setShowReturnToSupplierModal(true)}
+                    className="bg-rose-700 text-white hover:bg-rose-800"
+                    title="Create a Finance-controlled return to supplier"
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Return to Supplier
+                  </Button>
+                )}
               </div>
             </div>
             {/* Close Button */}
@@ -1792,6 +1805,15 @@ export default function GoodsReceivedPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ReturnToSupplierModal
+        open={showReturnToSupplierModal}
+        onOpenChange={setShowReturnToSupplierModal}
+        grn={viewing}
+        items={viewItems}
+        sageGrvNumber={selectedGrvNumber}
+        onCreated={() => fetchData(false)}
+      />
     </div>
   );
 }
