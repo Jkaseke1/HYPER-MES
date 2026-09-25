@@ -99,6 +99,12 @@ DECLARE
   v_grn_item public.grn_items%ROWTYPE;
   v_quantity numeric;
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('finance', 'accountant', 'admin')
+  ) THEN
+    RAISE EXCEPTION 'Only Finance, Accountant, or Admin users can create an RTS.';
+  END IF;
   IF NULLIF(BTRIM(p_reason), '') IS NULL THEN
     RAISE EXCEPTION 'A return reason is required.';
   END IF;
@@ -161,6 +167,12 @@ DECLARE
   v_rts public.return_to_supplier_requests%ROWTYPE;
   v_event_id uuid;
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('finance', 'accountant', 'admin')
+  ) THEN
+    RAISE EXCEPTION 'Only Finance, Accountant, or Admin users can approve an RTS.';
+  END IF;
   SELECT * INTO v_rts FROM public.return_to_supplier_requests WHERE id = p_rts_id FOR UPDATE;
   IF NOT FOUND OR v_rts.status <> 'pending_finance' THEN
     RAISE EXCEPTION 'Only a pending-finance RTS can be approved.';
@@ -178,3 +190,6 @@ END;
 $$;
 
 COMMENT ON TABLE public.return_to_supplier_requests IS 'Separate, auditable RTS documents. Original GRNs remain unchanged.';
+
+GRANT EXECUTE ON FUNCTION public.request_grn_return(uuid, text, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.approve_grn_return(uuid) TO authenticated;

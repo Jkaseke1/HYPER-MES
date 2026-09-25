@@ -523,6 +523,7 @@ export default function GoodsReceivedPage() {
   };
 
   const canRetrySagePosting = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
+  const canManageReturns = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
 
   const retryFailedSagePosting = async () => {
     if (!viewing || viewing.status !== 'approved' || !selectedSync || selectedSync.status !== 'failed' || !canRetrySagePosting) return;
@@ -1519,7 +1520,7 @@ export default function GoodsReceivedPage() {
                     {profile?.role === 'admin' ? 'Admin edit supplier' : 'Reopen for correction'}
                   </Button>
                 )}
-                {viewing?.status === 'approved' && selectedSync?.status === 'success' && (
+                {canManageReturns && viewing?.status === 'approved' && selectedSync?.status === 'success' && (
                   <Button
                     type="button"
                     size="sm"
