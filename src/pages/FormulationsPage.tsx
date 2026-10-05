@@ -1940,12 +1940,12 @@ export default function FormulationsPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <h4 className="formula-editor-section-title">{formulaStage === 'formula' ? 'Formula ingredients' : 'Generated BOM'} <span className="ml-1 text-slate-400">({ings.length})</span></h4>
-                <p className="formula-editor-section-help">{formulaStage === 'formula' ? 'Use the full raw-material names from the master list. The initials on the paper sheet are only shorthand.' : 'Calculated directly from the formula quantities and locked for review.'}</p>
+                <p className="formula-editor-section-help">{formulaStage === 'formula' ? 'Use the full raw-material names from the master list. The initials on the paper sheet are only shorthand.' : 'Review and adjust materials or quantities before saving the production BOM. The mass balance must still equal the reference batch.'}</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`formula-editor-metric ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'is-valid' : 'is-warning'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
                 <span className={`formula-editor-metric ${Math.abs(totalPct - 100) < 0.01 ? 'is-valid' : 'is-warning'}`}>Total: {totalPct.toFixed(1)}%</span>
-                {formulaStage === 'formula' && <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>}
+                <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add material</button>
               </div>
             </div>
             <div className="formula-editor-table">
@@ -1956,7 +1956,7 @@ export default function FormulationsPage() {
               <tbody>{ings.map((ing, idx) => (
                 <tr key={idx} className="border-b border-slate-50">
                   <td className="py-1.5 pr-2">
-                    <select disabled={formulaStage === 'bom'} value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium disabled:bg-slate-50">
+                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
                       <option value="">Select component / material...</option>
                       {draftFormulaMaterialIds.size > 0 && <optgroup label="✓ Materials already in this formula / BOM (shown first)">
                         {materials.filter(m => draftFormulaMaterialIds.has(m.id)).map(m => (
@@ -1975,11 +1975,11 @@ export default function FormulationsPage() {
                         ))}
                       </optgroup>
                     </select></td>
-                  <td className="py-1.5 pr-2"><input disabled={formulaStage === 'bom'} type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u, formulaBatchSize)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500 disabled:bg-slate-50" /></td>
-                  <td className="py-1.5 pr-2"><input disabled={formulaStage === 'bom'} type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500 disabled:bg-slate-50" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u, formulaBatchSize)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><span className="block rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">{Number(ing.percentage || 0).toFixed(3)}%</span></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
-                  <td className="py-1.5">{formulaStage === 'formula' && <button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                  <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors" title="Remove material"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>
               ))}</tbody>
             </table>
