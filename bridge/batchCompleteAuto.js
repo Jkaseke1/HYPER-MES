@@ -42,6 +42,32 @@ function postJson(urlString, body) {
   });
 }
 
+function getJson(urlString) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const transport = url.protocol === 'https:' ? https : http;
+    const request = transport.request({
+      method: 'GET',
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: `${url.pathname}${url.search}`,
+      headers: { 'X-Hyper-Api-Key': SDK_API_KEY },
+    }, (response) => {
+      let responseBody = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { responseBody += chunk; });
+      response.on('end', () => {
+        let parsed = {};
+        try { parsed = responseBody ? JSON.parse(responseBody) : {}; } catch (_) { parsed = { message: responseBody }; }
+        if (response.statusCode >= 200 && response.statusCode < 300) return resolve(parsed);
+        reject(new Error(parsed.message || parsed.Message || `HTTP ${response.statusCode}`));
+      });
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
 function localDateValue() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -137,21 +163,26 @@ async function handleBatchComplete(syncEvent) {
         description: rawMaterial?.name || sageCode,
       };
       }),
-      ...(packagingBom || []).map((packaging) => {
+      ...(await Promise.all((packagingBom || []).map(async (packaging) => {
         const sageCode = String(packaging.item_code || '').trim();
         const quantityPerTonne = Number(packaging.expected_qty_per_tonne || 0);
         const componentQuantity = quantityPerTonne * (quantity / 1000);
         if (!sageCode || !Number.isFinite(componentQuantity) || componentQuantity <= 0) {
           throw new Error(`Invalid Sage packaging component for ${packaging.description || sageCode || 'the production BOM'}.`);
         }
+        const stock = await getJson(`${SDK_BASE_URL}/api/v1/stock?itemCode=${encodeURIComponent(sageCode)}&warehouse=${encodeURIComponent(FINISHED_GOODS_WAREHOUSE)}`);
+        const unitCost = Number(stock.averageUnitCost);
+        if (!Number.isFinite(unitCost) || unitCost < 0) {
+          throw new Error(`Sage average cost is unavailable for packaging item ${sageCode}.`);
+        }
         return {
           sageCode,
           quantity: Math.round(componentQuantity * 10000) / 10000,
-          unitCost: 0,
+          unitCost,
           warehouseId: PACKAGING_WAREHOUSE_ID,
           description: packaging.description || sageCode,
         };
-      }),
+      }))),
     ],
     confirmPost: true,
   };
