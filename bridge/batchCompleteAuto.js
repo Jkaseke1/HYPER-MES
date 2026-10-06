@@ -12,6 +12,7 @@ const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_K
 const FINISHED_GOODS_WAREHOUSE = (process.env.SAGE_FINISHED_GOODS_WAREHOUSE_CODE || 'PD').trim().toUpperCase();
 const PRODUCTION_WAREHOUSE_ID = Number(process.env.SAGE_PRODUCTION_WAREHOUSE_ID || 19);
 const RAW_MATERIAL_WAREHOUSE_ID = Number(process.env.SAGE_RAW_MATERIAL_WAREHOUSE_ID || 18);
+const PACKAGING_WAREHOUSE_ID = Number(process.env.SAGE_PACKAGING_WAREHOUSE_ID || PRODUCTION_WAREHOUSE_ID);
 
 function postJson(urlString, body) {
   return new Promise((resolve, reject) => {
@@ -52,14 +53,14 @@ async function handleBatchComplete(syncEvent) {
 
   let { data: order, error } = await supabase
     .from('production_orders')
-    .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, sage_mfp_reference, formulations(id, name, sage_code)')
+    .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, sage_mfp_reference, sage_mfp_external_reference, sage_mfp_posting_status, formulations(id, name, sage_code)')
     .eq('id', syncEvent.reference_id)
     .single();
   if (error && /sage_mfp_reference/i.test(error.message || '')) {
     // Keep live posting compatible until the MES reference-column migration is applied.
     ({ data: order, error } = await supabase
       .from('production_orders')
-      .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, formulations(id, name, sage_code)')
+      .select('id, batch_number, actual_qty, rejected_qty, total_cost, cost_per_unit, sage_mfp_reference, formulations(id, name, sage_code)')
       .eq('id', syncEvent.reference_id)
       .single());
   }
@@ -79,6 +80,12 @@ async function handleBatchComplete(syncEvent) {
     .eq('issued', true);
   if (issuedMaterialsError) throw new Error(`Could not load issued production materials: ${issuedMaterialsError.message}`);
   if (!issuedMaterials?.length) throw new Error(`No issued materials available for Sage manufacturing documentation on ${order.batch_number}.`);
+
+  const { data: packagingBom, error: packagingBomError } = await supabase
+    .from('production_bom_packaging')
+    .select('item_code, description, unit, expected_qty_per_tonne')
+    .eq('formulation_id', order.formulations?.id);
+  if (packagingBomError) throw new Error(`Could not load packaging BOM for ${order.formulations?.name || order.id}: ${packagingBomError.message}`);
 
   const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
     supabase,
@@ -102,8 +109,10 @@ async function handleBatchComplete(syncEvent) {
   const manufacturingProcessBody = {
     // Sage allocates the next MFP###### reference for a new batch. Retain it
     // in MES so retries use the same Sage manufacturing-process document.
-    processReference: (order.sage_mfp_reference || order.batch_number || '').substring(0, 50),
-    externalReference: order.batch_number.substring(0, 50),
+    // Never use batch_number here: Sage batch references can be reused for
+    // multiple products/processes. The MES production-order UUID is unique.
+    processReference: (order.sage_mfp_reference || '').substring(0, 50),
+    externalReference: (order.sage_mfp_external_reference || `MES-PO-${order.id}`).substring(0, 50),
     finishedGoodCode: itemCode,
     // Sage manufacturing documents use the finished-good stock unit. MES keeps
     // the operational quantity in kilograms, so 1,000 kg of a 50 kg SKU is 20.
@@ -112,7 +121,8 @@ async function handleBatchComplete(syncEvent) {
     unitCost,
     transactionDate: body.receiptDate,
     description: `${order.formulations?.name || itemCode} manufacture (${quantity}kg / ${sageUnits} Sage unit(s))`.substring(0, 255),
-    components: issuedMaterials.map((material) => {
+    components: [
+      ...issuedMaterials.map((material) => {
       const rawMaterial = Array.isArray(material.raw_materials) ? material.raw_materials[0] : material.raw_materials;
       const sageCode = (rawMaterial?.sage_code || rawMaterial?.code || '').trim();
       const componentQuantity = Number(material.actual_qty || 0);
@@ -126,7 +136,23 @@ async function handleBatchComplete(syncEvent) {
         warehouseId: RAW_MATERIAL_WAREHOUSE_ID,
         description: rawMaterial?.name || sageCode,
       };
-    }),
+      }),
+      ...(packagingBom || []).map((packaging) => {
+        const sageCode = String(packaging.item_code || '').trim();
+        const quantityPerTonne = Number(packaging.expected_qty_per_tonne || 0);
+        const componentQuantity = quantityPerTonne * (quantity / 1000);
+        if (!sageCode || !Number.isFinite(componentQuantity) || componentQuantity <= 0) {
+          throw new Error(`Invalid Sage packaging component for ${packaging.description || sageCode || 'the production BOM'}.`);
+        }
+        return {
+          sageCode,
+          quantity: Math.round(componentQuantity * 10000) / 10000,
+          unitCost: 0,
+          warehouseId: PACKAGING_WAREHOUSE_ID,
+          description: packaging.description || sageCode,
+        };
+      }),
+    ],
     confirmPost: true,
   };
 
@@ -142,14 +168,35 @@ async function handleBatchComplete(syncEvent) {
   console.log(`  Sage SDK response: ${result.status || 'ok'} - ${result.message || 'posted'}`);
   let manufacturingProcessResult = null;
   try {
+    if (Object.prototype.hasOwnProperty.call(order, 'sage_mfp_posting_status')) {
+      await supabase
+        .from('production_orders')
+        .update({ sage_mfp_posting_status: 'processing', sage_mfp_posting_message: null })
+        .eq('id', order.id);
+    }
     manufacturingProcessResult = await postJson(`${SDK_BASE_URL}/api/v1/manufacturing-processes/post`, manufacturingProcessBody);
     const processReference = (manufacturingProcessResult.processReference || '').trim();
     if (processReference && processReference !== order.sage_mfp_reference && Object.prototype.hasOwnProperty.call(order, 'sage_mfp_reference')) {
       const { error: mfpReferenceError } = await supabase
         .from('production_orders')
-        .update({ sage_mfp_reference: processReference })
+        .update({
+          sage_mfp_reference: processReference,
+          sage_mfp_posting_status: 'posted',
+          sage_mfp_posting_message: manufacturingProcessResult.message || 'Sage manufacturing process posted.',
+          sage_mfp_posted_at: new Date().toISOString(),
+        })
         .eq('id', order.id);
       if (mfpReferenceError) throw new Error(`Sage manufacturing process ${processReference} was posted, but MES could not retain its reference: ${mfpReferenceError.message}`);
+    } else if (Object.prototype.hasOwnProperty.call(order, 'sage_mfp_posting_status')) {
+      const { error: mfpStatusError } = await supabase
+        .from('production_orders')
+        .update({
+          sage_mfp_posting_status: 'posted',
+          sage_mfp_posting_message: manufacturingProcessResult.message || 'Sage manufacturing process already posted.',
+          sage_mfp_posted_at: new Date().toISOString(),
+        })
+        .eq('id', order.id);
+      if (mfpStatusError) throw new Error(`Sage manufacturing process posted, but MES could not retain its status: ${mfpStatusError.message}`);
     }
     console.log(`  Sage manufacturing process: ${manufacturingProcessResult.status || 'ok'} - ${manufacturingProcessResult.message || 'recorded'}`);
   } catch (manufacturingProcessError) {
@@ -160,6 +207,12 @@ async function handleBatchComplete(syncEvent) {
       message: manufacturingProcessError.message,
       response: manufacturingProcessError.response || null,
     };
+    if (Object.prototype.hasOwnProperty.call(order, 'sage_mfp_posting_status')) {
+      await supabase
+        .from('production_orders')
+        .update({ sage_mfp_posting_status: 'warning', sage_mfp_posting_message: manufacturingProcessError.message })
+        .eq('id', order.id);
+    }
     console.warn(`  Sage manufacturing-process log skipped: ${manufacturingProcessError.message}`);
   }
   return {
