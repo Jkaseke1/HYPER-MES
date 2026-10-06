@@ -7,6 +7,7 @@ async function syncRawMaterials() {
   const result = await pool.request().query(`
     SELECT 
       StockLink AS code,
+      Code AS sage_code,
       Description_1 AS name,
       Description_2 AS description
     FROM StkItem
@@ -22,6 +23,11 @@ async function syncRawMaterials() {
       .from('raw_materials')
       .upsert({
         code: row.code,
+        // StockLink is the MES legacy key; Sage Code is the value used by
+        // SDK stock, issue, transfer, and manufacturing operations. Keep a
+        // non-empty fallback for older Sage rows that have no Code value so
+        // the active-material constraint cannot reject the import.
+        sage_code: String(row.sage_code || row.code || '').trim(),
         name: row.name || row.code,
         description: row.description || '',
         unit: 'kg',
