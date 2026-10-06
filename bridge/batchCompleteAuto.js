@@ -94,10 +94,10 @@ async function handleBatchComplete(syncEvent) {
 
   const itemCode = (order.formulations?.sage_code || '').trim();
   const quantity = Number(order.actual_qty || 0) - Number(order.rejected_qty || 0);
-  const unitCost = Number(order.cost_per_unit || 0);
+  const mesCostPerKg = Number(order.cost_per_unit || 0);
   if (!itemCode) throw new Error(`No Sage code for finished good ${order.formulations?.name || order.id}`);
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(`Invalid finished-goods quantity: ${quantity}`);
-  if (!Number.isFinite(unitCost) || unitCost < 0) throw new Error(`Invalid finished-goods unit cost: ${unitCost}`);
+  if (!Number.isFinite(mesCostPerKg) || mesCostPerKg < 0) throw new Error(`Invalid finished-goods cost per kg: ${mesCostPerKg}`);
 
   const { data: issuedMaterials, error: issuedMaterialsError } = await supabase
     .from('production_order_materials')
@@ -119,6 +119,7 @@ async function handleBatchComplete(syncEvent) {
     itemCode
   );
   const sageUnits = toSageUnits(quantity, kgPerSageUnit, itemCode);
+  const sageUnitCost = Math.round(mesCostPerKg * kgPerSageUnit * 10000) / 10000;
 
   const body = {
     reference: `WO-${order.batch_number}`.substring(0, 50),
@@ -128,7 +129,7 @@ async function handleBatchComplete(syncEvent) {
     warehouse: FINISHED_GOODS_WAREHOUSE,
     transactionCode: 'MFMF',
     quantity: sageUnits,
-    unitCost,
+    unitCost: sageUnitCost,
     receiptDate: localDateValue(),
     confirmPost: true,
   };
@@ -144,7 +145,7 @@ async function handleBatchComplete(syncEvent) {
     // the operational quantity in kilograms, so 1,000 kg of a 50 kg SKU is 20.
     quantity: sageUnits,
     warehouseId: PRODUCTION_WAREHOUSE_ID,
-    unitCost,
+    unitCost: sageUnitCost,
     transactionDate: body.receiptDate,
     description: `${order.formulations?.name || itemCode} manufacture (${quantity}kg / ${sageUnits} Sage unit(s))`.substring(0, 255),
     components: [
@@ -189,7 +190,7 @@ async function handleBatchComplete(syncEvent) {
 
   console.log(`  Batch: ${order.batch_number}`);
   console.log(`  Product: ${itemCode} - ${quantity}kg (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) to ${FINISHED_GOODS_WAREHOUSE}`);
-  console.log(`  MES cost: ${unitCost} per kg; Sage valuation mode: ${postingCostMode}; reference ${body.reference}`);
+  console.log(`  MES cost: ${mesCostPerKg} per kg; Sage cost: ${sageUnitCost} per ${kgPerSageUnit}kg unit; Sage valuation mode: ${postingCostMode}; reference ${body.reference}`);
 
   if (DRY_RUN) {
     return { dryRun: true, message: `DRY RUN: ${body.reference} would post finished goods through Sage SDK`, details: { sdkFinishedGoodsReceipt: { ...body, confirmPost: false } } };
