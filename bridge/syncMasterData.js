@@ -23,7 +23,7 @@ async function syncRawMaterials() {
     // have a different legacy `code` (for example StockLink), so upserting
     // only on `code` can attempt to create a second active row and violate
     // uq_raw_materials_active_sage_code.
-    const sageCode = String(row.sage_code || row.code || '').trim();
+    const sageCode = String(row.sage_code || row.code || '').trim().toUpperCase();
     const payload = {
       code: row.code,
       sage_code: sageCode,
@@ -37,7 +37,9 @@ async function syncRawMaterials() {
     const { data: existing, error: existingError } = await supabase
       .from('raw_materials')
       .select('id')
-      .eq('sage_code', sageCode)
+      // Match legacy rows regardless of the casing used when they were
+      // originally entered; the database uniqueness policy is normalized.
+      .ilike('sage_code', sageCode)
       .eq('is_active', true)
       .maybeSingle();
 
