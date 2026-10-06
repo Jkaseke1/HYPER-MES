@@ -134,11 +134,11 @@ async function handleBatchComplete(syncEvent) {
     confirmPost: true,
   };
   const manufacturingProcessBody = {
-    // Sage allocates the next MFP###### reference for a new batch. Retain it
-    // in MES so retries use the same Sage manufacturing-process document.
-    // Never use batch_number here: Sage batch references can be reused for
-    // multiple products/processes. The MES production-order UUID is unique.
-    processReference: (order.sage_mfp_reference || '').substring(0, 50),
+    // Use the MES batch number as Sage's process reference so both systems
+    // share one auditable manufacturing document number. If a process was
+    // already assigned before posting completed, retain that saved reference
+    // for idempotent retries.
+    processReference: (order.sage_mfp_reference || order.batch_number || '').substring(0, 50),
     externalReference: (order.sage_mfp_external_reference || `MES-PO-${order.id}`).substring(0, 50),
     finishedGoodCode: itemCode,
     // Sage manufacturing documents use the finished-good stock unit. MES keeps
