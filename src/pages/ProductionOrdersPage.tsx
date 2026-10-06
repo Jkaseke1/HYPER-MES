@@ -39,6 +39,7 @@ interface ConfirmDialogState {
 }
 
 interface SageIssueStatus {
+  id: string;
   status: string;
   message?: string | null;
   sage_response?: any;
@@ -178,6 +179,7 @@ export default function ProductionOrdersPage() {
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
+  const [retryingSageIssue, setRetryingSageIssue] = useState(false);
   const [sageCompletionStatus, setSageCompletionStatus] = useState<SageIssueStatus | null>(null);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
@@ -476,7 +478,7 @@ export default function ProductionOrdersPage() {
 
     const { data, error } = await supabase
       .from('sync_log')
-      .select('reference_id, status, message, sage_response, error_details, updated_at')
+      .select('id, reference_id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
       .eq('reference_type', 'production_orders')
       .in('reference_id', orderIds)
@@ -536,7 +538,7 @@ export default function ProductionOrdersPage() {
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
       .from('sync_log')
-      .select('status, message, sage_response, error_details, updated_at')
+      .select('id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
       .eq('reference_type', 'production_orders')
       .eq('reference_id', orderId)
@@ -576,6 +578,28 @@ export default function ProductionOrdersPage() {
     const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageIssueStatus]);
+
+  const retrySageMaterialIssue = useCallback(async () => {
+    if (!selected?.id || !sageIssueStatus?.id || sageIssueStatus.status !== 'failed') return;
+
+    setRetryingSageIssue(true);
+    setWorkflowError(null);
+    try {
+      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: sageIssueStatus.id });
+      if (error) throw error;
+
+      showSageNotification(
+        'processing',
+        'Material issue retry queued',
+        'The existing failed Sage event was requeued. MES materials will not be issued again.'
+      );
+      await loadSageIssueStatus(selected.id, true);
+    } catch (error: any) {
+      setWorkflowError(`Could not retry Sage material issue: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setRetryingSageIssue(false);
+    }
+  }, [selected?.id, sageIssueStatus, showSageNotification, loadSageIssueStatus]);
 
   const loadSageCompletionStatus = useCallback(async (orderId: string) => {
     const { data, error } = await supabase
@@ -2680,15 +2704,28 @@ export default function ProductionOrdersPage() {
                     </button>
                   )}
                   {selected.status === 'materials_issued' && (
-                    <button
-                      onClick={() => updateStatus('in_progress')}
-                      disabled={saving || !canStartProduction}
-                      title={canStartProduction ? 'Sage material issue posted. Start production.' : 'Production unlocks after Sage posts the material issue successfully.'}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {canStartProduction ? <Play className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                      {canStartProduction ? 'Start Production' : 'Waiting for Sage Issue'}
-                    </button>
+                    <>
+                      {sageIssueStatus?.status === 'failed' && (
+                        <button
+                          onClick={retrySageMaterialIssue}
+                          disabled={saving || retryingSageIssue}
+                          title="Requeue the existing failed Sage material issue. MES materials will not be issued again."
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-amber-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${retryingSageIssue ? 'animate-spin' : ''}`} />
+                          {retryingSageIssue ? 'Requeuing Sage Issue' : 'Retry Sage Material Issue'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => updateStatus('in_progress')}
+                        disabled={saving || !canStartProduction}
+                        title={canStartProduction ? 'Sage material issue posted. Start production.' : 'Production unlocks after Sage posts the material issue successfully.'}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {canStartProduction ? <Play className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                        {canStartProduction ? 'Start Production' : 'Waiting for Sage Issue'}
+                      </button>
+                    </>
                   )}
                   {selected.status === 'in_progress' && (
                     <button
