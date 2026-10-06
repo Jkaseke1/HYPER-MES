@@ -19,25 +19,48 @@ async function syncRawMaterials() {
   let updated = 0;
 
   for (const row of result.recordset) {
-    const { data, error } = await supabase
+    // Sage Code is the natural integration key. Existing MES materials can
+    // have a different legacy `code` (for example StockLink), so upserting
+    // only on `code` can attempt to create a second active row and violate
+    // uq_raw_materials_active_sage_code.
+    const sageCode = String(row.sage_code || row.code || '').trim();
+    const payload = {
+      code: row.code,
+      sage_code: sageCode,
+      name: row.name || row.code,
+      description: row.description || '',
+      unit: 'kg',
+      reorder_level: 0,
+      current_stock: 0,
+    };
+
+    const { data: existing, error: existingError } = await supabase
       .from('raw_materials')
-      .upsert({
-        code: row.code,
-        // StockLink is the MES legacy key; Sage Code is the value used by
-        // SDK stock, issue, transfer, and manufacturing operations. Keep a
-        // non-empty fallback for older Sage rows that have no Code value so
-        // the active-material constraint cannot reject the import.
-        sage_code: String(row.sage_code || row.code || '').trim(),
-        name: row.name || row.code,
-        description: row.description || '',
-        unit: 'kg',
-        reorder_level: 0,
-        current_stock: 0
-      }, { 
-        onConflict: 'code',
-        ignoreDuplicates: false 
-      })
-      .select();
+      .select('id')
+      .eq('sage_code', sageCode)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let data;
+    let error = existingError;
+    if (!error && existing?.id) {
+      // Preserve the established MES code and stock values; refresh only the
+      // Sage master-data description fields on the mapped row.
+      const result = await supabase
+        .from('raw_materials')
+        .update({ name: payload.name, description: payload.description, unit: payload.unit })
+        .eq('id', existing.id)
+        .select();
+      data = result.data;
+      error = result.error;
+    } else if (!error) {
+      const result = await supabase
+        .from('raw_materials')
+        .upsert(payload, { onConflict: 'code', ignoreDuplicates: false })
+        .select();
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error(`  ❌ Error syncing ${row.code}:`, error.message);
