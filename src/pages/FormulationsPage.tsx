@@ -369,7 +369,42 @@ export default function FormulationsPage() {
       status: 'draft',
     });
     setCopiedBatchSize(STANDARD_FORMULA_BATCH_KG);
-    setIngs([emptyIng()]);
+
+    // When an existing formula is selected as the source for a new version,
+    // show the formula that is actually in use.  The new version is still a
+    // separate draft (editId remains null), so changing these rows cannot
+    // mutate the source formulation.  An independent new formula continues
+    // to use the blank state above.
+    const [specRes, bomRes] = await Promise.all([
+      supabase.from('formula_specs').select('id, reference_batch_size').eq('formulation_id', src.id).maybeSingle(),
+      supabase.from('formulation_ingredients').select('*').eq('formulation_id', src.id).order('sort_order'),
+    ]);
+    let sourceLines: any[] = [];
+    if (!specRes.error && specRes.data?.id) {
+      const { data: specLines } = await supabase
+        .from('formula_spec_lines')
+        .select('*')
+        .eq('formula_spec_id', specRes.data.id)
+        .order('sort_order');
+      sourceLines = specLines || [];
+    }
+    if (!sourceLines.length) sourceLines = bomRes.data || [];
+    const sourceTotal = sourceLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+    const normalizedSourceLines = sourceTotal > 0 && Math.abs(sourceTotal - STANDARD_FORMULA_BATCH_KG) > 0.01
+      ? sourceLines.map(line => ({
+          ...line,
+          quantity: Math.round(((Number(line.quantity) || 0) / sourceTotal) * STANDARD_FORMULA_BATCH_KG * 10000) / 10000,
+        }))
+      : sourceLines;
+    setIngs(normalizedSourceLines.length > 0
+      ? normalizedSourceLines.map(line => ({
+          raw_material_id: line.raw_material_id,
+          quantity: Number(line.quantity) || 0,
+          unit: line.unit || 'kg',
+          percentage: Math.round(((Number(line.quantity) || 0) / STANDARD_FORMULA_BATCH_KG) * 1000000) / 10000,
+          is_critical: !!line.is_critical,
+        }))
+      : [emptyIng()]);
     setLegacyBomNotice(null);
   }
 
