@@ -34,6 +34,8 @@ const input =
   'w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white placeholder:text-slate-400';
 const label = 'block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1';
 
+const HAULIER_OPTIONS = ['HYPER', 'BLEXPRESS LOGISTICS', 'External'];
+
 function Field({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -186,8 +188,9 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       className={input}
                     >
                       <option value="">Select…</option>
-                      <option value="HYPER">HYPER</option>
-                      <option value="External">External</option>
+                      {HAULIER_OPTIONS.map((haulier) => (
+                        <option key={haulier} value={haulier}>{haulier}</option>
+                      ))}
                     </select>
                   </Field>
                   <Field title="Product (Sage) *">
