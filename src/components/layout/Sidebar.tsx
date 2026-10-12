@@ -118,6 +118,13 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Customer Management',
+    icon: Users,
+    items: [
+      { to: '/crm', icon: Users, label: 'CRM & Customers' },
+    ],
+  },
+  {
     label: 'Reports',
     icon: BarChart3Icon,
     items: [
@@ -134,6 +141,7 @@ const navGroups: NavGroup[] = [
       // Reconciliation
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },
+      { to: '/reports/sold-tonnage', icon: BarChart3Icon2, label: 'Sold Tonnage' },
       { to: '/admin/sync-log', icon: Activity, label: 'Sage Sync Log' },
       { to: '/plant-integrations', icon: Waypoints, label: 'Automation & Integrations' },
       { to: '/management-reporting', icon: Calendar, label: 'Scheduled Reporting' },
