@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { BarChart3, TrendingUp, DollarSign, Package, Download, Filter } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -112,6 +113,13 @@ export default function ReportsPage() {
           <Download className="w-4 h-4" /> Export Report
         </button>
       </div>
+
+      <Link to="/reports/intake-movement" className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900 hover:bg-teal-100">
+        <span>
+          <span className="font-semibold">Intake and movement.</span> Live weighbridge tickets, goods received notes, and material transfers.
+        </span>
+        <span className="shrink-0 font-medium">Open</span>
+      </Link>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200">
         <div className="flex items-center gap-2 text-sm text-slate-600">
