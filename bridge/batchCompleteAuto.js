@@ -128,6 +128,48 @@ async function handleBatchComplete(syncEvent) {
     }));
   }
 
+  // Older orders can predate the order-level packaging snapshot and may also
+  // have no legacy BOM packaging row. In that case, use the finance/Sage
+  // product mapping as a last-resort documentation fallback. This keeps Sage
+  // manufacturing history complete without changing the order's ingredients
+  // or reposting an already-completed event.
+  if (packagingBom.length === 0) {
+    const { data: integration, error: integrationError } = await supabase
+      .from('sage_product_integration_settings')
+      .select('packaging_sage_code, packaging_qty_per_sage_unit')
+      .eq('formulation_id', order.formulations?.id)
+      .limit(1)
+      .maybeSingle();
+    if (integrationError && /packaging_qty_per_sage_unit/i.test(integrationError.message || '')) {
+      const { data: legacyIntegration, error: legacyIntegrationError } = await supabase
+        .from('sage_product_integration_settings')
+        .select('packaging_sage_code')
+        .eq('formulation_id', order.formulations?.id)
+        .limit(1)
+        .maybeSingle();
+      if (legacyIntegrationError) throw new Error(`Could not load Sage packaging mapping for ${order.formulations?.name || order.id}: ${legacyIntegrationError.message}`);
+      if (legacyIntegration?.packaging_sage_code) {
+        packagingBom = [{
+          item_code: legacyIntegration.packaging_sage_code,
+          description: `Packaging for ${order.formulations?.name || itemCode}`,
+          unit: 'bags',
+          planned_qty: null,
+          packaging_qty_per_sage_unit: 1,
+        }];
+      }
+    } else if (integrationError) {
+      throw new Error(`Could not load Sage packaging mapping for ${order.formulations?.name || order.id}: ${integrationError.message}`);
+    } else if (integration?.packaging_sage_code) {
+      packagingBom = [{
+        item_code: integration.packaging_sage_code,
+        description: `Packaging for ${order.formulations?.name || itemCode}`,
+        unit: 'bags',
+        planned_qty: null,
+        packaging_qty_per_sage_unit: Number(integration.packaging_qty_per_sage_unit || 1),
+      }];
+    }
+  }
+
   const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
     supabase,
     order.formulations?.id,
@@ -181,7 +223,10 @@ async function handleBatchComplete(syncEvent) {
       }),
       ...(await Promise.all((packagingBom || []).map(async (packaging) => {
         const sageCode = String(packaging.item_code || '').trim();
-        const componentQuantity = Number(packaging.planned_qty || 0);
+        const componentQuantity = Number(
+          packaging.planned_qty ??
+          Number(packaging.packaging_qty_per_sage_unit || 1) * sageUnits
+        );
         if (!sageCode || !Number.isFinite(componentQuantity) || componentQuantity <= 0) {
           throw new Error(`Invalid Sage packaging component for ${packaging.description || sageCode || 'the production BOM'}.`);
         }

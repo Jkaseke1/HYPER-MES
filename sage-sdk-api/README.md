@@ -74,12 +74,19 @@ GRN write switch is supplied.
 # Development/UAT laptop only
 .\sage-sdk-api\Start-SageSdkApi-Uat.ps1
 
+# UAT GRN test window: posts Sage stock and the supplier AP invoice together
+.\sage-sdk-api\Start-SageSdkApi-Uat.ps1 -EnableFullGrnWorkflow
+
 # Live server connection and read-only preflight
 .\sage-sdk-api\Start-SageSdkApi-Production.ps1
 
 # One approved Production GRN posting window only
 .\sage-sdk-api\Start-SageSdkApi-Production.ps1 -EnableGrnWrites
 ```
+
+The UAT GRN switch is deliberately separate from Production. It enables the
+combined GRV and supplier-invoice workflow only for the configured UAT company;
+it does not enable LIVE Sage writes.
 
 Do not use the Production write switch for health checks, connection checks,
 stock reads, or dry runs.
