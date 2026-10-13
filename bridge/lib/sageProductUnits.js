@@ -10,9 +10,13 @@ async function getSageProductUnitSettings(supabase, formulationId, itemCode) {
   const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Could not load Sage product unit settings for ${itemCode}: ${error.message}`);
 
-  const kgPerSageUnit = Number(data?.kg_per_sage_unit || 1);
+  if (!data || data.kg_per_sage_unit === null || data.kg_per_sage_unit === undefined) {
+    throw new Error(`Missing Sage stock-unit mapping for ${itemCode}; finished-goods posting was stopped.`);
+  }
+
+  const kgPerSageUnit = Number(data.kg_per_sage_unit);
   if (!Number.isFinite(kgPerSageUnit) || kgPerSageUnit <= 0) {
-    throw new Error(`Invalid Sage stock-unit setting for ${itemCode}.`);
+    throw new Error(`Invalid Sage stock-unit setting for ${itemCode}; finished-goods posting was stopped.`);
   }
 
   return { kgPerSageUnit, postingCostMode: data?.posting_cost_mode || 'sage_average' };
