@@ -107,11 +107,26 @@ async function handleBatchComplete(syncEvent) {
   if (issuedMaterialsError) throw new Error(`Could not load issued production materials: ${issuedMaterialsError.message}`);
   if (!issuedMaterials?.length) throw new Error(`No issued materials available for Sage manufacturing documentation on ${order.batch_number}.`);
 
-  const { data: packagingBom, error: packagingBomError } = await supabase
-    .from('production_bom_packaging')
-    .select('item_code, description, unit, expected_qty_per_tonne')
-    .eq('formulation_id', order.formulations?.id);
-  if (packagingBomError) throw new Error(`Could not load packaging BOM for ${order.formulations?.name || order.id}: ${packagingBomError.message}`);
+  const { data: orderPackaging, error: orderPackagingError } = await supabase
+    .from('production_order_packaging')
+    .select('item_code, description, unit, planned_qty')
+    .eq('production_order_id', order.id);
+  if (orderPackagingError) throw new Error(`Could not load packaging selection for ${order.formulations?.name || order.id}: ${orderPackagingError.message}`);
+
+  // Use the immutable order snapshot. The formula BOM is only the default;
+  // the operator's selected SKU must be what reaches Sage.
+  let packagingBom = orderPackaging || [];
+  if (packagingBom.length === 0) {
+    const { data: legacyPackaging, error: legacyPackagingError } = await supabase
+      .from('production_bom_packaging')
+      .select('item_code, description, unit, expected_qty_per_tonne')
+      .eq('formulation_id', order.formulations?.id);
+    if (legacyPackagingError) throw new Error(`Could not load packaging BOM for ${order.formulations?.name || order.id}: ${legacyPackagingError.message}`);
+    packagingBom = (legacyPackaging || []).map((packaging) => ({
+      ...packaging,
+      planned_qty: Number(packaging.expected_qty_per_tonne || 0) * (Number(quantity) / 1000),
+    }));
+  }
 
   const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
     supabase,
@@ -166,8 +181,7 @@ async function handleBatchComplete(syncEvent) {
       }),
       ...(await Promise.all((packagingBom || []).map(async (packaging) => {
         const sageCode = String(packaging.item_code || '').trim();
-        const quantityPerTonne = Number(packaging.expected_qty_per_tonne || 0);
-        const componentQuantity = quantityPerTonne * (quantity / 1000);
+        const componentQuantity = Number(packaging.planned_qty || 0);
         if (!sageCode || !Number.isFinite(componentQuantity) || componentQuantity <= 0) {
           throw new Error(`Invalid Sage packaging component for ${packaging.description || sageCode || 'the production BOM'}.`);
         }

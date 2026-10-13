@@ -167,6 +167,8 @@ export default function ProductionOrdersPage() {
   const [bomPreview, setBomPreview] = useState<any[]>([]);
   const [selectedFormulation, setSelectedFormulation] = useState<Formulation | null>(null);
   const [bomPackaging, setBomPackaging] = useState<any[]>([]);
+  const [packagingSkus, setPackagingSkus] = useState<any[]>([]);
+  const [selectedPackagingSkuId, setSelectedPackagingSkuId] = useState('');
   const [showPkgModal, setShowPkgModal] = useState(false);
   const [pkgBomItems, setPkgBomItems] = useState<any[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
@@ -799,6 +801,9 @@ export default function ProductionOrdersPage() {
     const batchNumber = await peekProductionBatchNumber();
     setForm({ ...emptyForm, batch_number: batchNumber }); 
     setMaterials([]); 
+    setBomPackaging([]);
+    setPackagingSkus([]);
+    setSelectedPackagingSkuId('');
     setWorkflowError(null);
     setShowCreate(true); 
   };
@@ -812,6 +817,8 @@ export default function ProductionOrdersPage() {
       setMaterials([]);
       setBomPreview([]);
       setBomPackaging([]);
+      setPackagingSkus([]);
+      setSelectedPackagingSkuId('');
       setSelectedFormulation(null);
       return; 
     }
@@ -834,7 +841,7 @@ export default function ProductionOrdersPage() {
     if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
 
     // Check if BOM exists for this formulation
-    const [bomResult, packagingResult] = await Promise.all([
+    const [bomResult, packagingResult, packagingSkuResult] = await Promise.all([
       supabase
         .from('formulation_ingredients')
         .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
@@ -844,9 +851,25 @@ export default function ProductionOrdersPage() {
         .from('production_bom_packaging')
         .select('*')
         .eq('formulation_id', fid),
+      supabase
+        .from('packaging_skus')
+        .select('id, sku_code, description, bag_size_kg, sage_stock_code')
+        .eq('is_active', true)
+        .order('sku_code'),
     ]);
     const { data: bomData, error: bomError } = bomResult;
     setBomPackaging(packagingResult.data || []);
+    const availablePackaging = packagingSkuResult.data || [];
+    setPackagingSkus(availablePackaging);
+    const bomDefault = (packagingResult.data || []).find((item: any) =>
+      availablePackaging.some((sku: any) =>
+        sku.sku_code === item.item_code || sku.sage_stock_code === item.item_code
+      )
+    );
+    const defaultSku = bomDefault
+      ? availablePackaging.find((sku: any) => sku.sku_code === bomDefault.item_code || sku.sage_stock_code === bomDefault.item_code)
+      : availablePackaging.find((sku: any) => Number(sku.bag_size_kg) === Number(inferredSize || form.unit_size || 50));
+    setSelectedPackagingSkuId(defaultSku?.id || '');
     
     if (bomError || !bomData || bomData.length === 0) {
       setWorkflowError(`No BOM ingredients found for ${sel.name}. Please set up the BOM first.`);
@@ -902,6 +925,12 @@ export default function ProductionOrdersPage() {
       return;
     }
 
+    const selectedPackaging = packagingSkus.find((sku: any) => sku.id === selectedPackagingSkuId);
+    if (!selectedPackaging) {
+      setWorkflowError('Select the packaging SKU for this production order before creating it.');
+      return;
+    }
+
     setSaving(true);
     try {
       // Finance control: a work order must be based on an approved formula whose
@@ -938,7 +967,7 @@ export default function ProductionOrdersPage() {
         status: 'pending'
       });
       
-      const { error } = await supabase.from('production_orders').insert({
+      const { data: createdOrder, error } = await supabase.from('production_orders').insert({
         batch_number: officialBatchNumber,
         plan_id: form.plan_id || null,
         formulation_id: form.formulation_id || null,
@@ -958,9 +987,21 @@ export default function ProductionOrdersPage() {
         week_number: form.week_number === '' ? null : Number(form.week_number),
         notes: form.notes, 
         status: 'pending',
-      });
+      }).select('id').single();
 
       if (error) throw error;
+
+      const plannedPackagingQty = Number(form.planned_bags || bagsFromKg(plannedQty, form.unit_size));
+      const { error: packagingError } = await supabase.from('production_order_packaging').insert({
+        production_order_id: createdOrder.id,
+        packaging_sku_id: selectedPackaging.id,
+        item_code: selectedPackaging.sage_stock_code || selectedPackaging.sku_code,
+        description: selectedPackaging.description,
+        unit: 'bags',
+        planned_qty: plannedPackagingQty,
+        actual_qty: 0,
+      });
+      if (packagingError) throw packagingError;
 
       // BOM ingredients will be auto-loaded by the database trigger
       setSaving(false); 
@@ -2427,6 +2468,26 @@ export default function ProductionOrdersPage() {
                     <p className="text-[11px] text-amber-800">This formula's packaging requirements scale with the production order.</p>
                   </div>
                   <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-amber-900">{Number(form.planned_bags || bagsFromKg(form.planned_qty, form.unit_size)).toLocaleString()} bags</span>
+                </div>
+                <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <div>
+                    <label className={labelCls}>Packaging SKU *</label>
+                    <select
+                      value={selectedPackagingSkuId}
+                      onChange={(e) => setSelectedPackagingSkuId(e.target.value)}
+                      className={`${inputCls} font-bold`}
+                    >
+                      <option value="">Select packaging for this order...</option>
+                      {packagingSkus.map((sku: any) => (
+                        <option key={sku.id} value={sku.id}>
+                          {sku.sku_code} — {sku.description}{sku.bag_size_kg ? ` (${sku.bag_size_kg}kg)` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700">
+                    Planned: <strong>{Number(form.planned_bags || bagsFromKg(form.planned_qty, form.unit_size)).toLocaleString()} bags</strong>
+                  </div>
                 </div>
                 {bomPackaging.length ? (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
