@@ -841,7 +841,7 @@ export default function ProductionOrdersPage() {
     if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
 
     // Check if BOM exists for this formulation
-    const [bomResult, packagingResult, packagingSkuResult] = await Promise.all([
+    const [bomResult, packagingResult, packagingSkuResult, sageMappingResult] = await Promise.all([
       supabase
         .from('formulation_ingredients')
         .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
@@ -856,6 +856,12 @@ export default function ProductionOrdersPage() {
         .select('id, sku_code, description, bag_size_kg, sage_stock_code')
         .eq('is_active', true)
         .order('sku_code'),
+      supabase
+        .from('sage_product_integration_settings')
+        .select('packaging_sage_code')
+        .eq('formulation_id', fid)
+        .limit(1)
+        .maybeSingle(),
     ]);
     const { data: bomData, error: bomError } = bomResult;
     setBomPackaging(packagingResult.data || []);
@@ -866,9 +872,18 @@ export default function ProductionOrdersPage() {
         sku.sku_code === item.item_code || sku.sage_stock_code === item.item_code
       )
     );
+    const sageMappedCode = sageMappingResult.data?.packaging_sage_code;
+    const sageDefault = sageMappedCode
+      ? availablePackaging.find((sku: any) =>
+          sku.sku_code === sageMappedCode || sku.sage_stock_code === sageMappedCode
+        )
+      : undefined;
+    const sameSizeSkus = availablePackaging.filter((sku: any) =>
+      Number(sku.bag_size_kg) === Number(inferredSize || form.unit_size || 50)
+    );
     const defaultSku = bomDefault
       ? availablePackaging.find((sku: any) => sku.sku_code === bomDefault.item_code || sku.sage_stock_code === bomDefault.item_code)
-      : availablePackaging.find((sku: any) => Number(sku.bag_size_kg) === Number(inferredSize || form.unit_size || 50));
+      : sageDefault || (sameSizeSkus.length === 1 ? sameSizeSkus[0] : undefined);
     setSelectedPackagingSkuId(defaultSku?.id || '');
     
     if (bomError || !bomData || bomData.length === 0) {
