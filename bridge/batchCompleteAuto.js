@@ -170,6 +170,13 @@ async function handleBatchComplete(syncEvent) {
     }
   }
 
+  // Packaging is mandatory for every production order. Fail closed before
+  // posting the finished-goods receipt so Sage can never receive a completed
+  // manufacturing document without its packaging component.
+  if (packagingBom.length === 0) {
+    throw new Error(`Packaging is mandatory for production order ${order.batch_number}; no packaging SKU or Sage packaging mapping was found.`);
+  }
+
   const { kgPerSageUnit, postingCostMode } = await getSageProductUnitSettings(
     supabase,
     order.formulations?.id,
