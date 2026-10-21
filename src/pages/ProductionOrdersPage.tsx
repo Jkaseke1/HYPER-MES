@@ -183,6 +183,7 @@ export default function ProductionOrdersPage() {
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
   const [retryingSageIssue, setRetryingSageIssue] = useState(false);
   const [sageCompletionStatus, setSageCompletionStatus] = useState<SageIssueStatus | null>(null);
+  const [retryingSageCompletion, setRetryingSageCompletion] = useState(false);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
@@ -611,7 +612,7 @@ export default function ProductionOrdersPage() {
   const loadSageCompletionStatus = useCallback(async (orderId: string) => {
     const { data, error } = await supabase
       .from('sync_log')
-      .select('status, message, sage_response, error_details, updated_at')
+      .select('id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'production_completed')
       .eq('reference_type', 'production_orders')
       .eq('reference_id', orderId)
@@ -624,6 +625,28 @@ export default function ProductionOrdersPage() {
     }
     setSageCompletionStatus((data as SageIssueStatus | null) || null);
   }, []);
+
+  const retrySageCompletion = useCallback(async () => {
+    if (!selected?.id || !sageCompletionStatus?.id || sageCompletionStatus.status !== 'failed') return;
+
+    setRetryingSageCompletion(true);
+    setWorkflowError(null);
+    try {
+      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: sageCompletionStatus.id });
+      if (error) throw error;
+
+      showSageNotification(
+        'processing',
+        'Finished-goods retry queued',
+        'The existing failed Sage completion event was requeued. Sage stock is reconciled before any receipt is posted.'
+      );
+      await loadSageCompletionStatus(selected.id);
+    } catch (error: any) {
+      setWorkflowError(`Could not retry Sage completion: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setRetryingSageCompletion(false);
+    }
+  }, [selected?.id, sageCompletionStatus, showSageNotification, loadSageCompletionStatus]);
 
   useEffect(() => {
     if (!selected?.id) {
@@ -2813,14 +2836,26 @@ export default function ProductionOrdersPage() {
                     </>
                   )}
                   {selected.status === 'in_progress' && (
-                    <button
-                      onClick={handleCompletionRequest}
-                      disabled={saving || sageCompletionInFlight || sageCompletionPosted || sageCompletionFailed || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
-                    >
-                      {sageCompletionInFlight ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      {sageCompletionInFlight ? 'Waiting for Sage Receipt' : sageCompletionPosted ? 'Sage Receipt Posted' : sageCompletionFailed ? 'Sage Completion Failed' : 'Complete Production'}
-                    </button>
+                    sageCompletionFailed ? (
+                      <button
+                        onClick={retrySageCompletion}
+                        disabled={saving || retryingSageCompletion || !sageCompletionStatus?.id}
+                        title="Requeue this failed completion. Sage ledger checks prevent a duplicate finished-goods receipt."
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-amber-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${retryingSageCompletion ? 'animate-spin' : ''}`} />
+                        {retryingSageCompletion ? 'Requeuing Sage Completion' : 'Retry Sage Completion'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleCompletionRequest}
+                        disabled={saving || sageCompletionInFlight || sageCompletionPosted || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
+                      >
+                        {sageCompletionInFlight ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        {sageCompletionInFlight ? 'Waiting for Sage Receipt' : sageCompletionPosted ? 'Sage Receipt Posted' : 'Complete Production'}
+                      </button>
+                    )
                   )}
                   {selected.status === 'completed' && (
                     <button
