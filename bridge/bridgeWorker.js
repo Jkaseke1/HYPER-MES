@@ -13,8 +13,8 @@ const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto'
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
 
-const DEFAULT_POLL_INTERVAL_MS = 5000;
-const MINIMUM_POLL_INTERVAL_MS = 2000;
+const DEFAULT_POLL_INTERVAL_MS = 10000;
+const MINIMUM_POLL_INTERVAL_MS = 5000;
 const configuredPollInterval = Number(process.env.BRIDGE_POLL_INTERVAL_MS);
 const POLL_INTERVAL_MS = Number.isFinite(configuredPollInterval)
   ? Math.max(configuredPollInterval, MINIMUM_POLL_INTERVAL_MS)

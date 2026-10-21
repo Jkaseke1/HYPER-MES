@@ -466,9 +466,11 @@ export default function ProductionOrdersPage() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  // Reconcile the list even when a browser misses a Supabase Realtime event.
+  // Reconcile occasionally if Realtime misses an update; normal refreshes are event-driven.
   useEffect(() => {
-    const interval = window.setInterval(() => { void fetchOrders(true); }, 3000);
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void fetchOrders(true);
+    }, 30000);
     return () => window.clearInterval(interval);
   }, [fetchOrders]);
 
@@ -531,9 +533,10 @@ export default function ProductionOrdersPage() {
     loadSageIssueStatuses(orderIds);
     loadFinishedGoodsTransferStatuses(orderIds);
     const interval = window.setInterval(() => {
+      if (document.hidden) return;
       loadSageIssueStatuses(orderIds);
       loadFinishedGoodsTransferStatuses(orderIds);
-    }, 10000);
+    }, 30000);
     return () => window.clearInterval(interval);
   }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
@@ -577,7 +580,9 @@ export default function ProductionOrdersPage() {
     }
 
     loadSageIssueStatus(selected.id);
-    const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void loadSageIssueStatus(selected.id, true);
+    }, 15000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageIssueStatus]);
 
@@ -626,7 +631,9 @@ export default function ProductionOrdersPage() {
       return;
     }
     loadSageCompletionStatus(selected.id);
-    const interval = window.setInterval(() => loadSageCompletionStatus(selected.id), 5000);
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void loadSageCompletionStatus(selected.id);
+    }, 15000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageCompletionStatus]);
 
@@ -652,7 +659,9 @@ export default function ProductionOrdersPage() {
     };
 
     void refreshCompletion();
-    const interval = window.setInterval(refreshCompletion, 1500);
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void refreshCompletion();
+    }, 10000);
     return () => window.clearInterval(interval);
   }, [selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
@@ -1660,8 +1669,8 @@ export default function ProductionOrdersPage() {
     if (!selected || detailMaterials.length === 0) return;
     
     const interval = setInterval(() => {
-      refreshSageStock(false);
-    }, 5000);
+      if (!document.hidden) void refreshSageStock(false);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [selected?.id, detailMaterials.length]);
