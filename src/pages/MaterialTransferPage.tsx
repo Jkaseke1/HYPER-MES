@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useRef } from 'react';
 import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
@@ -135,31 +136,28 @@ export default function MaterialTransferPage() {
   }, []);
 
   useEffect(() => {
+    const refresh = startBackgroundRefresh(() => fetchData(true), refreshIntervals.operational);
     const channel = supabase
       .channel('material-transfer-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .subscribe();
 
-    const intervalId = window.setInterval(() => {
-      fetchData(true);
-    }, 3000);
-
     return () => {
-      window.clearInterval(intervalId);
+      refresh.stop();
       supabase.removeChannel(channel);
     };
   }, []);

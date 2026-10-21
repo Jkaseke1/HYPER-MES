@@ -23,14 +23,16 @@ export function useRealtimeRefresh(
     let refreshing = false;
     let refreshQueued = false;
     let stopped = false;
+    let nextReadAt = Date.now() + 60000;
     const scheduleRefresh = () => {
       if (stopped || !canRefreshInBackground()) return;
       if (refreshing) { refreshQueued = true; return; }
-      if (timeoutId) window.clearTimeout(timeoutId);
+      if (timeoutId) return;
       timeoutId = window.setTimeout(async () => {
         timeoutId = undefined;
         if (stopped || !canRefreshInBackground()) return;
         refreshing = true;
+        nextReadAt = Date.now() + 60000;
         try {
           await refreshRef.current();
         } catch (error) {
@@ -42,7 +44,7 @@ export function useRealtimeRefresh(
             scheduleRefresh();
           }
         }
-      }, debounceMs);
+      }, Math.max(debounceMs, nextReadAt - Date.now()));
     };
 
     const channel = supabase.channel(channelName);

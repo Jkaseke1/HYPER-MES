@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../../lib/backgroundRefresh';
 
 interface FrozenStockTake {
   take_number: string;
@@ -13,9 +14,8 @@ export default function StockTakeFrozenBanner() {
 
   useEffect(() => {
     fetchFrozenStockTake();
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchFrozenStockTake, 60000);
-    return () => clearInterval(interval);
+    const refresh = startBackgroundRefresh(fetchFrozenStockTake, refreshIntervals.operational);
+    return refresh.stop;
   }, []);
 
   const fetchFrozenStockTake = async () => {

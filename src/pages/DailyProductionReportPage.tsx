@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, CalendarDays, Clock3, Download, Factory, PackageCheck, RefreshCw, Wrench } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 
 type ProductionOrderRow = {
   id: string; batch_number: string; planned_qty: number; actual_qty: number;
@@ -67,13 +68,13 @@ export default function DailyProductionReportPage() {
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
   useEffect(() => {
+    const refresh = startBackgroundRefresh(() => fetchReport(true), refreshIntervals.reports);
     const channel = supabase.channel('daily-production-live-report')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => fetchReport(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => fetchReport(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_downtime' }, () => fetchReport(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, refresh.request)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, refresh.request)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_downtime' }, refresh.request)
       .subscribe();
-    const interval = window.setInterval(() => fetchReport(true), 30000);
-    return () => { window.clearInterval(interval); supabase.removeChannel(channel); };
+    return () => { refresh.stop(); supabase.removeChannel(channel); };
   }, [fetchReport]);
 
   const productRows = useMemo(() => {

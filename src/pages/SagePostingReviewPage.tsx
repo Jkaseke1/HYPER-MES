@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { useAuth } from '../context/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Textarea } from '../components/ui/textarea';
@@ -443,15 +444,15 @@ export default function SagePostingReviewPage() {
     } else {
       const nextReviews = data || [];
       setReviews(nextReviews);
-      loadDocumentSummaries(nextReviews);
+      await loadDocumentSummaries(nextReviews);
     }
     if (!isSilent) setLoading(false);
   }, [filter, loadDocumentSummaries]);
 
   useEffect(() => {
     fetchData(false);
-    const interval = setInterval(() => fetchData(true), 15000);
-    return () => clearInterval(interval);
+    const refresh = startBackgroundRefresh(() => fetchData(true), refreshIntervals.reports);
+    return refresh.stop;
   }, [fetchData]);
 
   const groups = useMemo(() => buildGroups(reviews), [reviews]);

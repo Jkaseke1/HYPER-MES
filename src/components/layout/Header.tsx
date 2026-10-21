@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock, ArrowRightLeft, PackageCheck, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../../lib/backgroundRefresh';
 import { canRefreshInBackground } from '../../lib/backendAvailability';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
 import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload, fetchRecentSystemUpdates, fetchPendingUpdates, SystemUpdateLogRecord } from '../../lib/updateManager';
@@ -293,17 +294,15 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     loadIncomingTransfers();
-    document.addEventListener('visibilitychange', loadIncomingTransfers);
-    window.addEventListener('online', loadIncomingTransfers);
+    const refresh = startBackgroundRefresh(loadIncomingTransfers, refreshIntervals.operational);
     const channel = supabase
       .channel('header-production-incoming-transfers')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, loadIncomingTransfers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, refresh.request)
       .subscribe();
 
     return () => {
       isMounted = false;
-      document.removeEventListener('visibilitychange', loadIncomingTransfers);
-      window.removeEventListener('online', loadIncomingTransfers);
+      refresh.stop();
       incomingTransfersLoadedRef.current = false;
       knownIncomingTransferIdsRef.current = new Set();
       supabase.removeChannel(channel);
@@ -354,8 +353,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     loadSageQueue();
-    document.addEventListener('visibilitychange', loadSageQueue);
-    window.addEventListener('online', loadSageQueue);
+    const refresh = startBackgroundRefresh(loadSageQueue, refreshIntervals.operational);
     const channel = supabase
       .channel('header-sage-posting-queue')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
@@ -371,14 +369,13 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             showSageActivityToast(item);
           }
         }
-        loadSageQueue();
+        void refresh.request();
       })
       .subscribe();
 
     return () => {
       isMounted = false;
-      document.removeEventListener('visibilitychange', loadSageQueue);
-      window.removeEventListener('online', loadSageQueue);
+      refresh.stop();
       sageQueueLoadedRef.current = false;
       knownSageStagesRef.current = new Map();
       supabase.removeChannel(channel);

@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -121,14 +122,17 @@ export default function StockTakeDetailPage() {
   useEffect(() => {
     if (id) {
       fetchStockTake();
-      // A Sage snapshot can take longer than one normal screen refresh. Poll
-      // the header too so the counter sees the bridge result without reload.
-      const interval = setInterval(() => {
-        void fetchStockTake({ silent: true });
-      }, 10000);
-      return () => clearInterval(interval);
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id && stockTake?.status !== 'CLOSED') {
+      // A Sage snapshot can take longer than one normal screen refresh. Poll
+      // the header too so the counter sees the bridge result without reload.
+      const refresh = startBackgroundRefresh(() => fetchStockTake({ silent: true }), refreshIntervals.operational);
+      return refresh.stop;
+    }
+  }, [id, stockTake?.status]);
 
   useEffect(() => {
     if (showAuditTrail && id) {

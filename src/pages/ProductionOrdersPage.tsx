@@ -454,9 +454,11 @@ export default function ProductionOrdersPage() {
   };
 
   const fetchingOrdersRef = useRef(false);
+  const lastOrdersReadAtRef = useRef(0);
   const fetchOrders = useCallback(async (silent = false) => {
     if (fetchingOrdersRef.current) return;
     fetchingOrdersRef.current = true;
+    lastOrdersReadAtRef.current = Date.now();
     try {
       if (!silent) setLoading(true);
       const { data, error } = await supabase.from('production_orders')
@@ -473,14 +475,20 @@ export default function ProductionOrdersPage() {
     }
   }, []);
 
+  const refreshOrdersInBackground = useCallback(async () => {
+    if (canRefreshInBackground() && Date.now() - lastOrdersReadAtRef.current >= 60000) {
+      await fetchOrders(true);
+    }
+  }, [fetchOrders]);
+
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   // Reconcile occasionally if Realtime misses an update; normal refreshes are event-driven.
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (canRefreshInBackground()) void fetchOrders(true);
+      void refreshOrdersInBackground();
     };
-    const stop = startBackgroundPolling(() => fetchOrders(true), 60000);
+    const stop = startBackgroundPolling(refreshOrdersInBackground, 60000);
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenVisible);
     return () => {
@@ -488,7 +496,7 @@ export default function ProductionOrdersPage() {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('online', refreshWhenVisible);
     };
-  }, [fetchOrders]);
+  }, [refreshOrdersInBackground]);
 
   const loadSageIssueStatuses = useCallback(async (orderIds: string[]) => {
     if (!orderIds.length) {
@@ -592,7 +600,7 @@ export default function ProductionOrdersPage() {
 
     loadSageIssueStatus(selected.id);
     if (!['pending', 'processing'].includes(sageIssueStatus?.status || '')) return;
-    return startBackgroundPolling(() => loadSageIssueStatus(selected.id, true), 15000);
+    return startBackgroundPolling(() => loadSageIssueStatus(selected.id, true), 30000);
   }, [showDetail, selected?.id, sageIssueStatus?.status, loadSageIssueStatus]);
 
   const retrySageMaterialIssue = useCallback(async () => {
@@ -663,7 +671,7 @@ export default function ProductionOrdersPage() {
     }
     loadSageCompletionStatus(selected.id);
     if (!['pending', 'processing'].includes(sageCompletionStatus?.status || '')) return;
-    return startBackgroundPolling(() => loadSageCompletionStatus(selected.id), 15000);
+    return startBackgroundPolling(() => loadSageCompletionStatus(selected.id), 30000);
   }, [showDetail, selected?.id, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
   // Keep an open batch reconciled through the final Sage-to-MES handoff even if
@@ -687,7 +695,7 @@ export default function ProductionOrdersPage() {
     };
 
     void refreshCompletion();
-    return startBackgroundPolling(refreshCompletion, 15000);
+    return startBackgroundPolling(refreshCompletion, 30000);
   }, [showDetail, selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
   // Keep the production queue current when another MES user, the bridge, or a
@@ -698,7 +706,7 @@ export default function ProductionOrdersPage() {
     const scheduleOrderRefresh = () => {
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        if (canRefreshInBackground()) void fetchOrders(true);
+        void refreshOrdersInBackground();
       }, 750);
     };
     const channel = supabase
@@ -781,7 +789,7 @@ export default function ProductionOrdersPage() {
       clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, selected?.id, showSageNotification, notifyFinishedGoodsTransferResult]);
+  }, [refreshOrdersInBackground, selected?.id, showSageNotification, notifyFinishedGoodsTransferResult]);
 
   const renderSageIssueStatus = (order: ProductionOrder, compact = false) => {
     const status = sageIssueStatuses[order.id];

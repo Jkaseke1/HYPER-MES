@@ -6,6 +6,7 @@ import GRNAttachments from '../components/grn/GRNAttachments';
 import ReturnToSupplierModal from '../components/grn/ReturnToSupplierModal';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { useAuth } from '../context/AuthContext';
 import { GoodsReceivedNote, Supplier, RawMaterial } from '../types/database';
 import { Button } from '../components/ui/button';
@@ -186,13 +187,10 @@ export default function GoodsReceivedPage() {
   );
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!document.hidden && grns.length > 0) {
-        fetchSageSyncStatuses(grns as any[]);
-      }
-    }, 15000);
-
-    return () => window.clearInterval(timer);
+    const refresh = startBackgroundRefresh(async () => {
+      if (grns.length > 0) await fetchSageSyncStatuses(grns as any[]);
+    }, refreshIntervals.operational);
+    return refresh.stop;
   }, [grns]);
 
   async function fetchSageSyncStatuses(grnRows: any[], notify = true) {

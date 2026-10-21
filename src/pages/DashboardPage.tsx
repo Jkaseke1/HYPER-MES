@@ -9,6 +9,7 @@ import {
   Clock, ArrowRight, Package, ClipboardList, FlaskConical
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow, DispatchOrder } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
@@ -151,21 +152,24 @@ export default function DashboardPage() {
     fetchLiveOrders();
     fetchDashboardData(true);
 
+    const refresh = startBackgroundRefresh(async () => {
+      await fetchLiveOrders();
+      await fetchDashboardData(false);
+    }, refreshIntervals.dashboard);
     const channel = supabase
       .channel('live-dashboard-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
-        fetchLiveOrders();
-        fetchDashboardData(false);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchDashboardData(false);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'raw_materials' }, () => {
-        fetchDashboardData(false);
+        void refresh.request();
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { refresh.stop(); supabase.removeChannel(channel); };
   }, [fetchLiveOrders, fetchDashboardData]);
 
   const forecastMap = useMemo(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Warehouse as WarehouseIcon, Package, AlertTriangle, ArrowUpDown, Search, Filter, Check, RefreshCw, Database } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { RawMaterial, StockMovement } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatCard from '../components/ui/StatCard';
@@ -45,32 +46,29 @@ export default function WarehousePage() {
   useEffect(() => { if (tab === 'buffer') fetchBufferBalances(); }, [tab]);
 
   useEffect(() => {
+    const refresh = startBackgroundRefresh(async () => {
+      await fetchData(true);
+      if (tab === 'buffer') await fetchBufferBalances();
+      if (tab === 'movements') await fetchMovements();
+    }, refreshIntervals.operational);
     const channel = supabase
       .channel('warehouse-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
-        fetchData(true);
-        if (tab === 'buffer') fetchBufferBalances();
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
-        fetchData(true);
-        if (tab === 'movements') fetchMovements();
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
-        fetchData(true);
+        void refresh.request();
       })
       .subscribe();
 
-    const intervalId = window.setInterval(() => {
-      fetchData(true);
-      if (tab === 'buffer') fetchBufferBalances();
-      if (tab === 'movements') fetchMovements();
-    }, 12000);
-
     return () => {
-      window.clearInterval(intervalId);
+      refresh.stop();
       supabase.removeChannel(channel);
     };
   }, [tab, dateFrom, dateTo, moveType]);

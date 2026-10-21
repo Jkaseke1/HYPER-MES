@@ -249,9 +249,56 @@ async function testProfileRefresh() {
   hooks.forEach(hook => hook?.cleanup?.());
 }
 
+async function testRefreshBudget() {
+  const clock = fakeTimers();
+  const listeners = new Set();
+  const document = { hidden: false, addEventListener: (_name, fn) => listeners.add(fn), removeEventListener: (_name, fn) => listeners.delete(fn) };
+  const navigator = { onLine: true };
+  const window = { addEventListener: (_name, fn) => listeners.add(fn), removeEventListener: (_name, fn) => listeners.delete(fn) };
+  let now = 0;
+  const availability = loadTypeScript('src/lib/backendAvailability.ts', { ...clock, document, navigator });
+  const { startBackgroundRefresh } = loadTypeScript('src/lib/backgroundRefresh.ts', {
+    ...clock, document, navigator, window, Date: { now: () => now },
+    require: () => availability,
+  });
+  let reads = 0;
+  let release;
+  const refresh = startBackgroundRefresh(() => { reads++; return new Promise(resolve => { release = resolve; }); }, 60000);
+  await Promise.all(Array.from({ length: 100 }, refresh.request));
+  assert.equal(reads, 0, 'Initial page reads must not be duplicated by event bursts');
+  now = 60000;
+  const pending = refresh.request();
+  now = 120000;
+  await refresh.request();
+  assert.equal(reads, 1, 'Slow reads must not overlap even after the interval passes');
+  release();
+  await pending;
+  document.hidden = true;
+  await refresh.request();
+  assert.equal(reads, 1);
+  document.hidden = false;
+  navigator.onLine = false;
+  await refresh.request();
+  assert.equal(reads, 1);
+  navigator.onLine = true;
+  const second = refresh.request();
+  assert.equal(reads, 2);
+  release();
+  await second;
+  await Promise.all(Array.from({ length: 100 }, refresh.request));
+  assert.equal(reads, 2, 'Realtime bursts share the same budget as scheduled reads');
+  refresh.stop();
+  now += 60000;
+  await refresh.request();
+  assert.equal(reads, 2, 'Unmounted pages must not keep refreshing');
+  assert.equal(clock.timers.size, 0);
+  assert.equal(listeners.size, 0);
+}
+
 (async () => {
   await testFetchGuard();
   await testBackgroundPolling();
+  await testRefreshBudget();
   await testBridgePolling();
   testRealtimeLoginGuard();
   await testProfileRefresh();

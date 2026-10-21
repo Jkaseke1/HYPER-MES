@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, AlertCircle, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 
 interface SyncLog {
   id: string;
@@ -118,11 +119,8 @@ export default function SyncLogPage() {
   }, [statusFilter, eventTypeFilter]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLogs();
-    }, 30000); // Auto-refresh every 30 seconds
-
-    return () => clearInterval(interval);
+    const refresh = startBackgroundRefresh(fetchLogs, refreshIntervals.reports);
+    return refresh.stop;
   }, [statusFilter, eventTypeFilter]);
 
   const filteredLogs = logs.filter(log => 

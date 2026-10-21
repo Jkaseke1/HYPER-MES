@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
@@ -153,28 +154,25 @@ export default function ProductionWarehousePage() {
   useEffect(() => { fetchTransfers(); }, []);
 
   useEffect(() => {
+    const refresh = startBackgroundRefresh(() => fetchTransfers(true), refreshIntervals.operational);
     const channel = supabase
       .channel('production-warehouse-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
-        fetchTransfers(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchTransfers(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
-        fetchTransfers(true);
+        void refresh.request();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
-        fetchTransfers(true);
+        void refresh.request();
       })
       .subscribe();
 
-    const intervalId = window.setInterval(() => {
-      fetchTransfers(true);
-    }, 12000);
-
     return () => {
-      window.clearInterval(intervalId);
+      refresh.stop();
       supabase.removeChannel(channel);
     };
   }, []);
