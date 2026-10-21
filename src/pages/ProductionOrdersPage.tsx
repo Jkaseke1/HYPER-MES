@@ -3,6 +3,7 @@ import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { canRefreshInBackground, startBackgroundPolling } from '../lib/backendAvailability';
 import { useAuth } from '../context/AuthContext';
 import { ProductionOrder, Formulation, Machine as ProductionLine, Profile, ProductionPlan, ProductionLog } from '../types/database';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -452,27 +453,41 @@ export default function ProductionOrdersPage() {
     return '';
   };
 
+  const fetchingOrdersRef = useRef(false);
   const fetchOrders = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    let q = supabase.from('production_orders').select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)').order('created_at', { ascending: false });
-    const { data, error } = await q;
-    if (error) {
-      console.error('Error fetching orders:', error);
-      setOrders([]);
-    } else {
-      setOrders((data as ProductionOrder[]) || []);
+    if (fetchingOrdersRef.current) return;
+    fetchingOrdersRef.current = true;
+    try {
+      if (!silent) setLoading(true);
+      const { data, error } = await supabase.from('production_orders')
+        .select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)')
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error fetching orders:', error);
+      } else {
+        setOrders((data as ProductionOrder[]) || []);
+      }
+    } finally {
+      fetchingOrdersRef.current = false;
+      if (!silent) setLoading(false);
     }
-    if (!silent) setLoading(false);
-  }, [tab, search]);
+  }, []);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   // Reconcile occasionally if Realtime misses an update; normal refreshes are event-driven.
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (!document.hidden) void fetchOrders(true);
-    }, 30000);
-    return () => window.clearInterval(interval);
+    const refreshWhenVisible = () => {
+      if (canRefreshInBackground()) void fetchOrders(true);
+    };
+    const stop = startBackgroundPolling(() => fetchOrders(true), 60000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('online', refreshWhenVisible);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('online', refreshWhenVisible);
+    };
   }, [fetchOrders]);
 
   const loadSageIssueStatuses = useCallback(async (orderIds: string[]) => {
@@ -533,12 +548,7 @@ export default function ProductionOrdersPage() {
     const orderIds = orders.map((order) => order.id).filter(Boolean);
     loadSageIssueStatuses(orderIds);
     loadFinishedGoodsTransferStatuses(orderIds);
-    const interval = window.setInterval(() => {
-      if (document.hidden) return;
-      loadSageIssueStatuses(orderIds);
-      loadFinishedGoodsTransferStatuses(orderIds);
-    }, 30000);
-    return () => window.clearInterval(interval);
+    // The order refresh above also refreshes this summary; no second list timer.
   }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
@@ -575,17 +585,15 @@ export default function ProductionOrdersPage() {
   }, [showSageNotification]);
 
   useEffect(() => {
-    if (!selected?.id) {
+    if (!showDetail || !selected?.id) {
       setSageIssueStatus(null);
       return;
     }
 
     loadSageIssueStatus(selected.id);
-    const interval = window.setInterval(() => {
-      if (!document.hidden) void loadSageIssueStatus(selected.id, true);
-    }, 15000);
-    return () => window.clearInterval(interval);
-  }, [selected?.id, loadSageIssueStatus]);
+    if (!['pending', 'processing'].includes(sageIssueStatus?.status || '')) return;
+    return startBackgroundPolling(() => loadSageIssueStatus(selected.id, true), 15000);
+  }, [showDetail, selected?.id, sageIssueStatus?.status, loadSageIssueStatus]);
 
   const retrySageMaterialIssue = useCallback(async () => {
     if (!selected?.id || !sageIssueStatus?.id || sageIssueStatus.status !== 'failed') return;
@@ -649,23 +657,21 @@ export default function ProductionOrdersPage() {
   }, [selected?.id, sageCompletionStatus, showSageNotification, loadSageCompletionStatus]);
 
   useEffect(() => {
-    if (!selected?.id) {
+    if (!showDetail || !selected?.id) {
       setSageCompletionStatus(null);
       return;
     }
     loadSageCompletionStatus(selected.id);
-    const interval = window.setInterval(() => {
-      if (!document.hidden) void loadSageCompletionStatus(selected.id);
-    }, 15000);
-    return () => window.clearInterval(interval);
-  }, [selected?.id, loadSageCompletionStatus]);
+    if (!['pending', 'processing'].includes(sageCompletionStatus?.status || '')) return;
+    return startBackgroundPolling(() => loadSageCompletionStatus(selected.id), 15000);
+  }, [showDetail, selected?.id, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
   // Keep an open batch reconciled through the final Sage-to-MES handoff even if
   // Realtime is temporarily unavailable in the user's browser.
   useEffect(() => {
     const isFinalizing = selected?.status !== 'completed'
       && ['pending', 'processing', 'success'].includes(sageCompletionStatus?.status || '');
-    if (!selected?.id || !isFinalizing) return;
+    if (!showDetail || !selected?.id || !isFinalizing) return;
 
     const refreshCompletion = async () => {
       const { data, error } = await supabase
@@ -678,39 +684,46 @@ export default function ProductionOrdersPage() {
         setSelected((current) => current?.id === updatedOrder.id ? { ...current, ...updatedOrder } : current);
         setOrders((current) => current.map((order) => order.id === updatedOrder.id ? { ...order, ...updatedOrder } : order));
       }
-      loadSageCompletionStatus(selected.id);
     };
 
     void refreshCompletion();
-    const interval = window.setInterval(() => {
-      if (!document.hidden) void refreshCompletion();
-    }, 10000);
-    return () => window.clearInterval(interval);
-  }, [selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
+    return startBackgroundPolling(refreshCompletion, 15000);
+  }, [showDetail, selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
   // Keep the production queue current when another MES user, the bridge, or a
   // database workflow changes an order. This removes the need to refresh the
   // browser repeatedly while a batch is being processed.
   useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleOrderRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        if (canRefreshInBackground()) void fetchOrders(true);
+      }, 750);
+    };
     const channel = supabase
       .channel('production-orders-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, (payload) => {
+        if (!canRefreshInBackground()) return;
         const updatedOrder = payload.new as ProductionOrder;
         if (updatedOrder?.id) {
           setSelected((current) => current?.id === updatedOrder.id ? { ...current, ...updatedOrder } : current);
         }
-        fetchOrders();
+        scheduleOrderRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => {
-        fetchOrders();
+        if (!canRefreshInBackground()) return;
+        scheduleOrderRefresh();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'finished_goods_transfers' }, (payload) => {
+        if (!canRefreshInBackground()) return;
         const transfer = payload.new as FinishedGoodsTransferStatus;
         if (!transfer?.production_order_id) return;
         setFinishedGoodsTransferStatuses((current) => ({ ...current, [transfer.production_order_id]: transfer }));
         notifyFinishedGoodsTransferResult(transfer);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
+        if (!canRefreshInBackground()) return;
         const event = payload.new as any;
         if (event?.reference_type !== 'production_orders') return;
 
@@ -765,6 +778,7 @@ export default function ProductionOrdersPage() {
       .subscribe();
 
     return () => {
+      clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
   }, [fetchOrders, selected?.id, showSageNotification, notifyFinishedGoodsTransferResult]);
@@ -1661,42 +1675,44 @@ export default function ProductionOrdersPage() {
 
   // Auto-refresh Sage stock when order detail loads
   useEffect(() => {
-    if (selected && detailMaterials.length > 0) {
+    if (showDetail && selected && detailMaterials.length > 0) {
       refreshSageStock(false);
     }
-  }, [selected?.id, detailMaterials.length]);
+  }, [showDetail, selected?.id, detailMaterials.length]);
 
   // The bridge publishes a balance update after each Sage post. Keep an open
   // production order aligned with it instead of leaving a stale stock warning
   // on screen after a material transfer completes.
   useEffect(() => {
-    if (!selected || detailMaterials.length === 0) return;
+    if (!showDetail || !selected || detailMaterials.length === 0) return;
 
     const materialIds = new Set(detailMaterials.map((material) => material.raw_material_id).filter(Boolean));
+    let stockRefreshTimer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
       .channel(`production-order-sage-stock-${selected.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, (payload) => {
+        if (!canRefreshInBackground()) return;
         const balance = payload.new as { raw_material_id?: string; warehouse_id?: number };
         if (balance?.warehouse_id !== 19 || !balance.raw_material_id || !materialIds.has(balance.raw_material_id)) return;
-        loadSageStockBalances([...materialIds]);
+        clearTimeout(stockRefreshTimer);
+        stockRefreshTimer = setTimeout(() => {
+          if (canRefreshInBackground()) void loadSageStockBalances([...materialIds]);
+        }, 500);
       })
       .subscribe();
 
     return () => {
+      clearTimeout(stockRefreshTimer);
       supabase.removeChannel(channel);
     };
-  }, [selected?.id, detailMaterials]);
+  }, [showDetail, selected?.id, detailMaterials]);
 
   // Keep the detail current even when a Realtime connection is unavailable.
   useEffect(() => {
-    if (!selected || detailMaterials.length === 0) return;
+    if (!showDetail || !selected || detailMaterials.length === 0) return;
     
-    const interval = setInterval(() => {
-      if (!document.hidden) void refreshSageStock(false);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [selected?.id, detailMaterials.length]);
+    return startBackgroundPolling(() => refreshSageStock(false), 60000);
+  }, [showDetail, selected?.id, detailMaterials.length]);
 
   /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {

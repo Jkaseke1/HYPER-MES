@@ -16,10 +16,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function withTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
-  return Promise.race([
-    Promise.resolve(operation),
-    new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), timeoutMs)),
-  ]);
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    Promise.resolve(operation).then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
 }
 
 function validateHyperfeedsDomain(email: string): Error | null {
@@ -39,17 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
     withTimeout(supabase.auth.getSession(), 8000, 'Session check timed out.')
       .then(({ data: { session: s } }) => {
+        if (!active) return;
         setSession(s);
         setUser(s?.user ?? null);
-        if (s?.user) {
-          void fetchProfile(s.user.id);
-        } else {
-          setLoading(false);
-        }
+        if (!s?.user) setLoading(false);
       })
       .catch((error) => {
+        if (!active) return;
         console.warn('Unable to restore the saved session:', error);
         setSession(null);
         setUser(null);
@@ -60,38 +59,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (s?.user) {
-        (async () => {
-          await fetchProfile(s.user.id);
-        })();
-      } else {
+      if (!s?.user) {
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
-  async function fetchProfile(userId: string) {
-    try {
-      const { data } = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle(),
-        8000,
-        'Profile lookup timed out.'
-      );
-      setProfile(data);
-    } catch (error) {
-      console.warn('Unable to load the user profile:', error);
-      setProfile(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    const controller = new AbortController();
+    setLoading(true);
+    // Read once per signed-in user, outside the auth callback's session lock.
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('profiles').select('*')
+          .eq('id', userId).abortSignal(controller.signal).maybeSingle();
+        if (controller.signal.aborted) return;
+        if (error) throw error;
+        setProfile(data);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('Unable to load the user profile:', error);
+        setProfile(null);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [userId]);
 
   async function signIn(email: string, password: string) {
     const domainError = validateHyperfeedsDomain(email);

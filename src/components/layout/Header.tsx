@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock, ArrowRightLeft, PackageCheck, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { canRefreshInBackground } from '../../lib/backendAvailability';
 import NetworkStatusBadge from '../ui/NetworkStatusBadge';
 import { UPDATE_CHANNEL_NAME, UPDATE_EVENT_NAME, SystemUpdatePayload, fetchRecentSystemUpdates, fetchPendingUpdates, SystemUpdateLogRecord } from '../../lib/updateManager';
 import { APP_VERSION } from '../../config/version';
@@ -216,12 +217,16 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     let isMounted = true;
+    let readingTransfers = false;
     async function loadIncomingTransfers() {
-      const { data, error } = await supabase
+      if (!canRefreshInBackground() || readingTransfers) return;
+      readingTransfers = true;
+      const { data, error } = await Promise.resolve(supabase
         .from('material_transfers')
         .select('id, transfer_number, quantity, unit, created_at, raw_materials(name, code)')
         .eq('status', 'in_buffer')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }))
+        .finally(() => { readingTransfers = false; });
 
       if (error) {
         console.warn('Unable to load incoming Production transfers:', error.message);
@@ -288,6 +293,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     loadIncomingTransfers();
+    document.addEventListener('visibilitychange', loadIncomingTransfers);
+    window.addEventListener('online', loadIncomingTransfers);
     const channel = supabase
       .channel('header-production-incoming-transfers')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, loadIncomingTransfers)
@@ -295,6 +302,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', loadIncomingTransfers);
+      window.removeEventListener('online', loadIncomingTransfers);
       incomingTransfersLoadedRef.current = false;
       knownIncomingTransferIdsRef.current = new Set();
       supabase.removeChannel(channel);
@@ -303,14 +312,18 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
   useEffect(() => {
     let isMounted = true;
+    let readingQueue = false;
 
     async function loadSageQueue() {
-      const { data, error } = await supabase
+      if (!canRefreshInBackground() || readingQueue) return;
+      readingQueue = true;
+      const { data, error } = await Promise.resolve(supabase
         .from('sync_log')
         .select('id, event_type, reference_id, status, message, updated_at, last_failure_message, retried_at, resolved_at')
         .in('status', ['pending', 'processing', 'failed', 'success'])
         .order('updated_at', { ascending: false })
-        .limit(60);
+        .limit(60))
+        .finally(() => { readingQueue = false; });
 
       if (error) {
         console.warn('Unable to load Sage posting queue:', error.message);
@@ -341,9 +354,12 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     loadSageQueue();
+    document.addEventListener('visibilitychange', loadSageQueue);
+    window.addEventListener('online', loadSageQueue);
     const channel = supabase
       .channel('header-sage-posting-queue')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
+        if (!canRefreshInBackground()) return;
         // Use the event payload immediately. A GRN can move from queued to
         // posted in only a few seconds, before a follow-up query would see the
         // intermediate validation and posting stages.
@@ -361,6 +377,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', loadSageQueue);
+      window.removeEventListener('online', loadSageQueue);
       sageQueueLoadedRef.current = false;
       knownSageStagesRef.current = new Map();
       supabase.removeChannel(channel);

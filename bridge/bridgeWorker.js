@@ -209,10 +209,10 @@ async function processPendingEvents() {
 
   if (error) {
     console.error('❌ Failed to read sync_log:', error.message);
-    return;
+    return { readFailed: true };
   }
 
-  if (!pending || pending.length === 0) return;
+  if (!pending || pending.length === 0) return { idle: true };
 
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
 
@@ -473,8 +473,15 @@ async function startWorker() {
   // A full stock refresh is batched so a large catalogue never delays posting events.
   void refreshSageStock(undefined, 'startup reconciliation batch');
 
-  await processPendingEvents();
-  setInterval(processPendingEvents, POLL_INTERVAL_MS);
+  const supabaseHost = new URL(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL).hostname;
+  if (supabaseHost === 'appyuqxetlphuxfybmus.supabase.co') {
+    const { startAdaptiveQueuePolling } = require('./lib/adaptiveQueuePoller');
+    console.log('UAT queue reads: active >=15s; idle up to 60s; database errors back off up to 5 minutes.');
+    startAdaptiveQueuePolling(processPendingEvents, { intervalMs: POLL_INTERVAL_MS });
+  } else {
+    await processPendingEvents();
+    setInterval(processPendingEvents, POLL_INTERVAL_MS);
+  }
   setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
 }
 

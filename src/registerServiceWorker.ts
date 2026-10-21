@@ -10,12 +10,8 @@ export function registerServiceWorker() {
         .then((registration) => {
           console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
 
-          // Auto-check for updates every 60 seconds. The recovery worker clears
-          // retired cached assets, then unregisters itself so releases are fetched
-          // directly from the current PlantControl deployment.
-          setInterval(() => {
-            registration.update();
-          }, 60000);
+          // This recovery worker unregisters itself after clearing retired caches.
+          // Updating that retired registration on a timer produces InvalidStateError.
 
           // Handle automatic live updates when a new SW version is waiting
           registration.onupdatefound = () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { canRefreshInBackground } from '../lib/backendAvailability';
 
 type RefreshCallback = () => void | Promise<void>;
 
@@ -19,11 +20,28 @@ export function useRealtimeRefresh(
 
   useEffect(() => {
     let timeoutId: number | undefined;
+    let refreshing = false;
+    let refreshQueued = false;
+    let stopped = false;
     const scheduleRefresh = () => {
+      if (stopped || !canRefreshInBackground()) return;
+      if (refreshing) { refreshQueued = true; return; }
       if (timeoutId) window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(() => {
+      timeoutId = window.setTimeout(async () => {
         timeoutId = undefined;
-        void refreshRef.current();
+        if (stopped || !canRefreshInBackground()) return;
+        refreshing = true;
+        try {
+          await refreshRef.current();
+        } catch (error) {
+          console.warn('Live refresh failed:', error);
+        } finally {
+          refreshing = false;
+          if (refreshQueued) {
+            refreshQueued = false;
+            scheduleRefresh();
+          }
+        }
       }, debounceMs);
     };
 
@@ -43,6 +61,7 @@ export function useRealtimeRefresh(
     window.addEventListener('plantcontrol:data-changed', refreshWhenActive);
 
     return () => {
+      stopped = true;
       if (timeoutId) window.clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('focus', refreshWhenActive);
