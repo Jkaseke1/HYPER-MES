@@ -526,7 +526,7 @@ export default function ProductionOrdersPage() {
       .from('sync_log')
       .select('id, reference_id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
-      .eq('reference_type', 'production_orders')
+      .or('reference_type.eq.production_orders,reference_type.eq.production_order,reference_type.is.null')
       .in('reference_id', orderIds)
       .order('updated_at', { ascending: false });
 
@@ -540,7 +540,15 @@ export default function ProductionOrdersPage() {
       const orderId = (row as any).reference_id;
       if (orderId && !nextStatuses[orderId]) nextStatuses[orderId] = row as SageIssueStatus;
     }
-    setSageIssueStatuses(nextStatuses);
+    setSageIssueStatuses((current) => {
+      const sameKeys = Object.keys(current).length === Object.keys(nextStatuses).length
+        && Object.keys(nextStatuses).every((id) => current[id]?.id === nextStatuses[id]?.id);
+      const sameStatuses = sameKeys && Object.keys(nextStatuses).every((id) =>
+        current[id]?.status === nextStatuses[id]?.status
+        && current[id]?.updated_at === nextStatuses[id]?.updated_at
+      );
+      return sameStatuses ? current : nextStatuses;
+    });
   }, []);
 
   const loadFinishedGoodsTransferStatuses = useCallback(async (orderIds: string[]) => {
@@ -577,12 +585,27 @@ export default function ProductionOrdersPage() {
     // The order refresh above also refreshes this summary; no second list timer.
   }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
+  // Realtime is the primary status path. Reconcile unsettled issue events every
+  // 15 seconds so a dropped/filtered websocket event cannot leave the table queued.
+  useEffect(() => {
+    const activeOrderIds = orders
+      .filter((order) => ['materials_issued', 'in_progress'].includes(order.status))
+      .filter((order) => !['success', 'failed'].includes(sageIssueStatuses[order.id]?.status || ''))
+      .map((order) => order.id)
+      .filter(Boolean);
+    if (!activeOrderIds.length) return;
+
+    const refreshActiveIssueStatuses = () => loadSageIssueStatuses(activeOrderIds);
+    void refreshActiveIssueStatuses();
+    return startBackgroundPolling(refreshActiveIssueStatuses, 15000);
+  }, [orders, sageIssueStatuses, loadSageIssueStatuses]);
+
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
       .from('sync_log')
       .select('id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
-      .eq('reference_type', 'production_orders')
+      .or('reference_type.eq.production_orders,reference_type.eq.production_order,reference_type.is.null')
       .eq('reference_id', orderId)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -751,7 +774,7 @@ export default function ProductionOrdersPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
         if (!canRefreshInBackground()) return;
         const event = payload.new as any;
-        if (event?.reference_type !== 'production_orders') return;
+        if (event?.reference_type && !['production_orders', 'production_order'].includes(event.reference_type)) return;
 
         if (event?.event_type === 'production_completed') {
           const status = {
@@ -775,7 +798,7 @@ export default function ProductionOrdersPage() {
           return;
         }
 
-        if (event.event_type !== 'materials_issued') return;
+        if (event.event_type !== 'materials_issued' || !event.reference_id) return;
 
         setSageIssueStatuses((current) => ({
           ...current,
@@ -1821,7 +1844,7 @@ export default function ProductionOrdersPage() {
           .from('sync_log')
           .select('status, message, updated_at')
           .eq('event_type', 'materials_issued')
-          .eq('reference_type', 'production_orders')
+          .or('reference_type.eq.production_orders,reference_type.eq.production_order,reference_type.is.null')
           .eq('reference_id', selected.id)
           .order('updated_at', { ascending: false })
           .limit(1)
