@@ -146,6 +146,7 @@ export default function ProductionOrdersPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showOptionalSchedule, setShowOptionalSchedule] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showEditQty, setShowEditQty] = useState(false);
   const [showFinishedGoodsTransfer, setShowFinishedGoodsTransfer] = useState(false);
@@ -2364,17 +2365,21 @@ export default function ProductionOrdersPage() {
             </div>
           </div>
 
-          {/* Scheduling & Workforce Card */}
-          <div className="border border-slate-200 bg-white p-4 sm:p-5 space-y-4 rounded-md">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold text-xs">2</div>
-                <h3 className="text-sm font-bold text-slate-900">Schedule & crew</h3>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">Optional Shift Setup</span>
-            </div>
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+            <button
+              type="button"
+              aria-expanded={showOptionalSchedule}
+              onClick={() => setShowOptionalSchedule((shown) => !shown)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+            >
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">Schedule & crew</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Optional. Add a shift, operator, dates or crew size.</span>
+              </span>
+              <span className="text-xs font-semibold text-teal-700">{showOptionalSchedule ? 'Hide details' : 'Add details'}</span>
+            </button>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {showOptionalSchedule && <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 md:grid-cols-3">
               <div>
                 <label className={labelCls}>Priority</label>
                 <select
@@ -2446,7 +2451,7 @@ export default function ProductionOrdersPage() {
                   placeholder="e.g. 5 workers"
                 />
               </div>
-            </div>
+            </div>}
           </div>
 
           {bomPreview.length > 0 && selectedFormulation && (
@@ -2476,7 +2481,7 @@ export default function ProductionOrdersPage() {
                 );
               })()}
               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                <div className="max-h-72 overflow-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-teal-50 sticky top-0">
                       <tr>
@@ -3120,14 +3125,14 @@ export default function ProductionOrdersPage() {
                   const massBalanced = selectedBomMassBalanced;
                   const formula = selected.formulations;
                   return (
-                    <section aria-label="Finance material issue approval review" className="overflow-hidden rounded-md border border-amber-200 bg-white">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3">
+                    <section aria-label="Finance formula and BOM verification" className="overflow-hidden rounded-md border border-violet-200 bg-white">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200 bg-violet-50 px-4 py-3">
                         <div>
-                          <h3 className="text-sm font-bold text-slate-900">Material issue approval</h3>
-                          <p className="mt-0.5 text-xs text-slate-600">Review exactly what Production is asking to issue: formula, BOM quantities, packaging and stock availability.</p>
+                          <h3 className="text-sm font-bold text-slate-900">Finance formula &amp; BOM verification</h3>
+                          <p className="mt-0.5 text-xs text-slate-600">Review the approved formula, batch basis, ingredient list and packaging before issuing stock.</p>
                         </div>
-                        <span className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900">
-                          {canValidateBom ? 'Approve material issue' : 'Finance approval pending'}
+                        <span className="rounded-md border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800">
+                          {canValidateBom ? 'Finance action required' : 'Awaiting Finance'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-4">
@@ -3169,8 +3174,8 @@ export default function ProductionOrdersPage() {
                 })()}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">Materials requested for issue</h3>
-                    <p className="text-xs text-slate-500">Review each BOM item, planned issue quantity, current stock and cost before approval</p>
+                    <h3 className="text-base font-extrabold text-slate-900">Formula BOM ingredients</h3>
+                    <p className="text-xs text-slate-500">Line-by-line quantities and stock available for this batch</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">
