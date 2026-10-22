@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, ClipboardList, Radio, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, ClipboardList, Radio, ShieldCheck, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
+import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
@@ -2005,6 +2006,12 @@ export default function ProductionOrdersPage() {
   const plannedCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.planned_qty || 0), 0);
   const actualCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.actual_qty || 0), 0);
   const outputAttainment = plannedCompletedQuantity > 0 ? Math.round((actualCompletedQuantity / plannedCompletedQuantity) * 100) : 0;
+  const lineWorkload = Object.entries(activeOrders.reduce<Record<string, ProductionOrder[]>>((byLine, order) => {
+    const line = order.machines?.name || 'Unassigned line';
+    (byLine[line] ||= []).push(order);
+    return byLine;
+  }, {})).sort(([, a], [, b]) => b.length - a.length).slice(0, 4);
+  const activeSagePosts = Object.values(sageIssueStatuses).filter((status) => ['pending', 'processing'].includes(status.status)).length;
   const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
   const selectedBomTotal = detailMaterials.reduce((sum, material) => sum + Number(material.planned_qty || 0), 0);
   const selectedBomMassBalanced = Boolean(selected && Math.abs(selectedBomTotal - Number(selected.planned_qty || 0)) <= 0.01);
@@ -2017,34 +2024,34 @@ export default function ProductionOrdersPage() {
 
   return (
     <div className="production-orders-page mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
-      <header className="flex flex-col gap-4 border-l-4 border-[#f39200] bg-[#0d2036] px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-teal-600"><Factory className="h-5 w-5 text-white" /></div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase text-slate-300">
-              <span>PlantControl</span><span className="text-slate-500">/</span><span>Production</span>
-              <span className="inline-flex items-center gap-1 normal-case text-emerald-300"><Radio className="h-3 w-3" /> Sage connected</span>
+      <StickyOperationsPanel>
+        <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
+          <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase text-[#ffc36b]">Production control</span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><Radio className="h-3 w-3" /> Sage connected</span>
+              </div>
+              <h1 className="mt-3 text-2xl font-bold">Production Orders</h1>
+              <p className="mt-1 text-sm text-slate-300">Live execution board for batches, material staging, and finished-goods completion.</p>
             </div>
-            <h1 className="mt-1 text-xl font-bold">Production Orders</h1>
-            <p className="mt-0.5 text-sm text-slate-300">Finance review, material issue, production and finished goods.</p>
+            <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 bg-[#f39200] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-black/20 transition-colors hover:bg-[#dc8500]">
+              <Plus className="h-5 w-5" /> Create Production Order
+            </button>
           </div>
-        </div>
-        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#dc8500]">
-          <Plus className="h-4 w-4" /> Create production order
-        </button>
-      </header>
+          <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase text-slate-400">Order book</p><Layers className="h-4 w-4 text-teal-300" /></div><p className="mt-2 text-3xl font-bold">{totalOrders}</p><p className="mt-1 text-xs text-slate-400">Registered batches</p></div>
+            <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase text-slate-400">Awaiting issue</p><Clock className="h-4 w-4 text-[#ffc36b]" /></div><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{pendingCount + financeReviewCount}</p><p className="mt-1 text-xs text-slate-400">{financeReviewCount ? `${financeReviewCount} with Finance · ${pendingCount} with Production` : 'Ready for material staging'}</p></div>
+            <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase text-slate-400">On the floor</p><Activity className="h-4 w-4 text-cyan-300" /></div><p className="mt-2 text-3xl font-bold text-cyan-300">{activeOrders.length}</p><p className="mt-1 text-xs text-slate-400">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
+            <div className="px-5 py-4"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase text-slate-400">Completed</p><CheckCircle2 className="h-4 w-4 text-emerald-300" /></div><p className="mt-2 text-3xl font-bold text-emerald-300">{completedCount}</p><p className="mt-1 text-xs text-slate-400">Finished batches</p></div>
+          </div>
+        </section>
+      </StickyOperationsPanel>
 
-      <section aria-label="Production order summary" className="grid grid-cols-2 gap-px border border-slate-200 bg-slate-200 sm:grid-cols-4">
-        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700"><Layers className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">All batches</p><p className="mt-0.5 text-xl font-bold text-slate-950">{totalOrders}</p><p className="text-[11px] text-slate-500">Order book</p></div></div>
-        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">Needs review / issue</p><p className="mt-0.5 text-xl font-bold text-amber-700">{pendingCount + financeReviewCount}</p><p className="text-[11px] text-slate-500">{financeReviewCount} Finance · {pendingCount} Production</p></div></div>
-        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700"><Factory className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">On the floor</p><p className="mt-0.5 text-xl font-bold text-teal-700">{activeOrders.length}</p><p className="text-[11px] text-slate-500">{materialsIssuedCount} staged · {inProgressCount} running</p></div></div>
-        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><CheckCircle2 className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">Completed</p><p className="mt-0.5 text-xl font-bold text-emerald-700">{completedCount}</p><p className="text-[11px] text-slate-500">Finished batches</p></div></div>
-      </section>
-
-      <section aria-label="Completed output attainment" className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:gap-4">
-        <div className="flex items-center justify-between gap-3 sm:w-44"><span className="text-xs font-semibold text-slate-600">Output attainment</span><span className="font-mono text-sm font-bold text-slate-900">{outputAttainment}%</span></div>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${outputAttainment >= 100 ? 'bg-emerald-600' : 'bg-teal-600'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div>
-        <p className="text-xs text-slate-500 sm:w-64 sm:text-right">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg recorded as complete</p>
+      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm lg:grid-cols-[1.15fr_0.9fr_1fr]">
+        <div className="border-l-4 border-[#f39200] bg-[#fffaf1] px-4 py-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase text-slate-600">Output attainment</p><p className="text-xl font-bold text-[#0d2036]">{outputAttainment}%</p></div><div className="mt-2 h-2 overflow-hidden bg-amber-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-[#f39200]'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-2 text-xs text-slate-600">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg completed</p></div>
+        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase text-slate-600">Live line</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => `${line}: ${lineOrders.length}`).join(' · ') : 'No line activity'}</p><p className="mt-1 text-xs text-slate-500">{inProgressCount} running · {materialsIssuedCount} staged</p></div><Factory className="h-5 w-5 shrink-0 text-teal-600" /></div>
+        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase text-slate-600">Workflow focus</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{financeReviewCount ? `${financeReviewCount} batch${financeReviewCount === 1 ? '' : 'es'} awaiting Finance material approval` : pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} ready to request Finance approval` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-xs text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-[#f39200]" /></div>
       </section>
 
       {/* Filter & Search Bar */}
