@@ -260,7 +260,7 @@ export interface ProductionOrder {
   wastage_bags?: number | null;
   unit: string;
   unit_size?: string | null;
-  status: 'pending' | 'materials_issued' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'pending_finance' | 'materials_issued' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   planned_start: string | null;
   planned_end: string | null;

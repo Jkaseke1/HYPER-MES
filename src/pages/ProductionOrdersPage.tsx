@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, Radio } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, Radio, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -75,10 +75,11 @@ const normalizeRawMaterials = (materials: any[]): OrderMaterial[] => {
   }));
 }
 
-type TabFilter = 'all' | 'pending' | 'materials_issued' | 'in_progress' | 'completed';
+type TabFilter = 'all' | 'pending' | 'pending_finance' | 'materials_issued' | 'in_progress' | 'completed';
 const tabs: { key: TabFilter; label: string }[] = [
   { key: 'all', label: 'All' }, 
   { key: 'pending', label: 'Pending' },
+  { key: 'pending_finance', label: 'Finance Review' },
   { key: 'materials_issued', label: 'Materials Issued' },
   { key: 'in_progress', label: 'In Progress' }, 
   { key: 'completed', label: 'Completed' },
@@ -123,8 +124,11 @@ const emptyForm = {
   notes: '',
 };
 
+const FINANCE_BOM_ROLES = ['finance', 'accountant', 'admin'];
+
 export default function ProductionOrdersPage() {
   const { profile } = useAuth();
+  const canValidateBom = FINANCE_BOM_ROLES.includes(profile?.role || '');
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [productionLines, setProductionLines] = useState<ProductionLine[]>([]);
@@ -163,6 +167,8 @@ export default function ProductionOrdersPage() {
   const [costing, setCosting] = useState({ raw_material_cost: 0, labour_cost: 0, production_line_cost: 0, overhead_cost: 0 });
   const [output, setOutput] = useState({ actual_qty: 0, actual_bags: 0, rejected_qty: 0, rejected_bags: 0, wastage_qty: 0, wastage_bags: 0, actual_hours: '' as string, average_throughput: '' as string });
   const [saving, setSaving] = useState(false);
+  const [showFinanceReject, setShowFinanceReject] = useState(false);
+  const [financeRejectReason, setFinanceRejectReason] = useState('');
   const [plans, setPlans] = useState<ProductionPlan[]>([]);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [bomPreview, setBomPreview] = useState<any[]>([]);
@@ -462,7 +468,7 @@ export default function ProductionOrdersPage() {
     try {
       if (!silent) setLoading(true);
       const { data, error } = await supabase.from('production_orders')
-        .select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, batch_size, nominal_speed), machines(name, code)')
+        .select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, version, batch_size, nominal_speed), machines(name, code)')
         .order('created_at', { ascending: false });
       if (error) {
         console.error('Error fetching orders:', error);
@@ -1508,13 +1514,106 @@ export default function ProductionOrdersPage() {
     );
   };
 
-  // Bulk issue all materials at once
+  const requestFinanceBomValidation = async () => {
+    if (!selected) return;
+    if (detailMaterials.length === 0) {
+      setWorkflowError('Cannot send to Finance — no ingredients linked to this order. Please set up the BOM for this formulation first.');
+      return;
+    }
+    openConfirmDialog({
+      title: 'Send to Finance',
+      message: `Send ${selected.batch_number} to Finance to validate the formula and BOM before materials are issued? Stock will not move until Finance approves.`,
+      confirmLabel: 'Send to Finance',
+      destructive: false,
+      onConfirm: async () => {
+        setSaving(true);
+        setWorkflowError(null);
+        try {
+          const { error } = await supabase
+            .from('production_orders')
+            .update({ status: 'pending_finance', rejection_reason: null })
+            .eq('id', selected.id)
+            .eq('status', 'pending');
+          if (error) throw error;
+          try {
+            await supabase.rpc('log_approval_action', {
+              p_entity_type: 'production_order',
+              p_entity_id: selected.id,
+              p_action: 'submitted',
+              p_previous_status: 'pending',
+              p_new_status: 'pending_finance',
+              p_approved_by: profile?.id || null,
+              p_comments: 'Production requested Finance to validate formula and BOM before issue.',
+            });
+          } catch (logError) {
+            console.warn('Failed to log finance BOM request:', logError);
+          }
+          toast.success('Sent to Finance to validate formula and BOM.');
+          setSelected({ ...selected, status: 'pending_finance', rejection_reason: null });
+          fetchOrders();
+        } catch (error: any) {
+          setWorkflowError(error.message || 'Could not send this order to Finance.');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  };
+
+  const rejectFinanceBomValidation = async () => {
+    if (!selected || !financeRejectReason.trim()) {
+      setWorkflowError('Please explain what Production must correct on the formula or BOM.');
+      return;
+    }
+    setSaving(true);
+    setWorkflowError(null);
+    try {
+      const { error } = await supabase
+        .from('production_orders')
+        .update({ status: 'pending', rejection_reason: financeRejectReason.trim() })
+        .eq('id', selected.id)
+        .eq('status', 'pending_finance');
+      if (error) throw error;
+      try {
+        await supabase.rpc('log_approval_action', {
+          p_entity_type: 'production_order',
+          p_entity_id: selected.id,
+          p_action: 'rejected',
+          p_previous_status: 'pending_finance',
+          p_new_status: 'pending',
+          p_approved_by: profile?.id || null,
+          p_comments: financeRejectReason.trim(),
+        });
+      } catch (logError) {
+        console.warn('Failed to log finance BOM rejection:', logError);
+      }
+      toast.success('Returned to Production with the BOM / formula notes.');
+      setSelected({ ...selected, status: 'pending', rejection_reason: financeRejectReason.trim() });
+      setShowFinanceReject(false);
+      setFinanceRejectReason('');
+      fetchOrders();
+    } catch (error: any) {
+      setWorkflowError(error.message || 'Could not return this order to Production.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Bulk issue all materials at once — Finance only, after BOM / formula validation.
   const bulkIssueMaterials = async () => {
     if (!selected) return;
+    if (!canValidateBom) {
+      setWorkflowError('Finance must validate the formula and BOM before materials can be issued.');
+      return;
+    }
+    if (selected.status !== 'pending_finance') {
+      setWorkflowError('This order is not waiting for Finance BOM validation.');
+      return;
+    }
     openConfirmDialog({
-      title: 'Issue All Materials',
-      message: `Issue all ${detailMaterials.length} materials for this production order? This cannot be undone.`,
-      confirmLabel: 'Issue Materials',
+      title: 'Validate BOM & Issue Materials',
+      message: `Confirm the formula and BOM for ${selected.batch_number} are correct, then issue all ${detailMaterials.length} materials? Stock will move and this cannot be undone.`,
+      confirmLabel: 'Validate & Issue',
       destructive: false,
       onConfirm: async () => {
         setSaving(true);
@@ -1525,8 +1624,9 @@ export default function ProductionOrdersPage() {
             throw new Error(preflight.message);
           }
 
-          // Issue all materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
-          const issuePromises = detailMaterials.map(material =>
+          // Issue remaining materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
+          const unissued = allIngredientsIssued() ? [] : detailMaterials.filter((material) => !material.issued);
+          const issuePromises = unissued.map(material =>
             supabase.rpc('issue_individual_ingredient', {
               p_material_id: material.id,
               p_actual_qty: material.planned_qty,
@@ -1546,6 +1646,19 @@ export default function ProductionOrdersPage() {
           // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
 
           // Now update order status to materials_issued
+          try {
+            await supabase.rpc('log_approval_action', {
+              p_entity_type: 'production_order',
+              p_entity_id: selected.id,
+              p_action: 'approved',
+              p_previous_status: 'pending_finance',
+              p_new_status: 'materials_issued',
+              p_approved_by: profile?.id || null,
+              p_comments: 'Finance validated formula and BOM, then issued materials.',
+            });
+          } catch (logError) {
+            console.warn('Failed to log finance BOM approval:', logError);
+          }
           await updateStatus('materials_issued');
 
           // Auto-link to DRS issues
@@ -1765,10 +1878,14 @@ export default function ProductionOrdersPage() {
       
       // Validate workflow sequence
       if (status === 'materials_issued') {
+        if (selected.status !== 'pending_finance') {
+          throw new Error('Cannot issue materials until Finance has validated the formula and BOM.');
+        }
         if (detailMaterials.length === 0) {
           throw new Error('Cannot issue materials — no ingredients linked to this order. Please set up the BOM for this formulation first.');
         }
-        // Note: bulkIssueMaterials will handle issuing all ingredients before calling this
+        updates.approved_by = profile?.id || null;
+        updates.approved_at = new Date().toISOString();
       }
       
       if (status === 'in_progress') {
@@ -1935,6 +2052,7 @@ export default function ProductionOrdersPage() {
 
   const totalOrders = orders.length;
   const pendingCount = orders.filter(o => o.status === 'pending').length;
+  const financeReviewCount = orders.filter(o => o.status === 'pending_finance').length;
   const inProgressCount = orders.filter(o => o.status === 'in_progress').length;
   const completedCount = orders.filter(o => o.status === 'completed').length;
   const materialsIssuedCount = orders.filter(o => o.status === 'materials_issued').length;
@@ -1972,7 +2090,7 @@ export default function ProductionOrdersPage() {
           </div>
           <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">
           <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Order book</p><Layers className="h-4 w-4 text-teal-300" /></div><p className="mt-2 text-3xl font-bold">{totalOrders}</p><p className="mt-1 text-xs text-slate-400">Registered batches</p></div>
-          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting issue</p><Clock className="h-4 w-4 text-[#ffc36b]" /></div><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{pendingCount}</p><p className="mt-1 text-xs text-slate-400">Ready for material staging</p></div>
+          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting issue</p><Clock className="h-4 w-4 text-[#ffc36b]" /></div><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{pendingCount + financeReviewCount}</p><p className="mt-1 text-xs text-slate-400">{financeReviewCount ? `${financeReviewCount} with Finance · ${pendingCount} still with Production` : 'Ready to send to Finance'}</p></div>
           <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On the floor</p><Activity className="h-4 w-4 text-cyan-300" /></div><p className="mt-2 text-3xl font-bold text-cyan-300">{activeOrders.length}</p><p className="mt-1 text-xs text-slate-400">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
           <div className="px-5 py-4"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Completed</p><CheckCircle2 className="h-4 w-4 text-emerald-300" /></div><p className="mt-2 text-3xl font-bold text-emerald-300">{completedCount}</p><p className="mt-1 text-xs text-slate-400">Finished batches</p></div>
           </div>
@@ -1982,7 +2100,7 @@ export default function ProductionOrdersPage() {
       <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm lg:grid-cols-[1.15fr_0.9fr_1fr]">
         <div className="border-l-4 border-[#f39200] bg-[#fffaf1] px-4 py-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Output attainment</p><p className="text-xl font-bold text-[#0d2036]">{outputAttainment}%</p></div><div className="mt-2 h-2 overflow-hidden bg-amber-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-[#f39200]'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-2 text-xs text-slate-600">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg completed</p></div>
         <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Live line</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => `${line}: ${lineOrders.length}`).join(' · ') : 'No line activity'}</p><p className="mt-1 text-xs text-slate-500">{inProgressCount} running · {materialsIssuedCount} staged</p></div><Factory className="h-5 w-5 shrink-0 text-teal-600" /></div>
-        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Workflow focus</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} need material issue` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-xs text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-[#f39200]" /></div>
+        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Workflow focus</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{financeReviewCount ? `${financeReviewCount} batch${financeReviewCount === 1 ? '' : 'es'} waiting for Finance BOM validation` : pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} ready to send to Finance` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-xs text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-[#f39200]" /></div>
       </section>
 
       {/* Filter & Search Bar */}
@@ -2729,6 +2847,38 @@ export default function ProductionOrdersPage() {
                 </div>
               )}
 
+              {selected.status === 'pending' && selected.rejection_reason && (
+                <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <div className="text-xs font-extrabold uppercase tracking-wide text-amber-800">Finance returned this BOM / formula</div>
+                  <p className="mt-1 text-xs text-amber-900">{selected.rejection_reason}</p>
+                </div>
+              )}
+
+              {selected.status === 'pending_finance' && (
+                <div className="mx-4 mt-3 p-3 bg-violet-50 border border-violet-200 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="w-5 h-5 text-violet-700 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-extrabold uppercase tracking-wide text-violet-800">
+                        {canValidateBom ? 'Validate formula and BOM before issue' : 'Waiting for Finance to validate formula and BOM'}
+                      </div>
+                      <p className="mt-1 text-xs text-violet-900">
+                        Formula: <span className="font-semibold">{selected.formulations?.name || 'Unknown'}</span>
+                        {selected.formulations?.code ? ` · ${selected.formulations.code}` : ''}
+                        {selected.formulations?.version != null ? ` · v${selected.formulations.version}` : ''}
+                        {' · '}Planned {selected.planned_qty?.toLocaleString()} {selected.unit}
+                        {' · '}{detailMaterials.length} BOM line{detailMaterials.length === 1 ? '' : 's'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-violet-700">
+                        {canValidateBom
+                          ? 'Check the formula and each BOM line below. Approving will issue materials to this batch.'
+                          : 'Stock will not move until Finance approves. Production can still view the BOM while waiting.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {sageIssueStatus && (
                 <div className={`mx-4 mt-3 p-3 border rounded-xl flex items-start gap-3 ${
                   sageIssueStatus.status === 'success'
@@ -2827,13 +2977,33 @@ export default function ProductionOrdersPage() {
                 <div className="flex items-center gap-3">
                   {selected.status === 'pending' && (
                     <button
-                      onClick={() => (allIngredientsIssued() ? updateStatus('materials_issued') : bulkIssueMaterials())}
-                      disabled={saving || detailMaterials.length === 0 || (!allIngredientsIssued() && !allMaterialsAvailable())}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
+                      onClick={requestFinanceBomValidation}
+                      disabled={saving || detailMaterials.length === 0}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-violet-200 transition-all disabled:opacity-50"
                     >
-                      <Check className="w-4 h-4" />
-                      Approve & Issue Materials
+                      <ShieldCheck className="w-4 h-4" />
+                      Send to Finance to Validate BOM
                     </button>
+                  )}
+                  {selected.status === 'pending_finance' && canValidateBom && (
+                    <>
+                      <button
+                        onClick={bulkIssueMaterials}
+                        disabled={saving || detailMaterials.length === 0 || !allMaterialsAvailable()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" />
+                        Validate BOM & Issue Materials
+                      </button>
+                      <button
+                        onClick={() => { setFinanceRejectReason(''); setShowFinanceReject(true); }}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-700 hover:bg-red-50 rounded-xl text-xs font-extrabold transition-all disabled:opacity-50"
+                      >
+                        <X className="w-4 h-4" />
+                        Return to Production
+                      </button>
+                    </>
                   )}
                   {selected.status === 'materials_issued' && (
                     <>
@@ -2893,7 +3063,7 @@ export default function ProductionOrdersPage() {
                     </button>
                   )}
                   <span className="hidden md:inline-flex text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
-                    Pending → Materials Issued → In Progress → Completed
+                    Pending → Finance BOM → Materials Issued → In Progress → Completed
                   </span>
                 </div>
                 {selected.status === 'pending' && (
@@ -3027,12 +3197,22 @@ export default function ProductionOrdersPage() {
                     </span>
                     {detailMaterials.some(m => !m.issued) && selected.status === 'pending' && (
                       <button
+                        onClick={requestFinanceBomValidation}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-black text-xs rounded-xl shadow-md shadow-violet-200 transition-all disabled:opacity-50"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        Send BOM to Finance
+                      </button>
+                    )}
+                    {detailMaterials.some(m => !m.issued) && selected.status === 'pending_finance' && canValidateBom && (
+                      <button
                         onClick={bulkIssueMaterials}
                         disabled={saving || !allMaterialsAvailable()}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md shadow-emerald-200 transition-all disabled:opacity-50"
                       >
                         <Check className="w-4 h-4" />
-                        Issue All at Once ({detailMaterials.filter(m => !m.issued).length} Items)
+                        Validate & Issue ({detailMaterials.filter(m => !m.issued).length} Items)
                       </button>
                     )}
                   </div>
@@ -3112,7 +3292,12 @@ export default function ProductionOrdersPage() {
                                 )}
                               </td>
                               <td className="px-3 py-3 text-center">
-                                {!material.issued && selected.status === 'pending' && (
+                                {!material.issued && selected.status === 'pending' && isOutOfStock && (
+                                  <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
+                                    <AlertTriangle className="w-3 h-3" /> Out of stock
+                                  </span>
+                                )}
+                                {!material.issued && selected.status === 'pending_finance' && canValidateBom && (
                                   <div className="flex flex-col items-center gap-1">
                                     {isOutOfStock && (
                                       <span className="text-[10px] text-red-600 font-bold flex items-center gap-0.5">
@@ -3832,6 +4017,40 @@ export default function ProductionOrdersPage() {
                 disabled={saving}
               />
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showFinanceReject} onOpenChange={(open) => { if (!open) { setShowFinanceReject(false); setFinanceRejectReason(''); } }}>
+        <DialogContent className="max-w-md p-0">
+          <div className="p-5 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-800">Return to Production</h3>
+            <p className="text-sm text-slate-600 mt-1">Tell Production what is wrong with the formula or BOM. Materials will not be issued.</p>
+          </div>
+          <div className="p-5 space-y-3">
+            <textarea
+              value={financeRejectReason}
+              onChange={(e) => setFinanceRejectReason(e.target.value)}
+              rows={4}
+              placeholder="e.g. Soya inclusion is too high for this batch size; correct the BOM and resend."
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowFinanceReject(false); setFinanceRejectReason(''); }}
+                disabled={saving}
+                className="px-3 py-2 text-sm font-medium border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={rejectFinanceBomValidation}
+                disabled={saving || !financeRejectReason.trim()}
+                className="px-3 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
+              >
+                {saving ? 'Returning...' : 'Return to Production'}
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

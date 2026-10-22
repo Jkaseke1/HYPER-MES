@@ -9,7 +9,7 @@ import StatusBadge from '../ui/StatusBadge';
 const CATEGORY_META: Record<string, { label: string; pill: string }> = {
   grn:                   { label: 'GRN',            pill: 'bg-blue-100 text-blue-700' },
   quality_inspection:    { label: 'Quality',         pill: 'bg-purple-100 text-purple-700' },
-  production_order:      { label: 'Production',      pill: 'bg-teal-100 text-teal-700' },
+  production_order:      { label: 'BOM / Formula',   pill: 'bg-violet-100 text-violet-700' },
   macropack_order:       { label: 'Macropack',       pill: 'bg-orange-100 text-orange-700' },
   dispatch_order:        { label: 'Dispatch',        pill: 'bg-indigo-100 text-indigo-700' },
   work_order:            { label: 'Maintenance',     pill: 'bg-slate-100 text-slate-600' },
@@ -115,18 +115,18 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
         } catch (e) { console.warn('Chick fallback error:', e); }
       }
 
-      // ── Production Orders ──
-      if (canApprove('production_order', role)) {
+      // ── Production BOM / formula validation ──
+      if (canApprove('production_order_bom', role)) {
         try {
           const { data: pos } = await supabase
             .from('production_orders')
-            .select('id, batch_number, status, created_at, operator_id')
-            .eq('status', 'pending')
+            .select('id, batch_number, status, created_at, operator_id, formulations(name, code)')
+            .eq('status', 'pending_finance')
             .order('created_at', { ascending: false });
           pos?.forEach((p: any) => {
             approvalsMap.set(`production_order:${p.id}`, {
               entity_type: 'production_order', entity_id: p.id, entity_number: p.batch_number,
-              entity_name: p.batch_number, status: p.status,
+              entity_name: p.formulations?.name || p.batch_number, status: p.status,
               created_at: p.created_at, created_by: p.operator_id || undefined,
             });
           });

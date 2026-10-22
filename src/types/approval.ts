@@ -35,6 +35,7 @@ export const APPROVAL_PERMISSIONS = {
   grn: ['finance', 'accountant', 'admin'],  // Single approver: Finance only
   quality_inspection: ['supervisor', 'production_manager', 'admin'],
   production_order: ['production_manager', 'finance', 'accountant', 'admin'],
+  production_order_bom: ['finance', 'accountant', 'admin'],
   dispatch_order: ['warehouse_manager', 'logistics', 'admin'],
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
@@ -68,6 +69,7 @@ export function getApprovalActionLabel(entityType: string): { approve: string; r
     grn: { approve: 'Approve Receipt', reject: 'Reject Receipt' },
     quality_inspection: { approve: 'Pass Inspection', reject: 'Fail Inspection' },
     production_order: { approve: 'Approve Order', reject: 'Reject Order' },
+    production_order_bom: { approve: 'Validate BOM & Issue', reject: 'Return to Production' },
     dispatch_order: { approve: 'Approve Dispatch', reject: 'Reject Dispatch' },
     work_order: { approve: 'Approve Work', reject: 'Reject Work' },
     reconciliation_period: { approve: 'Approve Period', reject: 'Reject Period' },

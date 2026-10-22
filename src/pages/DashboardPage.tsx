@@ -47,7 +47,7 @@ export default function DashboardPage() {
     const { data } = await supabase
       .from('production_orders')
       .select('*, formulations(name, code)')
-      .in('status', ['materials_issued', 'in_progress', 'pending'])
+      .in('status', ['materials_issued', 'in_progress', 'pending', 'pending_finance'])
       .order('created_at', { ascending: false })
       .limit(8);
     setLiveOrders((data as ProductionOrder[]) || []);
@@ -76,7 +76,7 @@ export default function DashboardPage() {
     const orders = ordersRes.data || [];
     const completed = orders.filter((o) => o.status === 'completed');
     const totalProd = completed.reduce((sum, o) => sum + (o.actual_qty || 0), 0);
-    const activeCount = orders.filter((o) => ['pending', 'materials_issued', 'in_progress'].includes(o.status)).length;
+    const activeCount = orders.filter((o) => ['pending', 'pending_finance', 'materials_issued', 'in_progress'].includes(o.status)).length;
     const totalPlanned = completed.reduce((sum, o) => sum + (o.planned_qty || 0), 0);
     const efficiency = totalPlanned > 0 ? Math.round((totalProd / totalPlanned) * 100) : 0;
 
