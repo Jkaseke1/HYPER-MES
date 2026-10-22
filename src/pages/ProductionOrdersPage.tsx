@@ -1968,26 +1968,28 @@ export default function ProductionOrdersPage() {
 
   return (
     <div className="production-orders-page mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="text-teal-700">PRODUCTION CONTROL</span>
-            <span className="text-slate-300">/</span>
-            <span className="inline-flex items-center gap-1 text-emerald-700"><Radio className="h-3 w-3" /> Sage connected</span>
+      <header className="flex flex-col gap-4 border-l-4 border-[#f39200] bg-[#0d2036] px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-teal-600"><Factory className="h-5 w-5 text-white" /></div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase text-slate-300">
+              <span>PlantControl</span><span className="text-slate-500">/</span><span>Production</span>
+              <span className="inline-flex items-center gap-1 normal-case text-emerald-300"><Radio className="h-3 w-3" /> Sage connected</span>
+            </div>
+            <h1 className="mt-1 text-xl font-bold">Production Orders</h1>
+            <p className="mt-0.5 text-sm text-slate-300">Finance review, material issue, production and finished goods.</p>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">Production Orders</h1>
-          <p className="mt-1 text-sm text-slate-600">Track Finance review, material issue, production and finished-goods posting.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-800">
+        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#dc8500]">
           <Plus className="h-4 w-4" /> Create production order
         </button>
       </header>
 
-      <section aria-label="Production order summary" className="grid grid-cols-2 divide-x divide-y divide-slate-200 overflow-hidden border border-slate-200 bg-white sm:grid-cols-4 sm:divide-y-0">
-        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">All batches</p><p className="mt-1 text-2xl font-bold text-slate-950">{totalOrders}</p><p className="text-xs text-slate-500">Order book</p></div>
-        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">Needs review / issue</p><p className="mt-1 text-2xl font-bold text-amber-700">{pendingCount + financeReviewCount}</p><p className="text-xs text-slate-500">{financeReviewCount} with Finance · {pendingCount} with Production</p></div>
-        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">On the floor</p><p className="mt-1 text-2xl font-bold text-teal-700">{activeOrders.length}</p><p className="text-xs text-slate-500">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
-        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">Completed</p><p className="mt-1 text-2xl font-bold text-emerald-700">{completedCount}</p><p className="text-xs text-slate-500">Finished batches</p></div>
+      <section aria-label="Production order summary" className="grid grid-cols-2 gap-px border border-slate-200 bg-slate-200 sm:grid-cols-4">
+        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700"><Layers className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">All batches</p><p className="mt-0.5 text-xl font-bold text-slate-950">{totalOrders}</p><p className="text-[11px] text-slate-500">Order book</p></div></div>
+        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">Needs review / issue</p><p className="mt-0.5 text-xl font-bold text-amber-700">{pendingCount + financeReviewCount}</p><p className="text-[11px] text-slate-500">{financeReviewCount} Finance · {pendingCount} Production</p></div></div>
+        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700"><Factory className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">On the floor</p><p className="mt-0.5 text-xl font-bold text-teal-700">{activeOrders.length}</p><p className="text-[11px] text-slate-500">{materialsIssuedCount} staged · {inProgressCount} running</p></div></div>
+        <div className="flex min-h-[92px] items-center gap-3 bg-white px-4 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><CheckCircle2 className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-slate-500">Completed</p><p className="mt-0.5 text-xl font-bold text-emerald-700">{completedCount}</p><p className="text-[11px] text-slate-500">Finished batches</p></div></div>
       </section>
 
       <section aria-label="Completed output attainment" className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:gap-4">
@@ -1998,9 +2000,16 @@ export default function ProductionOrdersPage() {
 
       {/* Filter & Search Bar */}
       <div className="production-order-register overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-white p-3.5">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="production-order-tabs flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+        <div className="border-b border-slate-200 bg-white p-4">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div><h2 className="text-base font-bold text-slate-900">Batch queue</h2><p className="mt-0.5 text-xs text-slate-500">{filtered.length} batch{filtered.length === 1 ? '' : 'es'} shown</p></div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input type="text" placeholder="Search batch number..." value={search} onChange={(e) => setSearch(e.target.value)} className="production-order-search w-full rounded-md border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600/20" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <div className="production-order-tabs flex min-w-0 items-center gap-1.5">
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -2018,16 +2027,6 @@ export default function ProductionOrdersPage() {
                   </span>
                 </button>
               ))}
-            </div>
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search batch number..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="production-order-search w-full rounded-md border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-sm focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
             </div>
           </div>
         </div>
