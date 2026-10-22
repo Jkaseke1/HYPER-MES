@@ -475,7 +475,7 @@ export default function ProductionOrdersPage() {
     try {
       if (!silent) setLoading(true);
       const { data, error } = await supabase.from('production_orders')
-        .select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, version, batch_size, nominal_speed), machines(name, code)')
+        .select('*, creator:profiles!created_by(full_name, email), operator:profiles!operator_id(full_name, email), formulations(name, code, version, batch_size, nominal_speed, status), machines(name, code)')
         .order('created_at', { ascending: false });
       if (error) {
         console.error('Error fetching orders:', error);
@@ -1516,6 +1516,14 @@ export default function ProductionOrdersPage() {
       setWorkflowError('This order is not waiting for Finance BOM validation.');
       return;
     }
+    if (selected.formulations?.status !== 'active') {
+      setWorkflowError('This formula is not currently Finance-approved. Return it for review before issuing materials.');
+      return;
+    }
+    if (!selectedBomMassBalanced) {
+      setWorkflowError(`BOM mass balance failed: ${selectedBomTotal.toFixed(3)} kg of ingredients vs ${Number(selected.planned_qty || 0).toFixed(3)} kg planned output.`);
+      return;
+    }
     openConfirmDialog({
       title: 'Approve BOM & Issue Materials',
       message: `Confirm the formula and BOM for ${selected.batch_number} are correct, then issue all ${detailMaterials.length} materials? Stock will move and this cannot be undone.`,
@@ -1984,6 +1992,8 @@ export default function ProductionOrdersPage() {
   const actualCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.actual_qty || 0), 0);
   const outputAttainment = plannedCompletedQuantity > 0 ? Math.round((actualCompletedQuantity / plannedCompletedQuantity) * 100) : 0;
   const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
+  const selectedBomTotal = detailMaterials.reduce((sum, material) => sum + Number(material.planned_qty || 0), 0);
+  const selectedBomMassBalanced = Boolean(selected && Math.abs(selectedBomTotal - Number(selected.planned_qty || 0)) <= 0.01);
   const sageCompletionInFlight = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
   const sageCompletionPosted = sageCompletionStatus?.status === 'success';
   const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
@@ -2892,7 +2902,7 @@ export default function ProductionOrdersPage() {
                     <>
                       <button
                         onClick={bulkIssueMaterials}
-                        disabled={saving || detailMaterials.length === 0 || !allMaterialsAvailable()}
+                        disabled={saving || detailMaterials.length === 0 || !allMaterialsAvailable() || !selectedBomMassBalanced || selected.formulations?.status !== 'active'}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-200 transition-all disabled:opacity-50"
                       >
                         <Check className="w-4 h-4" />
@@ -3090,10 +3100,64 @@ export default function ProductionOrdersPage() {
             {/* Materials Tab */}
             {detailTab === 'materials' && (
               <div className="space-y-4">
+                {selected.status === 'pending_finance' && (() => {
+                  const bomTotal = selectedBomTotal;
+                  const plannedOutput = Number(selected.planned_qty || 0);
+                  const massVariance = bomTotal - plannedOutput;
+                  const massBalanced = selectedBomMassBalanced;
+                  const formula = selected.formulations;
+                  return (
+                    <section aria-label="Finance formula and BOM verification" className="overflow-hidden rounded-md border border-violet-200 bg-white">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200 bg-violet-50 px-4 py-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900">Finance formula &amp; BOM verification</h3>
+                          <p className="mt-0.5 text-xs text-slate-600">Review the approved formula, batch basis, ingredient list and packaging before issuing stock.</p>
+                        </div>
+                        <span className="rounded-md border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800">
+                          {canValidateBom ? 'Finance action required' : 'Awaiting Finance'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-4">
+                        <div className="bg-white px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase text-slate-500">Formula</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900">{formula?.name || 'Unknown formula'}</div>
+                          <div className="mt-0.5 font-mono text-xs text-slate-500">{formula?.code || 'No code'}{formula?.version != null ? ` · v${formula.version}` : ''}</div>
+                        </div>
+                        <div className="bg-white px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase text-slate-500">Formula batch basis</div>
+                          <div className="mt-1 font-mono text-sm font-semibold text-slate-900">{Number(formula?.batch_size || 0).toLocaleString()} kg</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{formula?.status || 'Status unavailable'}</div>
+                        </div>
+                        <div className="bg-white px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase text-slate-500">Order target</div>
+                          <div className="mt-1 font-mono text-sm font-semibold text-slate-900">{plannedOutput.toLocaleString()} kg</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{Number(selected.planned_bags || bagsFromKg(plannedOutput, selected.unit_size)).toLocaleString()} × {selected.unit_size || '50'} kg bags</div>
+                        </div>
+                        <div className="bg-white px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase text-slate-500">Ingredient mass check</div>
+                          <div className={`mt-1 font-mono text-sm font-semibold ${massBalanced ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {massBalanced ? 'Balanced' : 'Variance'} · {bomTotal.toLocaleString()} kg
+                          </div>
+                          <div className={`mt-0.5 text-xs ${massBalanced ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {massBalanced ? 'Matches order target' : `${massVariance > 0 ? '+' : ''}${massVariance.toFixed(3)} kg vs target`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-slate-200 px-4 py-2.5 text-xs">
+                        <span className="font-semibold text-slate-700">Packaging</span>
+                        {orderPackaging.length ? orderPackaging.map((item) => (
+                          <span key={item.id} className="text-slate-700"><strong>{item.item_code}</strong> · {item.description} · {Number(item.planned_qty || 0).toLocaleString()} {item.unit || 'bags'}</span>
+                        )) : <span className="font-medium text-amber-800">No packaging SKU is saved on this order.</span>}
+                        <span className="ml-auto text-slate-500">{detailMaterials.length} ingredient lines</span>
+                      </div>
+                      {!massBalanced && <div className="border-t border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-800">Do not approve: BOM ingredient quantities do not reconcile to the planned batch output.</div>}
+                    </section>
+                  );
+                })()}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">Components (BOM Ingredients)</h3>
-                    <p className="text-xs text-slate-400">List of raw materials required to execute this batch</p>
+                    <h3 className="text-base font-extrabold text-slate-900">Formula BOM ingredients</h3>
+                    <p className="text-xs text-slate-500">Line-by-line quantities and stock available for this batch</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">
