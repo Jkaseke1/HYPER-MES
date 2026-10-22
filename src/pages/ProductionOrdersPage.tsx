@@ -157,6 +157,7 @@ export default function ProductionOrdersPage() {
   const [form, setForm] = useState(emptyForm);
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
+  const [orderPackaging, setOrderPackaging] = useState<any[]>([]);
   const [editQtyForm, setEditQtyForm] = useState({ planned_qty: 0 });
   const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
@@ -1288,6 +1289,7 @@ export default function ProductionOrdersPage() {
     const [
       { data: opsData },
       { data },
+      { data: packagingData },
       { data: logData },
       { data: downtimeData },
       { data: rateRows },
@@ -1303,6 +1305,11 @@ export default function ProductionOrdersPage() {
         .from('production_order_materials')
         .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
         .eq('production_order_id', order.id),
+      supabase
+        .from('production_order_packaging')
+        .select('id, item_code, description, unit, planned_qty, actual_qty, unit_cost')
+        .eq('production_order_id', order.id)
+        .order('created_at', { ascending: true }),
       supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true }),
       supabase.from('production_order_downtime').select('*').eq('production_order_id', order.id).order('created_at', { ascending: true }),
       order.formulation_id
@@ -1321,6 +1328,7 @@ export default function ProductionOrdersPage() {
 
     const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
+    setOrderPackaging(packagingData || []);
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
 
@@ -3093,6 +3101,30 @@ export default function ProductionOrdersPage() {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {orderPackaging.length > 0 && (
+                  <section className="overflow-hidden rounded-md border border-amber-200 bg-white">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Packaging</h4>
+                        <p className="text-xs text-slate-600">Recorded separately from the ingredient BOM.</p>
+                      </div>
+                      <span className="text-xs font-semibold text-amber-900">{orderPackaging.length} item{orderPackaging.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {orderPackaging.map((item) => (
+                        <div key={item.id} className="grid grid-cols-2 gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_140px_140px] sm:items-center">
+                          <div className="col-span-2 min-w-0 sm:col-span-1">
+                            <div className="truncate text-sm font-semibold text-slate-900">{item.description}</div>
+                            <div className="font-mono text-xs text-slate-500">{item.item_code}</div>
+                          </div>
+                          <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
+                          <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 )}
                 
                 {detailMaterials.length === 0 ? (
