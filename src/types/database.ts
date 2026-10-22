@@ -198,6 +198,7 @@ export interface Formulation {
   nominal_speed: number;
   status: 'draft' | 'active' | 'archived';
   created_by: string | null;
+  updated_by?: string | null;
   approved_by: string | null;
   created_at: string;
   updated_at: string;

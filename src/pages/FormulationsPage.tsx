@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck } from 'lucide-react';
+import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck, Eye, Power, UserRound } from 'lucide-react';
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -64,6 +64,17 @@ type FormulaGroup = {
   current: Formulation;
   versions: Formulation[];
 };
+
+function formatFormulaEditorDate(value?: string | null) {
+  if (!value) return 'Date not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date not recorded';
+  return new Intl.DateTimeFormat('en-ZW', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
 
 export function getFormulationCategory(name: string, existingCategory?: string | null): string {
   if (existingCategory && existingCategory.trim() !== '' && existingCategory.toLowerCase() !== 'null' && existingCategory.toLowerCase() !== 'other') {
@@ -147,6 +158,7 @@ export default function FormulationsPage() {
   const [categories, setCategories] = useState<{ code: string; name: string }[]>(DEFAULT_CATEGORIES);
   const [formulationIngredientCounts, setFormulationIngredientCounts] = useState<Record<string, number>>({});
   const [formulaReadiness, setFormulaReadiness] = useState<Record<string, FormulaReadiness>>({});
+  const [formulationEditors, setFormulationEditors] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
   const [showArchived, setShowArchived] = useState(false);
@@ -197,6 +209,22 @@ export default function FormulationsPage() {
     setLoading(true);
     const { data } = await supabase.from('formulations').select('*').order('name');
     setFormulations(data || []);
+
+    const editorIds = [...new Set((data || [])
+      .map((formula) => formula.updated_by)
+      .filter((id): id is string => Boolean(id)))];
+    if (editorIds.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', editorIds);
+      setFormulationEditors(Object.fromEntries((profiles || []).map((profile) => [
+        profile.id,
+        profile.full_name?.trim() || profile.email || 'Unknown user',
+      ])));
+    } else {
+      setFormulationEditors({});
+    }
     
     // Fetch ingredient counts for each formulation
     if (data && data.length > 0) {
@@ -555,6 +583,7 @@ export default function FormulationsPage() {
         target_fiber: Number(form.target_fiber) || 0,
         target_moisture: Number(form.target_moisture) || 0,
         updated_at: new Date().toISOString(),
+        ...(user?.id ? { updated_by: user.id } : {}),
       };
       
       console.log('Saving formulation with variants:', payload.unit_size_variants);
@@ -566,7 +595,10 @@ export default function FormulationsPage() {
         const { error } = await supabase.from('formulations').update(payload).eq('id', editId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from('formulations').insert(payload).select('id').single();
+        const { data, error } = await supabase.from('formulations').insert({
+          ...payload,
+          ...(user?.id ? { created_by: user.id } : {}),
+        }).select('id').single();
         if (error) throw error;
         fId = data?.id || null;
       }
@@ -700,6 +732,15 @@ export default function FormulationsPage() {
         if (insErr) throw insErr;
       }
 
+      const { error: auditError } = await supabase
+        .from('formulations')
+        .update({
+          updated_at: new Date().toISOString(),
+          ...(user?.id ? { updated_by: user.id } : {}),
+        })
+        .eq('id', selected.id);
+      if (auditError) throw auditError;
+
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
@@ -827,7 +868,7 @@ export default function FormulationsPage() {
     return !readiness?.isBalanced || formula.status !== 'active';
   });
 
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const userRole = (profile?.role || '').toLowerCase();
   const userEmail = (profile?.email || '').toLowerCase();
   const isFinanceUser = userRole.includes('admin') || userRole.includes('finance') || userRole === 'finance_manager' || userEmail.includes('jonga') || userRole === 'administrator';
@@ -1031,7 +1072,7 @@ export default function FormulationsPage() {
               </div>
               <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1120px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle [&_td:not(:first-child)]:whitespace-nowrap">
+                  <table className="formula-register w-full table-fixed text-sm [&_td]:align-middle">
                     <thead className="bg-slate-50 border-b border-slate-200 [&_th]:text-slate-600 [&_th]:tracking-normal [&_th]:normal-case">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
@@ -1042,7 +1083,7 @@ export default function FormulationsPage() {
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Version</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Batch Size</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-emerald-700 uppercase tracking-wider">Cost/Unit</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Daily Active</th>
+                        <th className="w-36 px-3 py-3 text-left text-xs font-semibold text-emerald-700 uppercase tracking-wider">Updated by</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Status</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-emerald-700 uppercase tracking-wider">Action</th>
                       </tr>
@@ -1050,6 +1091,8 @@ export default function FormulationsPage() {
                     <tbody className="divide-y divide-slate-100">
                       {withIngredients.map(group => {
                         const f = group.current;
+                        const editorId = f.updated_by;
+                        const editorName = editorId ? formulationEditors[editorId] : null;
                         return (
                         <tr 
                           key={f.id}
@@ -1072,7 +1115,7 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => compareMode ? toggleCompareSelect(f) : openDetail(f)}
-                              className="flex min-w-48 items-center gap-2 text-left hover:text-emerald-600 transition-colors"
+                              className="flex min-w-0 items-center gap-2 text-left hover:text-emerald-600 transition-colors"
                             >
                               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
                                 <FlaskConical className="w-4 h-4 text-emerald-600" />
@@ -1116,24 +1159,14 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-teal-700">${f.estimated_cost_per_unit.toFixed(2)}</span>
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            {(() => {
-                              const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
-                              const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
-
-                              if (isActiveToday) {
-                                return (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold shadow-sm">
-                                    ✨ Active Today
-                                  </span>
-                                );
-                              }
-                              return (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold">
-                                  Deactivated
-                                </span>
-                              );
-                            })()}
+                          <td className="px-3 py-3 whitespace-normal">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><UserRound className="h-3.5 w-3.5" /></span>
+                              <span className="min-w-0 leading-tight">
+                                <span className="block truncate text-xs font-semibold text-slate-700" title={editorName || 'Legacy record'}>{editorName || 'Legacy record'}</span>
+                                <span className="block text-[10px] text-slate-400" title={f.updated_at}>{editorId ? formatFormulaEditorDate(f.updated_at) : 'Editor not recorded'}</span>
+                              </span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge status={f.status} />
@@ -1150,24 +1183,29 @@ export default function FormulationsPage() {
                                       onClick={async () => {
                                         try {
                                           const updatedActiveIds = activeIds.filter(id => id !== f.id);
-                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
                                           
-                                          await supabase
+                                          const { error } = await supabase
                                             .from('formulations')
-                                            .update({ status: 'draft', updated_at: new Date().toISOString() })
+                                            .update({ status: 'draft', updated_at: new Date().toISOString(), ...(user?.id ? { updated_by: user.id } : {}) })
                                             .eq('id', f.id);
+                                          if (error) throw error;
+                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
 
                                           setToastMessage(`Formulation "${f.name}" deactivated.`);
                                           setTimeout(() => setToastMessage(null), 3000);
                                           await fetchFormulations();
                                         } catch (err: any) {
                                           console.error('Deactivate error:', err);
+                                          alert(`Could not deactivate formula: ${err.message || err}`);
                                         }
                                       }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md transition-colors"
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
                                       title="Deactivate Formulation for Today"
+                                      role="switch"
+                                      aria-checked={true}
+                                      aria-label={`Active today for ${f.name}`}
                                     >
-                                      Deactivate
+                                      <Power className="h-3.5 w-3.5" /> Active today
                                     </button>
                                   );
                                 }
@@ -1195,11 +1233,12 @@ export default function FormulationsPage() {
                                             status: 'active',
                                             approved_by: user?.id || null,
                                             updated_at: new Date().toISOString(),
+                                          ...(user?.id ? { updated_by: user.id } : {}),
                                           })
                                           .eq('id', f.id);
 
                                         if (updateErr) {
-                                          console.warn('Formulation status update warning:', updateErr);
+                                          throw updateErr;
                                         }
 
                                         // Track daily active formulation in storage
@@ -1213,24 +1252,26 @@ export default function FormulationsPage() {
                                         await fetchFormulations();
                                       } catch (err: any) {
                                         console.error('Set active error:', err);
-                                        setToastMessage(`✨ "${f.name} (v${f.version})" set as Active for Today.`);
-                                        setTimeout(() => setToastMessage(null), 4000);
-                                        await fetchFormulations();
+                                        alert(`Could not activate formula: ${err.message || err}`);
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-md transition-colors whitespace-nowrap"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors whitespace-nowrap"
                                     title="Set as Finance-Approved Active Formulation for Today"
+                                    role="switch"
+                                    aria-checked={false}
+                                    aria-label={`Active today for ${f.name}`}
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate today
                                   </button>
                                 );
                               })()}
                               <button
                                 onClick={() => openDetail(f)}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                title={`View ${f.name}`}
+                                aria-label={`View ${f.name}`}
                               >
-                                <ChevronRight className="w-3.5 h-3.5" />
-                                View
+                                <Eye className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -1253,7 +1294,7 @@ export default function FormulationsPage() {
               </div>
               <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1000px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle">
+                  <table className="formula-register formula-register-empty w-full table-fixed text-sm [&_td]:align-middle">
                     <thead className="bg-amber-50 border-b border-amber-200">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
@@ -1261,6 +1302,7 @@ export default function FormulationsPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-amber-700 uppercase tracking-wider">Code</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-amber-700 uppercase tracking-wider">Category</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-amber-700 uppercase tracking-wider">Version</th>
+                        <th className="w-36 px-3 py-3 text-left text-xs font-semibold text-amber-700 uppercase tracking-wider">Updated by</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-amber-700 uppercase tracking-wider">Batch Size</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-amber-700 uppercase tracking-wider">Cost/Unit</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold text-amber-700 uppercase tracking-wider">Status</th>
@@ -1270,6 +1312,8 @@ export default function FormulationsPage() {
                     <tbody className="divide-y divide-slate-100">
                       {withoutIngredients.map(group => {
                         const f = group.current;
+                        const editorId = f.updated_by;
+                        const editorName = editorId ? formulationEditors[editorId] : null;
                         return (
                         <tr 
                           key={f.id}
@@ -1325,6 +1369,15 @@ export default function FormulationsPage() {
                               ))}
                             </select>
                           </td>
+                          <td className="px-3 py-3 whitespace-normal">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><UserRound className="h-3.5 w-3.5" /></span>
+                              <span className="min-w-0 leading-tight">
+                                <span className="block truncate text-xs font-semibold text-slate-700" title={editorName || 'Legacy record'}>{editorName || 'Legacy record'}</span>
+                                <span className="block text-[10px] text-slate-400" title={f.updated_at}>{editorId ? formatFormulaEditorDate(f.updated_at) : 'Editor not recorded'}</span>
+                              </span>
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
                           </td>
@@ -1337,10 +1390,11 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={() => openDetail(f)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-amber-700 hover:bg-amber-50 transition-colors"
+                              title={`View ${f.name}`}
+                              aria-label={`View ${f.name}`}
                             >
-                              <ChevronRight className="w-3.5 h-3.5" />
-                              View
+                              <Eye className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
