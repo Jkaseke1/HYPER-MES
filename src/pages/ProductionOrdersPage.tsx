@@ -1661,10 +1661,12 @@ export default function ProductionOrdersPage() {
   };
 
   const [refreshingStock, setRefreshingStock] = useState(false);
+  const stockRefreshInFlightRef = useRef(false);
 
   // Refresh Sage stock balances for current order
   const refreshSageStock = async (showToast = true) => {
-    if (!selected || detailMaterials.length === 0) return;
+    if (!selected || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
+    stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
       const materialIds = detailMaterials.map(m => m.raw_material_id);
@@ -1696,16 +1698,10 @@ export default function ProductionOrdersPage() {
         toast.error('Failed to refresh stock balances');
       }
     } finally {
+      stockRefreshInFlightRef.current = false;
       if (showToast) setRefreshingStock(false);
     }
   };
-
-  // Auto-refresh Sage stock when order detail loads
-  useEffect(() => {
-    if (showDetail && selected && detailMaterials.length > 0) {
-      refreshSageStock(false);
-    }
-  }, [showDetail, selected?.id, detailMaterials.length]);
 
   // The bridge publishes a balance update after each Sage post. Keep an open
   // production order aligned with it instead of leaving a stale stock warning
@@ -1717,14 +1713,14 @@ export default function ProductionOrdersPage() {
     let stockRefreshTimer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
       .channel(`production-order-sage-stock-${selected.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances', filter: 'warehouse_id=eq.19' }, (payload) => {
         if (!canRefreshInBackground()) return;
         const balance = payload.new as { raw_material_id?: string; warehouse_id?: number };
         if (balance?.warehouse_id !== 19 || !balance.raw_material_id || !materialIds.has(balance.raw_material_id)) return;
         clearTimeout(stockRefreshTimer);
         stockRefreshTimer = setTimeout(() => {
-          if (canRefreshInBackground()) void loadSageStockBalances([...materialIds]);
-        }, 500);
+          if (canRefreshInBackground()) void refreshSageStock(false);
+        }, 1500);
       })
       .subscribe();
 
@@ -1734,11 +1730,11 @@ export default function ProductionOrdersPage() {
     };
   }, [showDetail, selected?.id, detailMaterials]);
 
-  // Keep the detail current even when a Realtime connection is unavailable.
+  // Realtime is primary; use a quiet fallback poll only for long-open details.
   useEffect(() => {
     if (!showDetail || !selected || detailMaterials.length === 0) return;
-    
-    return startBackgroundPolling(() => refreshSageStock(false), 60000);
+
+    return startBackgroundPolling(() => refreshSageStock(false), 300000);
   }, [showDetail, selected?.id, detailMaterials.length]);
 
   /* ── Production completion with packaging ── */
