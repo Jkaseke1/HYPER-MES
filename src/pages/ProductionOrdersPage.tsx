@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, Radio, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, ClipboardList, Radio, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -10,7 +10,6 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
-import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
@@ -1394,114 +1393,6 @@ export default function ProductionOrdersPage() {
     if (result.error) throw result.error;
   };
 
-  // Issue individual ingredient (Issue 4)
-  const issueIndividualIngredient = async (material: OrderMaterial) => {
-    if (!selected) return;
-    
-    setSaving(true);
-    try {
-      // Hard gate: validate Sage stock freshness and quantity before issue
-      const preflight = await runSageIssuePreflight([material]);
-      if (!preflight.ok) {
-        throw new Error(preflight.message);
-      }
-
-      // Call the database function to issue individual ingredient
-      const { error } = await supabase.rpc('issue_individual_ingredient', {
-        p_material_id: material.id,
-        p_actual_qty: material.planned_qty,
-        p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
-      });
-
-      if (error) throw error;
-
-      // Update unit_cost and total_cost from raw materials
-      const unitCost = Math.round((material.raw_materials?.cost_per_unit || 0) * 10000) / 10000;
-      const totalCost = Math.round((material.planned_qty * unitCost) * 10000) / 10000;
-      
-      console.log('DEBUG: Issuing ingredient', {
-        materialId: material.id,
-        materialName: material.raw_materials?.name,
-        rawMaterialsObj: material.raw_materials,
-        unitCost,
-        plannedQty: material.planned_qty,
-        totalCost
-      });
-      
-      console.log('DEBUG: About to update material', {
-        materialId: material.id,
-        updatePayload: { unit_cost: unitCost, total_cost: totalCost }
-      });
-
-      const { error: updateError, data: updateData } = await supabase.from('production_order_materials').update({
-        unit_cost: unitCost,
-        total_cost: totalCost
-      }).eq('id', material.id);
-      
-      console.log('DEBUG: Update response', { error: updateError, data: updateData });
-      
-      if (updateError) {
-        console.error('ERROR updating unit_cost:', {
-          message: updateError.message,
-          code: updateError.code,
-          details: updateError.details,
-          hint: updateError.hint,
-          fullError: updateError
-        });
-        throw updateError;
-      }
-
-      // Record as a stock movement so Material Transfer page reflects it
-      const { error: movementError } = await supabase.from('stock_movements').insert({
-        movement_type: 'production_input',
-        raw_material_id: material.raw_material_id,
-        quantity: -Math.abs(material.planned_qty),
-        unit: 'kg',
-        notes: `Issued to production order ${selected.batch_number}`,
-        reference_type: 'production_order',
-        reference_id: selected.id,
-        batch_number: selected.batch_number,
-        movement_date: new Date().toISOString(),
-      });
-
-      if (movementError) {
-        console.error('ERROR recording stock movement:', movementError);
-        // Don't throw - stock movement is secondary to the main issuance
-      }
-
-      // Auto-link to DRS issues
-      await supabase.from('rm_daily_issues').insert({
-        issue_date: new Date().toISOString().split('T')[0],
-        raw_material_name: material.raw_materials?.name || 'Unknown',
-        quantity_kg: material.planned_qty,
-        production_order_ref: selected.batch_number,
-      });
-
-      // Refresh materials - add small delay to ensure database is updated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const { data: refreshedData } = await supabase
-        .from('production_order_materials')
-        .select('id, production_order_id, raw_material_id, planned_qty, actual_qty, wastage_qty, unit, unit_cost, total_cost, issued, issued_at, issued_by, created_at, raw_materials(id, name, code, cost_per_unit, current_stock)')
-        .eq('production_order_id', selected.id);
-      
-      const refreshed = normalizeRawMaterials((refreshedData as any[]) || []);
-      console.log('DEBUG: Refreshed materials after issue', refreshed);
-      setDetailMaterials(refreshed);
-      await Promise.all([
-        loadProductionFloorStock(refreshed.map((m) => m.raw_material_id).filter(Boolean)),
-        loadSageStockBalances(refreshed.map((m) => m.raw_material_id).filter(Boolean)),
-      ]);
-      setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(refreshed) }));
-      
-      setSaving(false);
-    } catch (error: any) {
-      console.error('Error issuing ingredient:', error);
-      setWorkflowError(`Failed to issue ingredient: ${error.message}`);
-      setSaving(false);
-    }
-  };
-
   // Check if all ingredients are issued
   const allIngredientsIssued = () => {
     return detailMaterials.length > 0 && detailMaterials.every(m => m.issued);
@@ -2067,12 +1958,6 @@ export default function ProductionOrdersPage() {
   const plannedCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.planned_qty || 0), 0);
   const actualCompletedQuantity = orders.filter(o => o.status === 'completed').reduce((sum, order) => sum + Number(order.actual_qty || 0), 0);
   const outputAttainment = plannedCompletedQuantity > 0 ? Math.round((actualCompletedQuantity / plannedCompletedQuantity) * 100) : 0;
-  const lineWorkload = Object.entries(activeOrders.reduce<Record<string, ProductionOrder[]>>((byLine, order) => {
-    const line = order.machines?.name || 'Unassigned line';
-    (byLine[line] ||= []).push(order);
-    return byLine;
-  }, {})).sort(([, a], [, b]) => b.length - a.length).slice(0, 4);
-  const activeSagePosts = Object.values(sageIssueStatuses).filter((status) => ['pending', 'processing'].includes(status.status)).length;
   const selectedFinishedGoodsTransfer = selected ? finishedGoodsTransferStatuses[selected.id] : null;
   const sageCompletionInFlight = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
   const sageCompletionPosted = sageCompletionStatus?.status === 'success';
@@ -2082,35 +1967,33 @@ export default function ProductionOrdersPage() {
     : 0;
 
   return (
-    <div className="production-orders-page p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
-      <StickyOperationsPanel>
-        <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
-          <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffc36b]">Production control</span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><Radio className="h-3 w-3" /> Sage connected</span>
-            </div>
-            <h1 className="mt-3 text-2xl font-bold">Production Orders</h1>
-            <p className="mt-1 text-sm text-slate-300">Live execution board for batches, material staging, and finished-goods completion.</p>
+    <div className="production-orders-page mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
+      <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+            <span className="text-teal-700">PRODUCTION CONTROL</span>
+            <span className="text-slate-300">/</span>
+            <span className="inline-flex items-center gap-1 text-emerald-700"><Radio className="h-3 w-3" /> Sage connected</span>
           </div>
-          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 bg-[#f39200] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-black/20 transition-colors hover:bg-[#dc8500]">
-            <Plus className="w-5 h-5" /> Create Production Order
-          </button>
-          </div>
-          <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Order book</p><Layers className="h-4 w-4 text-teal-300" /></div><p className="mt-2 text-3xl font-bold">{totalOrders}</p><p className="mt-1 text-xs text-slate-400">Registered batches</p></div>
-          <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting issue</p><Clock className="h-4 w-4 text-[#ffc36b]" /></div><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{pendingCount + financeReviewCount}</p><p className="mt-1 text-xs text-slate-400">{financeReviewCount ? `${financeReviewCount} with Finance · ${pendingCount} still with Production` : 'Ready to send to Finance'}</p></div>
-          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On the floor</p><Activity className="h-4 w-4 text-cyan-300" /></div><p className="mt-2 text-3xl font-bold text-cyan-300">{activeOrders.length}</p><p className="mt-1 text-xs text-slate-400">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
-          <div className="px-5 py-4"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Completed</p><CheckCircle2 className="h-4 w-4 text-emerald-300" /></div><p className="mt-2 text-3xl font-bold text-emerald-300">{completedCount}</p><p className="mt-1 text-xs text-slate-400">Finished batches</p></div>
-          </div>
-        </section>
-      </StickyOperationsPanel>
+          <h1 className="mt-1 text-2xl font-bold text-slate-950">Production Orders</h1>
+          <p className="mt-1 text-sm text-slate-600">Track Finance review, material issue, production and finished-goods posting.</p>
+        </div>
+        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-800">
+          <Plus className="h-4 w-4" /> Create production order
+        </button>
+      </header>
 
-      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm lg:grid-cols-[1.15fr_0.9fr_1fr]">
-        <div className="border-l-4 border-[#f39200] bg-[#fffaf1] px-4 py-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Output attainment</p><p className="text-xl font-bold text-[#0d2036]">{outputAttainment}%</p></div><div className="mt-2 h-2 overflow-hidden bg-amber-100"><div className={`h-full ${outputAttainment >= 100 ? 'bg-emerald-500' : 'bg-[#f39200]'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div><p className="mt-2 text-xs text-slate-600">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg completed</p></div>
-        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Live line</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{lineWorkload.length ? lineWorkload.map(([line, lineOrders]) => `${line}: ${lineOrders.length}`).join(' · ') : 'No line activity'}</p><p className="mt-1 text-xs text-slate-500">{inProgressCount} running · {materialsIssuedCount} staged</p></div><Factory className="h-5 w-5 shrink-0 text-teal-600" /></div>
-        <div className="flex items-center justify-between gap-4 border border-slate-100 px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-600">Workflow focus</p><p className="mt-1 text-sm font-bold text-[#0d2036]">{financeReviewCount ? `${financeReviewCount} batch${financeReviewCount === 1 ? '' : 'es'} waiting for Finance BOM validation` : pendingCount ? `${pendingCount} batch${pendingCount === 1 ? '' : 'es'} ready to send to Finance` : activeOrders.length ? `${activeOrders.length} batch${activeOrders.length === 1 ? '' : 'es'} running on the floor` : 'No outstanding batches'}</p><p className="mt-1 text-xs text-slate-500">{activeSagePosts ? `${activeSagePosts} Sage action${activeSagePosts === 1 ? '' : 's'} processing` : 'Sage queue clear'}</p></div><ArrowRight className="h-5 w-5 shrink-0 text-[#f39200]" /></div>
+      <section aria-label="Production order summary" className="grid grid-cols-2 divide-x divide-y divide-slate-200 overflow-hidden border border-slate-200 bg-white sm:grid-cols-4 sm:divide-y-0">
+        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">All batches</p><p className="mt-1 text-2xl font-bold text-slate-950">{totalOrders}</p><p className="text-xs text-slate-500">Order book</p></div>
+        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">Needs review / issue</p><p className="mt-1 text-2xl font-bold text-amber-700">{pendingCount + financeReviewCount}</p><p className="text-xs text-slate-500">{financeReviewCount} with Finance · {pendingCount} with Production</p></div>
+        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">On the floor</p><p className="mt-1 text-2xl font-bold text-teal-700">{activeOrders.length}</p><p className="text-xs text-slate-500">{materialsIssuedCount} staged · {inProgressCount} running</p></div>
+        <div className="px-4 py-3"><p className="text-xs font-semibold text-slate-500">Completed</p><p className="mt-1 text-2xl font-bold text-emerald-700">{completedCount}</p><p className="text-xs text-slate-500">Finished batches</p></div>
+      </section>
+
+      <section aria-label="Completed output attainment" className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex items-center justify-between gap-3 sm:w-44"><span className="text-xs font-semibold text-slate-600">Output attainment</span><span className="font-mono text-sm font-bold text-slate-900">{outputAttainment}%</span></div>
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${outputAttainment >= 100 ? 'bg-emerald-600' : 'bg-teal-600'}`} style={{ width: `${Math.min(100, outputAttainment)}%` }} /></div>
+        <p className="text-xs text-slate-500 sm:w-64 sm:text-right">{actualCompletedQuantity.toLocaleString()} of {plannedCompletedQuantity.toLocaleString()} kg recorded as complete</p>
       </section>
 
       {/* Filter & Search Bar */}
@@ -2122,13 +2005,17 @@ export default function ProductionOrdersPage() {
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
+                  aria-pressed={tab === t.key}
                   className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-all shrink-0 ${
                     tab === t.key
                       ? 'bg-slate-900 text-white shadow'
                       : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  {t.label}
+                  <span>{t.label}</span>
+                  <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${tab === t.key ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    {t.key === 'all' ? totalOrders : t.key === 'pending' ? pendingCount : t.key === 'pending_finance' ? financeReviewCount : t.key === 'materials_issued' ? materialsIssuedCount : t.key === 'in_progress' ? inProgressCount : completedCount}
+                  </span>
                 </button>
               ))}
             </div>
@@ -2164,7 +2051,7 @@ export default function ProductionOrdersPage() {
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Batch Number</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Formulation</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Production Line</th>
-                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Actual Qty</th>
+                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Planned / actual</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Status</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Sage</th>
                     <th className="text-center px-4 py-3.5 font-bold text-slate-700">Action</th>
@@ -2187,8 +2074,9 @@ export default function ProductionOrdersPage() {
                       <td className="px-4 py-3.5">
                         <div className="text-slate-700 font-medium">{order.machines?.name || '-'}</div>
                       </td>
-                      <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {order.actual_qty ? <>{formatBags(order.actual_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty.toLocaleString()} kg)</span></> : '-'}
+                      <td className="px-4 py-3.5 text-right font-mono">
+                        <div className="font-semibold text-slate-800">{Number(order.planned_qty || 0).toLocaleString()} kg planned</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{order.actual_qty ? `${Number(order.actual_qty).toLocaleString()} kg actual` : 'Not recorded'}</div>
                       </td>
                       <td className="px-4 py-3.5">
                         {renderOrderStage(order)}
@@ -2227,7 +2115,7 @@ export default function ProductionOrdersPage() {
 
                   <div>
                     <h4 className="font-bold text-slate-900 text-base">{order.formulations?.name || 'Production Batch'}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Line: {order.machines?.name || 'Main Plant'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{order.formulations?.code ? `${order.formulations.code} · ` : ''}{order.machines?.name || 'Main Plant'}</p>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
@@ -3262,7 +3150,6 @@ export default function ProductionOrdersPage() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {detailMaterials.map((material) => {
-                          const availableStock = normalizeQty(getAvailableStock(material));
                           const isOutOfStock = !hasSufficientStock(material);
                           const qty = material.issued ? (material.actual_qty || material.planned_qty) : material.planned_qty;
                           const lineCost = (qty || 0) * (material.unit_cost || 0);
