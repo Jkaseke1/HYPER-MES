@@ -517,7 +517,7 @@ export default function ProductionOrdersPage() {
     };
   }, [refreshOrdersInBackground]);
 
-  const loadSageIssueStatuses = useCallback(async (orderIds: string[], rowLimit = 1000) => {
+  const loadSageIssueStatuses = useCallback(async (orderIds: string[], rowLimit = 1000, merge = false) => {
     if (!orderIds.length) {
       setSageIssueStatuses({});
       return;
@@ -543,13 +543,14 @@ export default function ProductionOrdersPage() {
       if (orderId && !nextStatuses[orderId]) nextStatuses[orderId] = row as SageIssueStatus;
     }
     setSageIssueStatuses((current) => {
-      const sameKeys = Object.keys(current).length === Object.keys(nextStatuses).length
-        && Object.keys(nextStatuses).every((id) => current[id]?.id === nextStatuses[id]?.id);
-      const sameStatuses = sameKeys && Object.keys(nextStatuses).every((id) =>
-        current[id]?.status === nextStatuses[id]?.status
-        && current[id]?.updated_at === nextStatuses[id]?.updated_at
+      const combined = merge ? { ...current, ...nextStatuses } : nextStatuses;
+      const sameKeys = Object.keys(current).length === Object.keys(combined).length
+        && Object.keys(combined).every((id) => current[id]?.id === combined[id]?.id);
+      const sameStatuses = sameKeys && Object.keys(combined).every((id) =>
+        current[id]?.status === combined[id]?.status
+        && current[id]?.updated_at === combined[id]?.updated_at
       );
-      return sameStatuses ? current : nextStatuses;
+      return sameStatuses ? current : combined;
     });
   }, []);
 
@@ -606,7 +607,7 @@ export default function ProductionOrdersPage() {
       );
       if (unsettledOrderIds.length) {
         const rowLimit = Math.max(20, Math.min(100, unsettledOrderIds.length * 5));
-        void loadSageIssueStatuses(unsettledOrderIds, rowLimit);
+        void loadSageIssueStatuses(unsettledOrderIds, rowLimit, true);
       }
     };
     return startBackgroundPolling(refreshActiveIssueStatuses, 30000);
