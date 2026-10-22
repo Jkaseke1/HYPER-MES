@@ -517,7 +517,7 @@ export default function ProductionOrdersPage() {
     };
   }, [refreshOrdersInBackground]);
 
-  const loadSageIssueStatuses = useCallback(async (orderIds: string[]) => {
+  const loadSageIssueStatuses = useCallback(async (orderIds: string[], rowLimit = 1000) => {
     if (!orderIds.length) {
       setSageIssueStatuses({});
       return;
@@ -529,7 +529,8 @@ export default function ProductionOrdersPage() {
       .eq('event_type', 'materials_issued')
       .or('reference_type.eq.production_orders,reference_type.eq.production_order,reference_type.is.null')
       .in('reference_id', orderIds)
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false })
+      .limit(rowLimit);
 
     if (error) {
       console.error('Error loading Sage issue statuses:', error);
@@ -591,7 +592,7 @@ export default function ProductionOrdersPage() {
   }, [sageIssueStatuses]);
 
   // Realtime is the primary status path. Reconcile unsettled issue events every
-  // 15 seconds so a dropped/filtered websocket event cannot leave the table queued.
+  // 30 seconds so a dropped/filtered websocket event cannot leave the table queued.
   useEffect(() => {
     const orderIds = orders
       .filter((order) => ['materials_issued', 'in_progress'].includes(order.status))
@@ -603,9 +604,12 @@ export default function ProductionOrdersPage() {
       const unsettledOrderIds = orderIds.filter((orderId) =>
         !['success', 'failed'].includes(sageIssueStatusesRef.current[orderId]?.status || '')
       );
-      if (unsettledOrderIds.length) void loadSageIssueStatuses(unsettledOrderIds);
+      if (unsettledOrderIds.length) {
+        const rowLimit = Math.max(20, Math.min(100, unsettledOrderIds.length * 5));
+        void loadSageIssueStatuses(unsettledOrderIds, rowLimit);
+      }
     };
-    return startBackgroundPolling(refreshActiveIssueStatuses, 15000);
+    return startBackgroundPolling(refreshActiveIssueStatuses, 30000);
   }, [orders, loadSageIssueStatuses]);
 
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
