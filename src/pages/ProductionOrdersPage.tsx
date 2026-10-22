@@ -13,6 +13,7 @@ import PackagingDeclaration from '../components/production/PackagingDeclaration'
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface OrderMaterial {
   id: string; 
@@ -134,6 +135,8 @@ const PRODUCTION_WORKFLOW_STEPS = [
 
 export default function ProductionOrdersPage() {
   const { profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const canValidateBom = FINANCE_BOM_ROLES.includes(profile?.role || '');
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
@@ -1369,6 +1372,16 @@ export default function ProductionOrdersPage() {
     setShowDetail(true);
   };
 
+  useEffect(() => {
+    const orderId = (location.state as { financeMaterialOrderId?: string } | null)?.financeMaterialOrderId;
+    if (!orderId || orders.length === 0) return;
+    const order = orders.find((candidate) => candidate.id === orderId);
+    if (!order) return;
+    setTab('pending_finance');
+    void openDetail(order);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, orders]);
+
   // The completion action owns output persistence, so the Sage receipt always
   // uses the exact quantities currently shown to the production clerk.
   const recordCompletionOutput = async (order: ProductionOrder) => {
@@ -1427,9 +1440,9 @@ export default function ProductionOrdersPage() {
       return;
     }
     openConfirmDialog({
-      title: 'Send to Finance',
-      message: `Send ${selected.batch_number} to Finance to validate the formula and BOM before materials are issued? Stock will not move until Finance approves.`,
-      confirmLabel: 'Send to Finance',
+      title: 'Request material-issue approval',
+      message: `Send ${selected.batch_number} to Finance as a material-issue approval task? Finance will review the formula, each BOM quantity, packaging and available stock. No materials will be issued and no stock will move until Finance approves.`,
+      confirmLabel: 'Request Finance approval',
       destructive: false,
       onConfirm: async () => {
         setSaving(true);
@@ -1449,12 +1462,12 @@ export default function ProductionOrdersPage() {
               p_previous_status: 'pending',
               p_new_status: 'pending_finance',
               p_approved_by: profile?.id || null,
-              p_comments: 'Production requested Finance to validate formula and BOM before issue.',
+              p_comments: 'Production requested Finance approval to issue the planned materials after reviewing formula and BOM.',
             });
           } catch (logError) {
             console.warn('Failed to log finance BOM request:', logError);
           }
-          toast.success('Sent to Finance to validate formula and BOM.');
+          toast.success('Material-issue approval requested. Finance has been alerted.');
           setSelected({ ...selected, status: 'pending_finance', rejection_reason: null });
           fetchOrders();
         } catch (error: any) {
@@ -1505,7 +1518,7 @@ export default function ProductionOrdersPage() {
     }
   };
 
-  // Bulk issue all materials at once — Finance only, after BOM / formula validation.
+  // Finance authorizes the complete material issue after review of the order and BOM.
   const bulkIssueMaterials = async () => {
     if (!selected) return;
     if (!canValidateBom) {
@@ -1525,9 +1538,9 @@ export default function ProductionOrdersPage() {
       return;
     }
     openConfirmDialog({
-      title: 'Approve BOM & Issue Materials',
-      message: `Confirm the formula and BOM for ${selected.batch_number} are correct, then issue all ${detailMaterials.length} materials? Stock will move and this cannot be undone.`,
-      confirmLabel: 'Approve & Issue',
+      title: 'Approve material issue',
+      message: `Approve and issue the planned materials for ${selected.batch_number} (${detailMaterials.length} ingredient lines)? This will record the material issues and move stock; it cannot be undone.`,
+      confirmLabel: 'Approve & Issue Materials',
       destructive: false,
       onConfirm: async () => {
         setSaving(true);
@@ -1544,7 +1557,7 @@ export default function ProductionOrdersPage() {
             supabase.rpc('issue_individual_ingredient', {
               p_material_id: material.id,
               p_actual_qty: material.planned_qty,
-              p_issued_by: profiles.find(p => p.email === 'admin@hyperfeeds.com')?.id || null
+              p_issued_by: profile?.id || null
             })
           );
 
@@ -1568,7 +1581,7 @@ export default function ProductionOrdersPage() {
               p_previous_status: 'pending_finance',
               p_new_status: 'materials_issued',
               p_approved_by: profile?.id || null,
-              p_comments: 'Finance validated formula and BOM, then issued materials.',
+              p_comments: 'Finance approved and issued the planned materials after reviewing the formula and BOM.',
             });
           } catch (logError) {
             console.warn('Failed to log finance BOM approval:', logError);
@@ -2759,7 +2772,7 @@ export default function ProductionOrdersPage() {
                     <ShieldCheck className="w-5 h-5 text-violet-700 shrink-0 mt-0.5" />
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold uppercase tracking-wide text-violet-800">
-                        {canValidateBom ? 'Validate formula and BOM before issue' : 'Waiting for Finance to validate formula and BOM'}
+                        {canValidateBom ? 'Material issue requires your approval' : 'Waiting for Finance to approve material issue'}
                       </div>
                       <p className="mt-1 text-xs text-violet-900">
                         Formula: <span className="font-semibold">{selected.formulations?.name || 'Unknown'}</span>
@@ -2770,8 +2783,8 @@ export default function ProductionOrdersPage() {
                       </p>
                       <p className="mt-1 text-[11px] text-violet-700">
                         {canValidateBom
-                          ? 'Check the formula and each BOM line below. Approving will issue materials to this batch.'
-                          : 'Stock will not move until Finance approves. Production can still view the BOM while waiting.'}
+                          ? 'Review the formula, every material and planned quantity, packaging, and stock availability below. Approving issues these materials to the batch.'
+                          : 'This is a material-issue approval task. Stock will not move until Finance approves; review the planned materials and quantities below.'}
                       </p>
                     </div>
                   </div>
@@ -2851,7 +2864,7 @@ export default function ProductionOrdersPage() {
                     <h3 className="text-sm font-bold text-slate-900">Manufacturing steps</h3>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {selected.status === 'pending' && 'Review the batch and send its formula and BOM to Finance.'}
-                      {selected.status === 'pending_finance' && (canValidateBom ? 'Check the formula and every BOM line. Approval issues the materials.' : 'Finance must check the formula and BOM before stock moves.')}
+                      {selected.status === 'pending_finance' && (canValidateBom ? 'Review every planned material and quantity. Approval authorizes the issue and moves stock.' : 'Finance must approve this material issue before stock moves.')}
                       {selected.status === 'materials_issued' && 'Materials are issued. Production can now start.'}
                       {selected.status === 'in_progress' && 'Record actual output, rejects and wastage, then complete the batch.'}
                       {selected.status === 'completed' && 'Finished-goods receipt is posted. Verify and hand over stock when ready.'}
@@ -2895,7 +2908,7 @@ export default function ProductionOrdersPage() {
                       className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-violet-200 transition-all disabled:opacity-50"
                     >
                       <ShieldCheck className="w-4 h-4" />
-                      Send to Finance to Validate BOM
+                      Request Finance Material-Issue Approval
                     </button>
                   )}
                   {selected.status === 'pending_finance' && canValidateBom && (
@@ -3107,14 +3120,14 @@ export default function ProductionOrdersPage() {
                   const massBalanced = selectedBomMassBalanced;
                   const formula = selected.formulations;
                   return (
-                    <section aria-label="Finance formula and BOM verification" className="overflow-hidden rounded-md border border-violet-200 bg-white">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200 bg-violet-50 px-4 py-3">
+                    <section aria-label="Finance material issue approval review" className="overflow-hidden rounded-md border border-amber-200 bg-white">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3">
                         <div>
-                          <h3 className="text-sm font-bold text-slate-900">Finance formula &amp; BOM verification</h3>
-                          <p className="mt-0.5 text-xs text-slate-600">Review the approved formula, batch basis, ingredient list and packaging before issuing stock.</p>
+                          <h3 className="text-sm font-bold text-slate-900">Material issue approval</h3>
+                          <p className="mt-0.5 text-xs text-slate-600">Review exactly what Production is asking to issue: formula, BOM quantities, packaging and stock availability.</p>
                         </div>
-                        <span className="rounded-md border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800">
-                          {canValidateBom ? 'Finance action required' : 'Awaiting Finance'}
+                        <span className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900">
+                          {canValidateBom ? 'Approve material issue' : 'Finance approval pending'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-4">
@@ -3156,8 +3169,8 @@ export default function ProductionOrdersPage() {
                 })()}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">Formula BOM ingredients</h3>
-                    <p className="text-xs text-slate-500">Line-by-line quantities and stock available for this batch</p>
+                    <h3 className="text-base font-extrabold text-slate-900">Materials requested for issue</h3>
+                    <p className="text-xs text-slate-500">Review each BOM item, planned issue quantity, current stock and cost before approval</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700">

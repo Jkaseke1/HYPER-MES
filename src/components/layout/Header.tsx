@@ -39,6 +39,16 @@ interface IncomingProductionTransfer {
   raw_materials?: { name?: string | null; code?: string | null } | null;
 }
 
+interface FinanceMaterialApproval {
+  id: string;
+  batch_number: string;
+  planned_qty: number;
+  unit: string | null;
+  unit_size: number | null;
+  created_at: string;
+  formulations?: { name?: string | null; code?: string | null } | null;
+}
+
 const sageEventLabels: Record<string, string> = {
   grn_confirmed: 'Goods receipt / GRV',
   material_transfer_to_production: 'Material transfer to Production',
@@ -61,11 +71,14 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const [sageQueue, setSageQueue] = useState<SageQueueItem[]>([]);
   const [loadingSageQueue, setLoadingSageQueue] = useState(true);
   const [incomingProductionTransfers, setIncomingProductionTransfers] = useState<IncomingProductionTransfer[]>([]);
+  const [financeMaterialApprovals, setFinanceMaterialApprovals] = useState<FinanceMaterialApproval[]>([]);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const updateRef = useRef<HTMLDivElement>(null);
   const incomingTransfersLoadedRef = useRef(false);
   const knownIncomingTransferIdsRef = useRef<Set<string>>(new Set());
+  const financeApprovalsLoadedRef = useRef(false);
+  const knownFinanceApprovalIdsRef = useRef<Set<string>>(new Set());
   const sageQueueLoadedRef = useRef(false);
   const knownSageStagesRef = useRef<Map<string, string>>(new Map());
 
@@ -305,6 +318,80 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       refresh.stop();
       incomingTransfersLoadedRef.current = false;
       knownIncomingTransferIdsRef.current = new Set();
+      supabase.removeChannel(channel);
+    };
+  }, [navigate, profile?.role]);
+
+  useEffect(() => {
+    const financeRoles = ['admin', 'finance', 'accountant'];
+    if (!financeRoles.includes(profile?.role || '')) {
+      setFinanceMaterialApprovals([]);
+      financeApprovalsLoadedRef.current = false;
+      knownFinanceApprovalIdsRef.current = new Set();
+      return;
+    }
+
+    let isMounted = true;
+    let reading = false;
+    async function loadFinanceApprovals() {
+      if (!canRefreshInBackground() || reading) return;
+      reading = true;
+      const { data, error } = await Promise.resolve(supabase
+        .from('production_orders')
+        .select('id, batch_number, planned_qty, unit, unit_size, created_at, formulations(name, code)')
+        .eq('status', 'pending_finance')
+        .order('created_at', { ascending: true })
+        .limit(20))
+        .finally(() => { reading = false; });
+      if (error) {
+        console.warn('Unable to load Finance material-issue approvals:', error.message);
+        return;
+      }
+      if (!isMounted) return;
+
+      const approvals = (data || []) as FinanceMaterialApproval[];
+      const nextIds = new Set(approvals.map((order) => order.id));
+      const newlySubmitted = approvals.filter((order) => !knownFinanceApprovalIdsRef.current.has(order.id));
+      const isInitialLoad = !financeApprovalsLoadedRef.current;
+      knownFinanceApprovalIdsRef.current = nextIds;
+      financeApprovalsLoadedRef.current = true;
+      setFinanceMaterialApprovals(approvals);
+
+      if (!isInitialLoad && newlySubmitted.length) {
+        const order = newlySubmitted[0];
+        toast.custom((notification) => (
+          <div className="w-[390px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-amber-200 bg-white shadow-2xl">
+            <div className="h-1 bg-amber-500" />
+            <div className="p-4">
+              <p className="text-[11px] font-bold uppercase text-amber-800">Finance action required</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">Approve material issue · {order.batch_number}</p>
+              <p className="mt-1 text-xs text-slate-600">Review the formula, BOM quantities, stock and planned issue before approving.</p>
+              <button type="button" onClick={() => { toast.dismiss(notification.id); navigate('/production-orders', { state: { financeMaterialOrderId: order.id } }); }} className="mt-3 w-full rounded-md bg-amber-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-amber-800">Review material issue</button>
+            </div>
+          </div>
+        ), { duration: 12000 });
+      }
+    }
+
+    loadFinanceApprovals();
+    const refresh = startBackgroundRefresh(loadFinanceApprovals, refreshIntervals.operational);
+    const channel = supabase
+      .channel('header-finance-material-approvals')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, (payload) => {
+        if (payload.new && (payload.new as any).status !== 'pending_finance') {
+          const id = (payload.new as any).id;
+          knownFinanceApprovalIdsRef.current.delete(id);
+          setFinanceMaterialApprovals((current) => current.filter((order) => order.id !== id));
+        }
+        refresh.request();
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      refresh.stop();
+      financeApprovalsLoadedRef.current = false;
+      knownFinanceApprovalIdsRef.current = new Set();
       supabase.removeChannel(channel);
     };
   }, [navigate, profile?.role]);
@@ -602,7 +689,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5 text-slate-500" />
-            {(notifications.length > 0 || sageQueue.length > 0 || incomingProductionTransfers.length > 0) && (
+            {(notifications.length > 0 || sageQueue.length > 0 || incomingProductionTransfers.length > 0 || financeMaterialApprovals.length > 0) && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
             )}
           </button>
@@ -613,9 +700,25 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                   <p className="text-sm font-semibold text-slate-900">Notifications</p>
                   <p className="text-xs text-slate-500">Operational activity requiring attention</p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{notifications.length + sageQueue.length + incomingProductionTransfers.length}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{notifications.length + sageQueue.length + incomingProductionTransfers.length + financeMaterialApprovals.length}</span>
               </div>
               <div className="max-h-[420px] space-y-2 overflow-y-auto p-3">
+                {financeMaterialApprovals.map((order) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => { setOpen(false); navigate('/production-orders', { state: { financeMaterialOrderId: order.id } }); }}
+                    className="w-full rounded-md border border-amber-300 bg-amber-50 p-3 text-left transition-colors hover:border-amber-400 hover:bg-amber-100"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase text-amber-800"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Material issue awaiting approval</span>
+                      <span className="text-[11px] text-amber-800">{formatDate(order.created_at)}</span>
+                    </div>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{order.batch_number}</p>
+                    <p className="mt-0.5 text-xs text-slate-700">{order.formulations?.name || order.formulations?.code || 'Production batch'} · {Number(order.planned_qty).toLocaleString()} {order.unit || 'kg'}</p>
+                    <p className="mt-2 text-xs font-semibold text-amber-900">Open formula, BOM and issue quantities <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></p>
+                  </button>
+                ))}
                 {incomingProductionTransfers.map((transfer) => (
                   <button
                     key={transfer.id}
@@ -682,7 +785,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading alerts...
                   </div>
                 )}
-                {!loadingNotifications && !loadingSageQueue && notifications.length === 0 && sageQueue.length === 0 && incomingProductionTransfers.length === 0 && (
+                {!loadingNotifications && !loadingSageQueue && notifications.length === 0 && sageQueue.length === 0 && incomingProductionTransfers.length === 0 && financeMaterialApprovals.length === 0 && (
                   <p className="text-xs text-slate-400 text-center py-4">No alerts logged yet.</p>
                 )}
                 {notifications.map((notification) => (
