@@ -1307,7 +1307,7 @@ export default function ProductionOrdersPage() {
         .eq('production_order_id', order.id),
       supabase
         .from('production_order_packaging')
-        .select('id, item_code, description, unit, planned_qty, actual_qty, unit_cost')
+        .select('id, packaging_sku_id, item_code, description, unit, planned_qty, actual_qty, unit_cost, packaging_skus(bag_size_kg)')
         .eq('production_order_id', order.id)
         .order('created_at', { ascending: true }),
       supabase.from('production_logs').select('*').eq('production_order_id', order.id).order('started_at', { ascending: true }),
@@ -1906,7 +1906,28 @@ export default function ProductionOrdersPage() {
             implied_tonnes: a.implied_tonnes || 0,
           }));
         if (pkgData.length > 0) {
-          await supabase.from('batch_packaging_used').insert(pkgData);
+          const { error: packagingUseError } = await supabase.from('batch_packaging_used').insert(pkgData);
+          if (packagingUseError) {
+            console.error('Packaging usage history could not be recorded:', packagingUseError);
+            toast.error('Packaging usage history could not be recorded. Check the order packaging summary.');
+          }
+          const packagingUpdates = await Promise.all(pkgData.map((item) =>
+            supabase
+              .from('production_order_packaging')
+              .update({ actual_qty: item.bags_used })
+              .eq('production_order_id', selected.id)
+              .eq('packaging_sku_id', item.packaging_sku_id)
+          ));
+          const packagingUpdateError = packagingUpdates.find((result) => result.error)?.error;
+          if (packagingUpdateError) {
+            console.error('Packaging usage was recorded, but the order summary could not be updated:', packagingUpdateError);
+            toast.error('Packaging usage was saved, but the order packaging summary did not update.');
+          } else {
+            setOrderPackaging((current) => current.map((item) => {
+              const used = pkgData.find((actual) => actual.packaging_sku_id === item.packaging_sku_id);
+              return used ? { ...item, actual_qty: used.bags_used } : item;
+            }));
+          }
         }
       }
 
@@ -3886,6 +3907,7 @@ export default function ProductionOrdersPage() {
                 formulationName={getOrderFormulationName(selected)}
                 onSave={handlePkgConfirm}
                 disabled={saving}
+                selectedPackaging={orderPackaging}
               />
             )}
           </div>
