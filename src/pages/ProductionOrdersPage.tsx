@@ -204,6 +204,7 @@ export default function ProductionOrdersPage() {
   const [sageCompletionStatus, setSageCompletionStatus] = useState<SageIssueStatus | null>(null);
   const [retryingSageCompletion, setRetryingSageCompletion] = useState(false);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
+  const sageIssueStatusesRef = useRef(sageIssueStatuses);
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
   const notifiedSageIssueRef = useRef<Record<string, string>>({});
   const notifiedSageCompletionRef = useRef<Record<string, string>>({});
@@ -585,20 +586,27 @@ export default function ProductionOrdersPage() {
     // The order refresh above also refreshes this summary; no second list timer.
   }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
+  useEffect(() => {
+    sageIssueStatusesRef.current = sageIssueStatuses;
+  }, [sageIssueStatuses]);
+
   // Realtime is the primary status path. Reconcile unsettled issue events every
   // 15 seconds so a dropped/filtered websocket event cannot leave the table queued.
   useEffect(() => {
-    const activeOrderIds = orders
+    const orderIds = orders
       .filter((order) => ['materials_issued', 'in_progress'].includes(order.status))
-      .filter((order) => !['success', 'failed'].includes(sageIssueStatuses[order.id]?.status || ''))
       .map((order) => order.id)
       .filter(Boolean);
-    if (!activeOrderIds.length) return;
+    if (!orderIds.length) return;
 
-    const refreshActiveIssueStatuses = () => loadSageIssueStatuses(activeOrderIds);
-    void refreshActiveIssueStatuses();
+    const refreshActiveIssueStatuses = () => {
+      const unsettledOrderIds = orderIds.filter((orderId) =>
+        !['success', 'failed'].includes(sageIssueStatusesRef.current[orderId]?.status || '')
+      );
+      if (unsettledOrderIds.length) void loadSageIssueStatuses(unsettledOrderIds);
+    };
     return startBackgroundPolling(refreshActiveIssueStatuses, 15000);
-  }, [orders, sageIssueStatuses, loadSageIssueStatuses]);
+  }, [orders, loadSageIssueStatuses]);
 
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
