@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck, Eye, Power, UserRound } from 'lucide-react';
+import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck, Eye, Power, UserRound, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -209,6 +210,7 @@ export default function FormulationsPage() {
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activatingFormulationId, setActivatingFormulationId] = useState<string | null>(null);
   const currentFormulaMaterialIds = new Set(detailIngs.map((ingredient) => ingredient.raw_material_id));
   const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
 
@@ -1223,6 +1225,7 @@ export default function FormulationsPage() {
                                   return (
                                     <button
                                       onClick={async () => {
+                                        let notificationId: string | undefined;
                                         try {
                                           const { error } = await supabase
                                             .from('formulations')
@@ -1263,8 +1266,8 @@ export default function FormulationsPage() {
                                           await openEdit(f);
                                           return;
                                         }
-                                        const { data: { user } } = await supabase.auth.getUser();
-
+                                        setActivatingFormulationId(f.id);
+                                        notificationId = toast.loading(`Activating ${f.code} v${f.version}…`);
                                         const { data: previousActive, error: lookupError } = await supabase
                                           .from('formulations')
                                           .select('id')
@@ -1301,21 +1304,29 @@ export default function FormulationsPage() {
                                           throw activateError;
                                         }
 
-                                        setToastMessage(`"${f.name}" v${f.version} is saved as active and available to Production.`);
-                                        setTimeout(() => setToastMessage(null), 4000);
-                                        await fetchFormulations();
+                                        toast.success(`${f.name} v${f.version} is active and available to Production.`, {
+                                          id: notificationId,
+                                          duration: 5000,
+                                          style: { border: '1px solid #0f766e', borderRadius: '12px' },
+                                        });
+                                        void fetchFormulations();
                                       } catch (err: any) {
                                         console.error('Set active error:', err);
-                                        alert(`Could not activate formula: ${err.message || err}`);
+                                        toast.error(`Could not activate formula: ${err.message || err}`, { id: notificationId, duration: 6000 });
+                                      } finally {
+                                        setActivatingFormulationId(null);
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors whitespace-nowrap"
+                                    disabled={activatingFormulationId !== null}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-70"
                                     title="Set as Finance-Approved Active Formulation for Today"
                                     role="switch"
                                     aria-checked={false}
                                     aria-label={`Active today for ${f.name}`}
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate today
+                                    {activatingFormulationId === f.id
+                                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Activating…</>
+                                      : <><CheckCircle2 className="h-3.5 w-3.5" /> Activate today</>}
                                   </button>
                                 );
                               })()}
