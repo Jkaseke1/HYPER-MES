@@ -229,61 +229,69 @@ export default function FormulationsPage() {
     return true;
   });
 
-  const fetchFormulations = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('formulations').select('*').order('name');
-    setFormulations(data || []);
-    setSelected((current) => current
-      ? (data || []).find((formula) => formula.id === current.id) || current
-      : current);
+  const fetchFormulations = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const { data, error } = await supabase.from('formulations').select('*').order('name');
+      if (error) throw error;
+      const formulas = data || [];
+      setFormulations(formulas);
+      setSelected((current) => current
+        ? formulas.find((formula) => formula.id === current.id) || current
+        : current);
 
-    const editorIds = [...new Set((data || [])
-      .map((formula) => formula.updated_by)
-      .filter((id): id is string => Boolean(id)))];
-    if (editorIds.length) {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', editorIds);
-      setFormulationEditors(Object.fromEntries((profiles || []).map((profile) => [
-        profile.id,
-        profile.full_name?.trim() || profile.email || 'Unknown user',
-      ])));
-    } else {
-      setFormulationEditors({});
+      const editorIds = [...new Set(formulas
+        .map((formula) => formula.updated_by)
+        .filter((id): id is string => Boolean(id)))];
+      if (editorIds.length) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', editorIds);
+        if (!profilesError) {
+          setFormulationEditors(Object.fromEntries((profiles || []).map((profile) => [
+            profile.id,
+            profile.full_name?.trim() || profile.email || 'Unknown user',
+          ])));
+        }
+      } else {
+        setFormulationEditors({});
+      }
+
+      if (formulas.length > 0) {
+        const { data: ingredientData, error: ingredientsError } = await supabase
+          .from('formulation_ingredients')
+          .select('formulation_id, quantity, is_active')
+          .in('formulation_id', formulas.map((formula) => formula.id));
+        if (ingredientsError) throw ingredientsError;
+
+        const counts: Record<string, number> = {};
+        const totals: Record<string, number> = {};
+        ingredientData?.forEach(ing => {
+          counts[ing.formulation_id] = (counts[ing.formulation_id] || 0) + 1;
+          if (ing.is_active) totals[ing.formulation_id] = (totals[ing.formulation_id] || 0) + (Number(ing.quantity) || 0);
+        });
+        setFormulationIngredientCounts(counts);
+        const readiness: Record<string, FormulaReadiness> = {};
+        formulas.forEach((formula) => {
+          const ingredientTotalKg = totals[formula.id] || 0;
+          const varianceKg = ingredientTotalKg - Number(formula.batch_size || 0);
+          readiness[formula.id] = {
+            ingredientTotalKg,
+            varianceKg,
+            isBalanced: ingredientTotalKg > 0 && Math.abs(varianceKg) <= 0.01,
+          };
+        });
+        setFormulaReadiness(readiness);
+      } else {
+        setFormulationIngredientCounts({});
+        setFormulaReadiness({});
+      }
+    } catch (error) {
+      console.error('Failed to refresh formulations:', error);
+    } finally {
+      if (showLoading) setLoading(false);
     }
-    
-    // Fetch ingredient counts for each formulation
-    if (data && data.length > 0) {
-      const { data: ingredientData } = await supabase
-        .from('formulation_ingredients')
-        .select('formulation_id, quantity, is_active')
-        .in('formulation_id', data.map((formula) => formula.id));
-      
-      const counts: Record<string, number> = {};
-      const totals: Record<string, number> = {};
-      ingredientData?.forEach(ing => {
-        counts[ing.formulation_id] = (counts[ing.formulation_id] || 0) + 1;
-        if (ing.is_active) totals[ing.formulation_id] = (totals[ing.formulation_id] || 0) + (Number(ing.quantity) || 0);
-      });
-      setFormulationIngredientCounts(counts);
-      const readiness: Record<string, FormulaReadiness> = {};
-      data.forEach((formula) => {
-        const ingredientTotalKg = totals[formula.id] || 0;
-        const varianceKg = ingredientTotalKg - Number(formula.batch_size || 0);
-        readiness[formula.id] = {
-          ingredientTotalKg,
-          varianceKg,
-          isBalanced: ingredientTotalKg > 0 && Math.abs(varianceKg) <= 0.01,
-        };
-      });
-      setFormulaReadiness(readiness);
-    } else {
-      setFormulationIngredientCounts({});
-      setFormulaReadiness({});
-    }
-    
-    setLoading(false);
   }, []);
 
   const fetchMaterials = useCallback(async () => {
@@ -305,7 +313,7 @@ export default function FormulationsPage() {
     setCategories((data as { code: string; name: string }[]) || []);
   }, []);
 
-  useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
+  useEffect(() => { fetchFormulations(true); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
   
   const formulaGroups: FormulaGroup[] = Array.from(
     filtered.reduce((groups, formulation) => {
