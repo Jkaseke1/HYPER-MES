@@ -2280,7 +2280,7 @@ export default function ProductionOrdersPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 bg-slate-50 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#e8f2f1] space-y-4">
           {workflowError && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md">
               <div className="flex items-center gap-2 text-red-800">
@@ -2290,15 +2290,15 @@ export default function ProductionOrdersPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-y border-slate-200 bg-white px-4 py-3 text-sm">
-            <div><span className="text-slate-500">Planned output</span><strong className="ml-2 text-slate-900">{Number(form.planned_qty || 0).toLocaleString()} kg</strong></div>
-            <div><span className="text-slate-500">Bags</span><strong className="ml-2 text-slate-900">{Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 50) || 0)} × {form.unit_size || 50} kg</strong></div>
-            <div><span className="text-slate-500">Formula items</span><strong className="ml-2 text-slate-900">{bomPreview.length}</strong></div>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-md border-b-2 border-orange-500 bg-[#10283d] px-4 py-3 text-sm shadow-sm">
+            <div><span className="text-teal-100/75">Planned output</span><strong className="ml-2 text-white">{Number(form.planned_qty || 0).toLocaleString()} kg</strong></div>
+            <div><span className="text-teal-100/75">Bags</span><strong className="ml-2 text-white">{Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 50) || 0)} × {form.unit_size || 50} kg</strong></div>
+            <div><span className="text-teal-100/75">Formula items</span><strong className="ml-2 text-orange-300">{bomPreview.length}</strong></div>
           </div>
 
           {/* Core Order Setup Card */}
-          <div className="border border-slate-200 bg-white p-4 sm:p-5 space-y-4 rounded-md">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="border border-teal-200 bg-[#f2f8f7] p-4 sm:p-5 space-y-4 rounded-md shadow-sm">
+            <div className="flex items-center justify-between border-b border-teal-200 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">1</div>
                 <h3 className="text-sm font-bold text-slate-900">Batch details</h3>
@@ -2423,12 +2423,12 @@ export default function ProductionOrdersPage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-md border border-teal-200 bg-[#f2f8f7] shadow-sm">
             <button
               type="button"
               aria-expanded={showOptionalSchedule}
               onClick={() => setShowOptionalSchedule((shown) => !shown)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-teal-50"
             >
               <span>
                 <span className="block text-sm font-semibold text-slate-900">Schedule & crew</span>
@@ -2437,7 +2437,7 @@ export default function ProductionOrdersPage() {
               <span className="text-xs font-semibold text-teal-700">{showOptionalSchedule ? 'Hide details' : 'Add details'}</span>
             </button>
 
-            {showOptionalSchedule && <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 md:grid-cols-3">
+            {showOptionalSchedule && <div className="grid grid-cols-1 gap-4 border-t border-teal-200 px-4 py-4 md:grid-cols-3">
               <div>
                 <label className={labelCls}>Priority</label>
                 <select
@@ -2513,7 +2513,7 @@ export default function ProductionOrdersPage() {
           </div>
 
           {bomPreview.length > 0 && selectedFormulation && (
-            <div className="space-y-3 border border-slate-200 bg-white p-4 rounded-md">
+            <div className="space-y-3 border border-teal-200 bg-[#f2f8f7] p-4 rounded-md shadow-sm">
               {(() => {
                 const premixLines = bomPreview.filter((ingredient: any) =>
                   /premix/i.test(`${ingredient.code || ''} ${ingredient.name || ''}`)
@@ -2666,19 +2666,19 @@ export default function ProductionOrdersPage() {
           )}
           </div>
 
-          <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 border-t bg-white px-4 sm:px-5 py-3">
-            <p className="text-xs text-slate-500">Finance-activated formula required. Review BOM and packaging before creating.</p>
+          <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 border-t-2 border-orange-500 bg-[#10283d] px-4 sm:px-5 py-3">
+            <p className="text-xs text-teal-100/80">Finance-activated formula required. Review BOM and packaging before creating.</p>
             <div className="flex justify-end gap-2">
             <button
               onClick={() => setShowCreate(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-white bg-white/10 border border-white/30 rounded-md hover:bg-white/20 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={createOrder}
               disabled={saving || !form.machine_id}
-              className="px-4 py-2 text-sm font-semibold text-white bg-teal-700 rounded-md hover:bg-teal-800 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-semibold text-[#10283d] bg-orange-400 rounded-md hover:bg-orange-300 transition-colors disabled:opacity-50"
             >
               {saving ? 'Creating...' : 'Create Order'}
             </button>
