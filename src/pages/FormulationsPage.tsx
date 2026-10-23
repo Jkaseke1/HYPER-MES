@@ -19,6 +19,31 @@ function formulaNameForBagSize(name: string, bagSize: string): string {
   return [baseName, numericSize ? `${numericSize}kg` : value].filter(Boolean).join(' ');
 }
 
+function showFormulaNotice(message: string) {
+  toast.custom((notification) => (
+    <div
+      role="status"
+      className={`flex w-[min(420px,calc(100vw-2rem))] items-start gap-3 rounded-xl border border-emerald-200 bg-white p-4 text-slate-800 shadow-xl transition-all ${notification.visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'}`}
+    >
+      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+        <CheckCircle2 className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] font-bold uppercase tracking-wide text-emerald-700">Formula update</span>
+        <span className="mt-0.5 block text-sm font-medium leading-5 text-slate-700">{message}</span>
+      </span>
+      <button
+        type="button"
+        onClick={() => toast.dismiss(notification.id)}
+        className="-mr-1 -mt-1 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  ), { duration: 4000, position: 'top-right' });
+}
+
 type UnitSizeVariant = { size: string; batch_size: number };
 const STANDARD_FORMULA_BATCH_KG = 1000;
 
@@ -210,7 +235,6 @@ export default function FormulationsPage() {
   const [bomEditIngs, setBomEditIngs] = useState<FormulationIngredient[]>([]);
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activatingFormulationId, setActivatingFormulationId] = useState<string | null>(null);
   const currentFormulaMaterialIds = new Set(detailIngs.map((ingredient) => ingredient.raw_material_id));
   const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
@@ -711,7 +735,7 @@ export default function FormulationsPage() {
       }
 
       setEditOpen(false);
-      setToastMessage(`Formula ${form.code} v${form.version} saved and BOM generated from the formula.`);
+      showFormulaNotice(`Formula ${form.code} v${form.version} saved and BOM generated from the formula.`);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving formulation:', error);
@@ -797,8 +821,7 @@ export default function FormulationsPage() {
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
-      setToastMessage(`BOM updated on draft v${selected.version}. Total formulation percentage normalized to 100%.`);
-      setTimeout(() => setToastMessage(null), 4000);
+      showFormulaNotice(`BOM updated on draft v${selected.version}. Total formulation percentage normalized to 100%.`);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving BOM:', error);
@@ -928,12 +951,6 @@ export default function FormulationsPage() {
 
   return (
     <div className="formula-page p-6 space-y-6">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 border border-emerald-500 animate-bounce">
-          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
-          <span className="text-sm font-extrabold">{toastMessage}</span>
-        </div>
-      )}
       {!isFinanceUser && (
         <div className="bg-slate-900 border border-slate-700 text-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
@@ -1241,8 +1258,7 @@ export default function FormulationsPage() {
                                             .eq('id', f.id);
                                           if (error) throw error;
 
-                                          setToastMessage(`Formulation "${f.name}" deactivated for all users.`);
-                                          setTimeout(() => setToastMessage(null), 3000);
+                                          showFormulaNotice(`Formulation "${f.name}" deactivated for all users.`);
                                           await fetchFormulations();
                                         } catch (err: any) {
                                           console.error('Deactivate error:', err);
@@ -1821,8 +1837,7 @@ export default function FormulationsPage() {
                               copy[maxIdx].percentage = Math.round((copy[maxIdx].percentage + diff) * 1000) / 1000;
                             }
                             setBomEditIngs(copy);
-                            setToastMessage("📦 Bulk Raw Materials normalized to 100% Bulk Matrix!");
-                            setTimeout(() => setToastMessage(null), 3000);
+                            showFormulaNotice('Bulk Raw Materials normalized to 100% Bulk Matrix.');
                           }
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition-all active:scale-95"
@@ -1860,8 +1875,7 @@ export default function FormulationsPage() {
                               copy[maxIdx].percentage = Math.round((copy[maxIdx].percentage + diff) * 1000) / 1000;
                             }
                             setBomEditIngs(copy);
-                            setToastMessage("⚡ All ingredients (Bulk + Premix) normalized to 100% Total Matrix!");
-                            setTimeout(() => setToastMessage(null), 3000);
+                            showFormulaNotice('All ingredients (Bulk + Premix) normalized to 100% Total Matrix.');
                           }
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-800 border border-sky-300 rounded-lg text-xs font-bold transition-all active:scale-95"
