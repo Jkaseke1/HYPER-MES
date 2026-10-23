@@ -6,8 +6,17 @@ import Modal from '../components/ui/Modal';
 import './formula-editor.css';
 import './formulations-page.css';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+function formulaNameForBagSize(name: string, bagSize: string): string {
+  const baseName = String(name || '').trim().replace(/\s+\d+(?:\.\d+)?\s*kg\s*$/i, '').trim();
+  const value = String(bagSize || '').trim();
+  if (!value) return baseName;
+  const numericSize = value.match(/^(\d+(?:\.\d+)?)\s*(?:kg)?$/i)?.[1];
+  return [baseName, numericSize ? `${numericSize}kg` : value].filter(Boolean).join(' ');
+}
 
 type UnitSizeVariant = { size: string; batch_size: number };
 const STANDARD_FORMULA_BATCH_KG = 1000;
@@ -64,6 +73,18 @@ type FormulaGroup = {
   current: Formulation;
   versions: Formulation[];
 };
+
+function compareFormulaVersions(a: Formulation, b: Formulation) {
+  const versionDifference = Number(b.version || 0) - Number(a.version || 0);
+  if (versionDifference) return versionDifference;
+  return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+}
+
+function compareFormulaGroups(a: FormulaGroup, b: FormulaGroup) {
+  const activityDifference = new Date(b.current.updated_at || b.current.created_at).getTime()
+    - new Date(a.current.updated_at || a.current.created_at).getTime();
+  return activityDifference || a.current.name.localeCompare(b.current.name);
+}
 
 function formatFormulaEditorDate(value?: string | null) {
   if (!value) return 'Date not recorded';
@@ -209,6 +230,9 @@ export default function FormulationsPage() {
     setLoading(true);
     const { data } = await supabase.from('formulations').select('*').order('name');
     setFormulations(data || []);
+    setSelected((current) => current
+      ? (data || []).find((formula) => formula.id === current.id) || current
+      : current);
 
     const editorIds = [...new Set((data || [])
       .map((formula) => formula.updated_by)
@@ -230,7 +254,8 @@ export default function FormulationsPage() {
     if (data && data.length > 0) {
       const { data: ingredientData } = await supabase
         .from('formulation_ingredients')
-        .select('formulation_id, quantity, is_active');
+        .select('formulation_id, quantity, is_active')
+        .in('formulation_id', data.map((formula) => formula.id));
       
       const counts: Record<string, number> = {};
       const totals: Record<string, number> = {};
@@ -288,9 +313,9 @@ export default function FormulationsPage() {
       return groups;
     }, new Map<string, FormulaGroup>()).values(),
   ).map(group => {
-    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    const versions = [...group.versions].sort(compareFormulaVersions);
     return { ...group, current: versions[0], versions };
-  });
+  }).sort(compareFormulaGroups);
 
   // The version picker should show one product/formula entry at a time. Older
   // versions remain available from the history control after a formula is
@@ -304,9 +329,9 @@ export default function FormulationsPage() {
       return groups;
     }, new Map<string, FormulaGroup>()).values(),
   ).map(group => {
-    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    const versions = [...group.versions].sort(compareFormulaVersions);
     return { ...group, current: versions[0], versions };
-  });
+  }).sort(compareFormulaGroups);
 
   const withIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) > 0);
   const withoutIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) === 0);
@@ -341,6 +366,23 @@ export default function FormulationsPage() {
     setDetailPkgItems(pkgRes.data || []);
     setDetailOpen(true);
   }
+
+  useRealtimeRefresh('formulations-bom-live', [
+    'formulations',
+    'formulation_ingredients',
+    'production_bom_packaging',
+  ], async () => {
+    await fetchFormulations();
+    if (!detailOpen || !selected || bomEditMode) return;
+
+    const [ingredients, packaging] = await Promise.all([
+      supabase.from('formulation_ingredients').select('*, raw_materials(*)')
+        .eq('formulation_id', selected.id).order('sort_order'),
+      supabase.from('production_bom_packaging').select('*').eq('formulation_id', selected.id),
+    ]);
+    setDetailIngs(ingredients.data || []);
+    setDetailPkgItems(packaging.data || []);
+  }, 700);
 
   function openNew() {
     setEditId(null);
@@ -866,7 +908,7 @@ export default function FormulationsPage() {
   const financeReviewQueue = formulations.filter((formula) => {
     const readiness = formulaReadiness[formula.id];
     return !readiness?.isBalanced || formula.status !== 'active';
-  });
+  }).sort(compareFormulaVersions);
 
   const { profile, user } = useAuth();
   const userRole = (profile?.role || '').toLowerCase();
@@ -1992,7 +2034,12 @@ export default function FormulationsPage() {
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
-              <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
+              <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => {
+                const size = e.target.value;
+                const variants = [...form.unit_size_variants];
+                variants[0] = { ...(variants[0] || { size: '', batch_size: Number(form.batch_size) || STANDARD_FORMULA_BATCH_KG }), size };
+                setForm(current => ({ ...current, name: formulaNameForBagSize(current.name, size), unit_size_variants: variants }));
+              }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 25" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference batch (kg) *</label>
               <input type="number" min="0.01" step="0.01" value={form.batch_size} onChange={e => updateReferenceBatchSize(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000.00" />
               </div>
