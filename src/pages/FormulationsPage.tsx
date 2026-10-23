@@ -382,7 +382,7 @@ export default function FormulationsPage() {
     ]);
     setDetailIngs(ingredients.data || []);
     setDetailPkgItems(packaging.data || []);
-  }, 700);
+  }, 350, 1000);
 
   function openNew() {
     setEditId(null);
@@ -1216,24 +1216,21 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
                               {isFinanceUser && (() => {
-                                const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
-                                const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
+                                // The database status is shared by Finance and Production.
+                                const isActiveToday = Boolean((f as any).is_daily_active);
 
                                 if (isActiveToday) {
                                   return (
                                     <button
                                       onClick={async () => {
                                         try {
-                                          const updatedActiveIds = activeIds.filter(id => id !== f.id);
-                                          
                                           const { error } = await supabase
                                             .from('formulations')
-                                            .update({ status: 'draft', updated_at: new Date().toISOString(), ...(user?.id ? { updated_by: user.id } : {}) })
+                                            .update({ is_daily_active: false, status: 'draft', updated_at: new Date().toISOString(), ...(user?.id ? { updated_by: user.id } : {}) })
                                             .eq('id', f.id);
                                           if (error) throw error;
-                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
 
-                                          setToastMessage(`Formulation "${f.name}" deactivated.`);
+                                          setToastMessage(`Formulation "${f.name}" deactivated for all users.`);
                                           setTimeout(() => setToastMessage(null), 3000);
                                           await fetchFormulations();
                                         } catch (err: any) {
@@ -1268,28 +1265,14 @@ export default function FormulationsPage() {
                                         }
                                         const { data: { user } } = await supabase.auth.getUser();
 
-                                        // Update status and approved_by in Supabase
-                                        const { error: updateErr } = await supabase
-                                          .from('formulations')
-                                          .update({
-                                            status: 'active',
-                                            approved_by: user?.id || null,
-                                            updated_at: new Date().toISOString(),
-                                          ...(user?.id ? { updated_by: user.id } : {}),
-                                          })
-                                          .eq('id', f.id);
+                                        const { error: activateErr } = await supabase.rpc('set_daily_active_formulation', {
+                                          p_formulation_id: f.id,
+                                          p_approved_by: user?.id || null,
+                                          p_notes: '',
+                                        });
+                                        if (activateErr) throw activateErr;
 
-                                        if (updateErr) {
-                                          throw updateErr;
-                                        }
-
-                                        // Track daily active formulation in storage
-                                        if (!activeIds.includes(f.id)) {
-                                          activeIds.push(f.id);
-                                          localStorage.setItem('daily_active_formulations', JSON.stringify(activeIds));
-                                        }
-
-                                        setToastMessage(`✨ "${f.name} (v${f.version})" is now ACTIVE for Today's Production!`);
+                                        setToastMessage(`"${f.name}" v${f.version} is saved as active and available to Production.`);
                                         setTimeout(() => setToastMessage(null), 4000);
                                         await fetchFormulations();
                                       } catch (err: any) {

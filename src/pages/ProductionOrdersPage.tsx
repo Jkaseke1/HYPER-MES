@@ -15,6 +15,7 @@ import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 interface OrderMaterial {
   id: string; 
@@ -141,6 +142,19 @@ export default function ProductionOrdersPage() {
   const canValidateBom = FINANCE_BOM_ROLES.includes(profile?.role || '');
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [formulations, setFormulations] = useState<Formulation[]>([]);
+  const refreshActiveFormulations = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('formulations')
+      .select('*')
+      .eq('status', 'active')
+      .eq('is_daily_active', true)
+      .order('version', { ascending: false });
+    if (error) {
+      console.warn('Could not refresh finance-activated formulations:', error);
+      return;
+    }
+    setFormulations((data as Formulation[]) || []);
+  }, []);
   const [productionLines, setProductionLines] = useState<ProductionLine[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tab, setTab] = useState<TabFilter>('all');
@@ -893,17 +907,18 @@ export default function ProductionOrdersPage() {
   const canStartProduction = selectedSageIssue?.status === 'success';
   useEffect(() => {
     Promise.all([
-      supabase.from('formulations').select('*').eq('status', 'active'),
       supabase.from('machines').select('*').eq('is_active', true),
       supabase.from('profiles').select('*'),
       supabase.from('production_plans').select('*').order('created_at', { ascending: false }),
-    ]).then(([f, m, p, pl]) => {
-      setFormulations((f.data as Formulation[]) || []);
+    ]).then(([m, p, pl]) => {
       setProductionLines((m.data as ProductionLine[]) || []);
       setProfiles((p.data as Profile[]) || []);
       setPlans((pl.data as ProductionPlan[]) || []);
     });
   }, []);
+
+  useEffect(() => { void refreshActiveFormulations(); }, [refreshActiveFormulations]);
+  useRealtimeRefresh('production-order-active-formulations', ['formulations'], refreshActiveFormulations, 350, 1000);
 
   const openCreate = async () => { 
     const batchNumber = await peekProductionBatchNumber();
@@ -2314,10 +2329,10 @@ export default function ProductionOrdersPage() {
               <div>
                 <label className={labelCls}>Product Formulation * (Finance Activated Only)</label>
                 {(() => {
-                  const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
-                  const dailyActiveFormulations = formulations.filter(
-                    f => activeIds.includes(f.id) || (f as any).is_daily_active === true
-                  );
+                  const dailyActiveFormulations = formulations
+                    .filter(f => f.status === 'active' && (f as any).is_daily_active === true)
+                    .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0)
+                      || a.name.localeCompare(b.name));
 
                   return (
                     <div>
@@ -2327,7 +2342,7 @@ export default function ProductionOrdersPage() {
                         className={`${inputCls} font-bold text-slate-900 focus:ring-2 focus:ring-teal-500`}
                         required
                       >
-                        <option value="">Select Finance-Activated formulation for today's run...</option>
+                        <option value="">Select a Finance-activated formulation...</option>
                         {dailyActiveFormulations.map((f) => (
                           <option key={f.id} value={f.id}>
                             ✨ {f.code} — {f.name} (v{f.version}) [Finance Active Today]
@@ -2336,8 +2351,8 @@ export default function ProductionOrdersPage() {
                       </select>
                       {dailyActiveFormulations.length === 0 && (
                         <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
-                          <p className="font-bold">🔒 No Formulations Currently Active for Today</p>
-                          <p>Finance (Jonga) has not activated any BOM versions on the Formulations page for today's run. Please ask Finance to set active BOMs.</p>
+                          <p className="font-bold">No active formulations available</p>
+                          <p>Finance must save and activate a balanced formula before Production can create an order.</p>
                         </div>
                       )}
                     </div>
