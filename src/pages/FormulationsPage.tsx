@@ -1225,7 +1225,6 @@ export default function FormulationsPage() {
                                   return (
                                     <button
                                       onClick={async () => {
-                                        let notificationId: string | undefined;
                                         try {
                                           const { error } = await supabase
                                             .from('formulations')
@@ -1255,6 +1254,7 @@ export default function FormulationsPage() {
                                 return (
                                   <button
                                     onClick={async () => {
+                                      let notificationId: string | undefined;
                                       try {
                                         if (!isFinanceUser) {
                                           alert('Only Finance can approve a formula for production.');
