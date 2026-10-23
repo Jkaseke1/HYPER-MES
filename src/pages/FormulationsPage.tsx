@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck, Eye, Power, UserRound, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
@@ -175,6 +175,7 @@ export function getIngredientTypeCode(name: string, code: string): { isPremix: b
 }
 
 export default function FormulationsPage() {
+  const activationInFlight = useRef(new Set<string>());
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
   const [categories, setCategories] = useState<{ code: string; name: string }[]>(DEFAULT_CATEGORIES);
@@ -1254,7 +1255,9 @@ export default function FormulationsPage() {
                                 return (
                                   <button
                                     onClick={async () => {
-                                      let notificationId: string | undefined;
+                                      if (activationInFlight.current.has(f.id)) return;
+                                      activationInFlight.current.add(f.id);
+                                      const notificationId = `formula-activation-${f.id}`;
                                       try {
                                         if (!isFinanceUser) {
                                           alert('Only Finance can approve a formula for production.');
@@ -1267,7 +1270,7 @@ export default function FormulationsPage() {
                                           return;
                                         }
                                         setActivatingFormulationId(f.id);
-                                        notificationId = toast.loading(`Activating ${f.code} v${f.version}…`);
+                                        toast.loading(`Activating ${f.code} v${f.version}…`, { id: notificationId });
                                         const { data: previousActive, error: lookupError } = await supabase
                                           .from('formulations')
                                           .select('id')
@@ -1314,6 +1317,7 @@ export default function FormulationsPage() {
                                         console.error('Set active error:', err);
                                         toast.error(`Could not activate formula: ${err.message || err}`, { id: notificationId, duration: 6000 });
                                       } finally {
+                                        activationInFlight.current.delete(f.id);
                                         setActivatingFormulationId(null);
                                       }
                                     }}
