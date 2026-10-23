@@ -1265,12 +1265,41 @@ export default function FormulationsPage() {
                                         }
                                         const { data: { user } } = await supabase.auth.getUser();
 
-                                        const { error: activateErr } = await supabase.rpc('set_daily_active_formulation', {
-                                          p_formulation_id: f.id,
-                                          p_approved_by: user?.id || null,
-                                          p_notes: '',
-                                        });
-                                        if (activateErr) throw activateErr;
+                                        const { data: previousActive, error: lookupError } = await supabase
+                                          .from('formulations')
+                                          .select('id')
+                                          .eq('code', f.code)
+                                          .eq('is_daily_active', true);
+                                        if (lookupError) throw lookupError;
+
+                                        const { error: clearError } = await supabase
+                                          .from('formulations')
+                                          .update({ is_daily_active: false })
+                                          .eq('code', f.code)
+                                          .eq('is_daily_active', true);
+                                        if (clearError) throw clearError;
+
+                                        const { error: activateError } = await supabase
+                                          .from('formulations')
+                                          .update({
+                                            status: 'active',
+                                            is_daily_active: true,
+                                            is_approved: true,
+                                            approved_by: user?.id || null,
+                                            approved_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString(),
+                                            ...(user?.id ? { updated_by: user.id } : {}),
+                                          })
+                                          .eq('id', f.id);
+                                        if (activateError) {
+                                          const previousIds = (previousActive || []).map((row) => row.id);
+                                          if (previousIds.length) {
+                                            await supabase.from('formulations')
+                                              .update({ is_daily_active: true })
+                                              .in('id', previousIds);
+                                          }
+                                          throw activateError;
+                                        }
 
                                         setToastMessage(`"${f.name}" v${f.version} is saved as active and available to Production.`);
                                         setTimeout(() => setToastMessage(null), 4000);
