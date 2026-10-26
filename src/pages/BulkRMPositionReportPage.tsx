@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth, endOfMonth, subDays, subMonths } from 'date-fns';
-import { AlertTriangle, Download, RefreshCw, Scale, FileText, ArrowRightLeft, Factory } from 'lucide-react';
+import { AlertTriangle, Download, RefreshCw, Scale, FileText, ArrowRightLeft, Factory, PackageCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
@@ -31,8 +31,24 @@ interface PositionRow {
   grn: number;
   transfers: number;
   issues: number;
+  consumed: number;
+  inManufacturing: number;
   physical: number | null;
   system: number;
+}
+
+interface BatchRow {
+  id: string;
+  batch: string;
+  formula: string;
+  line: string;
+  status: string;
+  planned: number;
+  actual: number;
+  issuedKg: number;
+  sageIssue: string;
+  sageComplete: string;
+  fgTransfer: string;
 }
 
 function n(v: unknown) {
@@ -93,6 +109,7 @@ export default function BulkRMPositionReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<PositionRow[]>([]);
+  const [batches, setBatches] = useState<BatchRow[]>([]);
   const [openingAsAt, setOpeningAsAt] = useState<string | null>(null);
 
   const period = months[monthIndex];
@@ -104,7 +121,7 @@ export default function BulkRMPositionReportPage() {
       const openingDate = format(subDays(new Date(`${period.start}T00:00:00`), 1), 'yyyy-MM-dd');
       const endTs = `${period.end}T23:59:59`;
 
-      const [materialsRes, openingSnapsRes, physicalSnapsRes, sageRes, tickets, grns, transfers, issues] = await Promise.all([
+      const [materialsRes, openingSnapsRes, physicalSnapsRes, sageRes, tickets, grns, transfers, issues, createdOrders, completedOrders, openOrders] = await Promise.all([
         supabase.from('raw_materials').select('id, name, code, current_stock').eq('is_active', true).order('name'),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock, opening_stock').lte('snapshot_date', openingDate).order('snapshot_date', { ascending: false }).limit(4000),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock').lte('snapshot_date', period.end).order('snapshot_date', { ascending: false }).limit(4000),
@@ -135,10 +152,33 @@ export default function BulkRMPositionReportPage() {
         ),
         fetchPaged<any>((from, to) =>
           supabase.from('production_order_materials')
-            .select('raw_material_id, planned_qty, actual_qty, issued, issued_at, raw_materials(id, name, code)')
+            .select('production_order_id, raw_material_id, planned_qty, actual_qty, issued, issued_at, raw_materials(id, name, code)')
             .eq('issued', true)
             .gte('issued_at', period.start)
             .lte('issued_at', endTs)
+            .range(from, to)
+        ),
+        fetchPaged<any>((from, to) =>
+          supabase.from('production_orders')
+            .select('id, batch_number, status, planned_qty, actual_qty, created_at, actual_end, formulations(name, code), machines(name)')
+            .gte('created_at', period.start)
+            .lte('created_at', endTs)
+            .neq('status', 'cancelled')
+            .range(from, to)
+        ),
+        fetchPaged<any>((from, to) =>
+          supabase.from('production_orders')
+            .select('id, batch_number, status, planned_qty, actual_qty, created_at, actual_end, formulations(name, code), machines(name)')
+            .eq('status', 'completed')
+            .gte('actual_end', period.start)
+            .lte('actual_end', endTs)
+            .range(from, to)
+        ),
+        fetchPaged<any>((from, to) =>
+          supabase.from('production_orders')
+            .select('id, batch_number, status, planned_qty, actual_qty, created_at, actual_end, formulations(name, code), machines(name)')
+            .in('status', ['pending_finance', 'materials_issued', 'in_progress'])
+            .lte('created_at', endTs)
             .range(from, to)
         ),
       ]);
@@ -161,10 +201,55 @@ export default function BulkRMPositionReportPage() {
       const matchMaterial = (id?: string | null, code?: string | null, name?: string | null) =>
         (id && byId[id]) || (code && byCode[norm(code)]) || (name && byName[norm(name)]) || null;
 
+      const orderMap = new Map<string, any>();
+      [...createdOrders, ...completedOrders, ...openOrders].forEach((order) => {
+        if (order?.id) orderMap.set(order.id, order);
+      });
+      const manufacturingOrders = Array.from(orderMap.values());
+      const orderIds = manufacturingOrders.map((order) => order.id);
+
+      const [sageLogs, fgTransfers] = orderIds.length
+        ? await Promise.all([
+            fetchPaged<any>((from, to) =>
+              supabase.from('sync_log')
+                .select('reference_id, event_type, status, updated_at')
+                .in('event_type', ['materials_issued', 'production_completed'])
+                .in('reference_id', orderIds.slice(0, 200))
+                .order('updated_at', { ascending: false })
+                .range(from, to)
+            ),
+            fetchPaged<any>((from, to) =>
+              supabase.from('finished_goods_transfers')
+                .select('production_order_id, quantity, verified_quantity, status, created_at')
+                .in('production_order_id', orderIds.slice(0, 200))
+                .order('created_at', { ascending: false })
+                .range(from, to)
+            ),
+          ])
+        : [[], []];
+
+      const latestSage: Record<string, Record<string, string>> = {};
+      sageLogs.forEach((log: any) => {
+        if (!log.reference_id || !log.event_type) return;
+        latestSage[log.reference_id] ||= {};
+        if (!latestSage[log.reference_id][log.event_type]) {
+          latestSage[log.reference_id][log.event_type] = log.status || 'unknown';
+        }
+      });
+      const latestFg: Record<string, string> = {};
+      fgTransfers.forEach((row: any) => {
+        if (row.production_order_id && !latestFg[row.production_order_id]) {
+          latestFg[row.production_order_id] = row.status || '—';
+        }
+      });
+
       const weighbridge: Record<string, number> = {};
       const grnQty: Record<string, number> = {};
       const transferQty: Record<string, number> = {};
       const issueQty: Record<string, number> = {};
+      const consumedQty: Record<string, number> = {};
+      const wipQty: Record<string, number> = {};
+      const issuedByOrder: Record<string, number> = {};
       const unmatchedWb: Record<string, number> = {};
 
       tickets.forEach((t) => {
@@ -192,8 +277,35 @@ export default function BulkRMPositionReportPage() {
       issues.forEach((row) => {
         const rm = rel(row.raw_materials);
         const mat = matchMaterial(row.raw_material_id || rm?.id, rm?.code, rm?.name);
-        if (mat) add(issueQty, mat.id, n(row.actual_qty) || n(row.planned_qty));
+        const amount = n(row.actual_qty) || n(row.planned_qty);
+        const order = orderMap.get(row.production_order_id);
+        if (mat) {
+          add(issueQty, mat.id, amount);
+          if (order?.status === 'completed') add(consumedQty, mat.id, amount);
+          else add(wipQty, mat.id, amount);
+        }
+        if (row.production_order_id) add(issuedByOrder, row.production_order_id, amount);
       });
+
+      setBatches(manufacturingOrders
+        .map((order) => {
+          const formula = rel(order.formulations);
+          const line = rel(order.machines);
+          return {
+            id: order.id,
+            batch: order.batch_number || '—',
+            formula: formula?.name || formula?.code || '—',
+            line: line?.name || '—',
+            status: order.status || 'pending',
+            planned: n(order.planned_qty),
+            actual: n(order.actual_qty),
+            issuedKg: issuedByOrder[order.id] || 0,
+            sageIssue: latestSage[order.id]?.materials_issued || 'not queued',
+            sageComplete: latestSage[order.id]?.production_completed || 'not queued',
+            fgTransfer: latestFg[order.id] || 'none',
+          };
+        })
+        .sort((a, b) => a.batch.localeCompare(b.batch)));
 
       const openingByName: Record<string, number> = {};
       let usedOpeningDate: string | null = null;
@@ -244,6 +356,8 @@ export default function BulkRMPositionReportPage() {
           grn: mat ? grnQty[mat.id] || 0 : 0,
           transfers: mat ? transferQty[mat.id] || 0 : 0,
           issues: mat ? issueQty[mat.id] || 0 : 0,
+          consumed: mat ? consumedQty[mat.id] || 0 : 0,
+          inManufacturing: mat ? wipQty[mat.id] || 0 : 0,
           physical: physical === undefined ? null : physical,
           system,
           ...extra,
@@ -264,6 +378,7 @@ export default function BulkRMPositionReportPage() {
     } catch (err: any) {
       setError(err.message || 'Could not build the bulk raw materials position.');
       setRows([]);
+      setBatches([]);
     } finally {
       setLoading(false);
     }
@@ -283,7 +398,7 @@ export default function BulkRMPositionReportPage() {
   const visible = useMemo(() => {
     if (!hideZeros) return withCalcs;
     return withCalcs.filter((row) =>
-      row.opening || row.weighbridge || row.grn || row.transfers || row.issues || row.physical || row.system
+      row.opening || row.weighbridge || row.grn || row.transfers || row.issues || row.consumed || row.inManufacturing || row.physical || row.system
     );
   }, [withCalcs, hideZeros]);
 
@@ -293,10 +408,23 @@ export default function BulkRMPositionReportPage() {
     grn: acc.grn + row.grn,
     transfers: acc.transfers + row.transfers,
     issues: acc.issues + row.issues,
+    consumed: acc.consumed + row.consumed,
+    inManufacturing: acc.inManufacturing + row.inManufacturing,
     theo: acc.theo + row.theo,
     system: acc.system + row.system,
     physical: acc.physical + (row.physical || 0),
-  }), { opening: 0, weighbridge: 0, grn: 0, transfers: 0, issues: 0, theo: 0, system: 0, physical: 0 }), [visible]);
+  }), { opening: 0, weighbridge: 0, grn: 0, transfers: 0, issues: 0, consumed: 0, inManufacturing: 0, theo: 0, system: 0, physical: 0 }), [visible]);
+
+  const manufacturing = useMemo(() => {
+    const completed = batches.filter((b) => b.status === 'completed');
+    const running = batches.filter((b) => ['materials_issued', 'in_progress', 'pending_finance'].includes(b.status));
+    const produced = completed.reduce((sum, b) => sum + b.actual, 0);
+    const planned = batches.reduce((sum, b) => sum + b.planned, 0);
+    const sageGi = batches.filter((b) => b.sageIssue === 'success').length;
+    const sageDone = batches.filter((b) => b.sageComplete === 'success').length;
+    const yieldPct = planned > 0 ? (produced / planned) * 100 : 0;
+    return { completed: completed.length, running: running.length, produced, planned, sageGi, sageDone, yieldPct, total: batches.length };
+  }, [batches]);
 
   function exportWorkbook() {
     const sheet = XLSX.utils.json_to_sheet(visible.map((row) => ({
@@ -309,13 +437,28 @@ export default function BulkRMPositionReportPage() {
       Total: row.total,
       'Transfers to production': row.transfers,
       'BOM issues': row.issues,
+      'Consumed in completed batches': row.consumed,
+      'In manufacturing WIP': row.inManufacturing,
       'THEO closing': row.theo,
       'Physical stock': row.physical,
       'System stock': row.system,
       'Stock variance': row.variance,
     })));
+    const mfgSheet = XLSX.utils.json_to_sheet(batches.map((row) => ({
+      Batch: row.batch,
+      Formula: row.formula,
+      Line: row.line,
+      Status: row.status,
+      'Planned kg': row.planned,
+      'Produced kg': row.actual,
+      'RM issued kg': row.issuedKg,
+      'Sage GI': row.sageIssue,
+      'Sage complete': row.sageComplete,
+      'FG transfer': row.fgTransfer,
+    })));
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, sheet, 'Bulk RM');
+    XLSX.utils.book_append_sheet(book, mfgSheet, 'Manufacturing');
     XLSX.writeFile(book, `Bulk-RM-position-${period.start}-to-${period.end}.xlsx`);
   }
 
@@ -326,7 +469,7 @@ export default function BulkRMPositionReportPage() {
           <p className="text-[11px] font-bold uppercase tracking-wide text-[#f39200]">Manufacturing stock position</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">{format(new Date(`${period.start}T00:00:00`), 'MMMM yyyy')} bulk raw materials</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Opening + weighbridge + GRN + transfers + BOM issues. Theoretical closing is opening plus GRN receipts minus materials issued to production.
+            Purchased stock through manufacturing: weighbridge, GRN, transfers, BOM issues, batches, Sage GI / completion, and finished goods.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -353,17 +496,21 @@ export default function BulkRMPositionReportPage() {
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
-          { label: 'Weighbridge intake', value: totals.weighbridge, note: 'Nett mass received at the bridge', icon: Scale },
-          { label: 'GRN receipts', value: totals.grn, note: 'Purchased quantity booked in', icon: FileText },
-          { label: 'Transfers to production', value: totals.transfers, note: 'Moved from RM warehouse', icon: ArrowRightLeft },
-          { label: 'BOM issues', value: totals.issues, note: 'Consumed on production orders', icon: Factory },
+          { label: 'Weighbridge intake', value: qty(totals.weighbridge), note: 'Nett mass received at the bridge', icon: Scale },
+          { label: 'GRN receipts', value: qty(totals.grn), note: 'Purchased quantity booked in', icon: FileText },
+          { label: 'Transfers to production', value: qty(totals.transfers), note: 'Moved from RM warehouse', icon: ArrowRightLeft },
+          { label: 'BOM issues', value: qty(totals.issues), note: `${qty(totals.consumed)} consumed · ${qty(totals.inManufacturing)} still in batches`, icon: Factory },
+          { label: 'Finished goods produced', value: qty(manufacturing.produced), note: `${manufacturing.completed} completed batches`, icon: PackageCheck },
+          { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: Factory },
+          { label: 'Sage manufacturing', value: `${manufacturing.sageGi}/${manufacturing.total}`, note: `${manufacturing.sageDone} batch completions posted`, icon: FileText },
+          { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: PackageCheck },
         ].map(({ label, value, note, icon: Icon }) => (
           <div key={label} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">{label}</p>
               <Icon className="h-4 w-4 text-teal-700" />
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{qty(value)}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
             <p className="mt-1 text-xs text-slate-400">{note}</p>
           </div>
         ))}
@@ -375,6 +522,18 @@ export default function BulkRMPositionReportPage() {
           GRN booked {qty(totals.grn)} kg against weighbridge nett {qty(totals.weighbridge)} kg. Difference {qty(totals.grn - totals.weighbridge)} kg.
         </div>
       )}
+      {totals.transfers - totals.issues > 0.5 && (
+        <div className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          {qty(totals.transfers - totals.issues)} kg transferred to production has not been issued onto a batch yet.
+        </div>
+      )}
+      {totals.inManufacturing > 0.5 && (
+        <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <Factory className="mt-0.5 h-4 w-4 shrink-0" />
+          {qty(totals.inManufacturing)} kg is issued to open manufacturing batches and has not become finished goods yet.
+        </div>
+      )}
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
@@ -383,7 +542,7 @@ export default function BulkRMPositionReportPage() {
           <h2 className="text-sm font-semibold text-slate-900">Bulk raw materials</h2>
           <p className="text-xs text-slate-500">
             Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}.
-            THEO closing = opening + GRN − BOM issues.
+            THEO closing = opening + GRN − BOM issues. Consumed is completed manufacturing; in manufacturing is still on an open batch.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -397,6 +556,8 @@ export default function BulkRMPositionReportPage() {
                 <th className="px-3 py-3 text-right font-medium">Total</th>
                 <th className="px-3 py-3 text-right font-medium">Transfers</th>
                 <th className="px-3 py-3 text-right font-medium">Issues</th>
+                <th className="px-3 py-3 text-right font-medium">Consumed</th>
+                <th className="px-3 py-3 text-right font-medium">In mfg</th>
                 <th className="px-3 py-3 text-right font-medium">THEO closing</th>
                 <th className="px-3 py-3 text-right font-medium">Physical</th>
                 <th className="px-3 py-3 text-right font-medium">System</th>
@@ -405,9 +566,9 @@ export default function BulkRMPositionReportPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="px-3 py-16 text-center text-slate-400">Building position from weighbridge, GRN, transfers and issues…</td></tr>
+                <tr><td colSpan={13} className="px-3 py-16 text-center text-slate-400">Building position from weighbridge, GRN, transfers, issues and manufacturing…</td></tr>
               ) : visible.length === 0 ? (
-                <tr><td colSpan={11} className="px-3 py-16 text-center text-slate-400">No bulk movement in this month.</td></tr>
+                <tr><td colSpan={13} className="px-3 py-16 text-center text-slate-400">No bulk movement in this month.</td></tr>
               ) : visible.map((row) => {
                 const highlight = row.variance !== null && Math.abs(row.variance) > 0.1;
                 const wbWarn = Math.abs(row.wbGap) > 0.5 && (row.weighbridge > 0 || row.grn > 0);
@@ -423,6 +584,8 @@ export default function BulkRMPositionReportPage() {
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.total)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-violet-700">{qty(row.transfers)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{qty(row.issues)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.consumed)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-sky-700">{qty(row.inManufacturing)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{qty(row.theo)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.physical)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{qty(row.system)}</td>
@@ -441,6 +604,8 @@ export default function BulkRMPositionReportPage() {
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.opening + totals.grn)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.transfers)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.issues)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.consumed)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.inManufacturing)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.theo)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.physical)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{qty(totals.system)}</td>
@@ -448,6 +613,53 @@ export default function BulkRMPositionReportPage() {
                 </tr>
               </tfoot>
             )}
+          </table>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-900">Manufacturing batches</h2>
+          <p className="text-xs text-slate-500">
+            Orders created or completed this month, plus open batches still on the floor. Sage GI is materials issued; Sage complete is the finished-goods receipt.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-3 font-medium">Batch</th>
+                <th className="px-3 py-3 font-medium">Formula</th>
+                <th className="px-3 py-3 font-medium">Line</th>
+                <th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 text-right font-medium">Planned</th>
+                <th className="px-3 py-3 text-right font-medium">Produced</th>
+                <th className="px-3 py-3 text-right font-medium">RM issued</th>
+                <th className="px-3 py-3 font-medium">Sage GI</th>
+                <th className="px-3 py-3 font-medium">Sage complete</th>
+                <th className="px-3 py-3 font-medium">FG transfer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={10} className="px-3 py-16 text-center text-slate-400">Loading manufacturing…</td></tr>
+              ) : batches.length === 0 ? (
+                <tr><td colSpan={10} className="px-3 py-16 text-center text-slate-400">No manufacturing batches in this month.</td></tr>
+              ) : batches.map((row) => (
+                <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-900">{row.batch}</td>
+                  <td className="px-3 py-2.5 text-slate-800">{row.formula}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{row.line}</td>
+                  <td className="px-3 py-2.5 capitalize text-slate-700">{row.status.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.planned)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{qty(row.actual)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{qty(row.issuedKg)}</td>
+                  <td className={`px-3 py-2.5 ${row.sageIssue === 'success' ? 'text-emerald-700' : row.sageIssue === 'failed' ? 'text-red-700' : 'text-slate-500'}`}>{row.sageIssue.replace(/_/g, ' ')}</td>
+                  <td className={`px-3 py-2.5 ${row.sageComplete === 'success' ? 'text-emerald-700' : row.sageComplete === 'failed' ? 'text-red-700' : 'text-slate-500'}`}>{row.sageComplete.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2.5 capitalize text-slate-600">{row.fgTransfer.replace(/_/g, ' ')}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       </div>

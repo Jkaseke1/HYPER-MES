@@ -85,6 +85,7 @@ const navGroups: NavGroup[] = [
       { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
       // Execution
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
+      { to: '/reports/bulk-rm-position', icon: Factory, label: 'RM & Manufacturing' },
       { to: '/production-control', icon: ClipboardCheck, label: 'Production Control Centre' },
       { to: '/production-warehouse', icon: ArrowRightLeft, label: 'Incoming Materials' },
       { to: '/macropack', icon: Beaker, label: 'Macropack Manufacturing' },
