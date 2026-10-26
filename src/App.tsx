@@ -69,6 +69,7 @@ const ProductionControlCentrePage = lazy(() => import('./pages/ProductionControl
 const MacropackReconciliationReportPage = lazy(() => import('./pages/MacropackReconciliationReportPage'));
 const CRMPage = lazy(() => import('./pages/CRMPage'));
 const IntakeMovementReportPage = lazy(() => import('./pages/IntakeMovementReportPage'));
+const BulkRMPositionReportPage = lazy(() => import('./pages/BulkRMPositionReportPage'));
 import { canAccessPath, defaultPathForRole } from './lib/roleAccess';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -165,6 +166,7 @@ export default function App() {
               <Route path="reports/process-loss" element={<ProcessLossReportPage />} />
               <Route path="reports/macropack-reconciliation" element={<MacropackReconciliationReportPage />} />
               <Route path="reports/intake-movement" element={<IntakeMovementReportPage />} />
+              <Route path="reports/bulk-rm-position" element={<BulkRMPositionReportPage />} />
               <Route path="rm-stock-dashboard" element={<RMStockDashboardPage />} />
               <Route path="rm-receipts-matrix" element={<RMReceiptsMatrixPage />} />
               <Route path="rm-issues-matrix" element={<RMIssuesMatrixPage />} />

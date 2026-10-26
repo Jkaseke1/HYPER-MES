@@ -3,17 +3,17 @@ export type MesRole = string | null | undefined;
 const fullAccessRoles = new Set(['admin', 'md']);
 
 const rolePaths: Record<string, string[]> = {
-  weighbridge: ['/weigh-bridge', '/reports/intake-movement'],
-  weigh_bridge: ['/weigh-bridge', '/reports/intake-movement'],
+  weighbridge: ['/weigh-bridge', '/reports/intake-movement', '/reports/bulk-rm-position'],
+  weigh_bridge: ['/weigh-bridge', '/reports/intake-movement', '/reports/bulk-rm-position'],
   production_receiver: ['/production-warehouse'],
-  raw_material_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/reports/intake-movement'],
-  warehouse_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/reports/intake-movement'],
-  production_manager: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/intake-movement'],
-  supervisor: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/intake-movement'],
+  raw_material_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/reports/intake-movement', '/reports/bulk-rm-position'],
+  warehouse_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/reports/intake-movement', '/reports/bulk-rm-position'],
+  production_manager: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/intake-movement', '/reports/bulk-rm-position'],
+  supervisor: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/intake-movement', '/reports/bulk-rm-position'],
   operator: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
   logistics: ['/dispatch', '/dispatch-planning', '/fleet', '/crm'],
-  finance: ['/goods-received', '/sage-posting-review', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reports/intake-movement', '/reconciliation'],
-  accountant: ['/goods-received', '/sage-posting-review', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reports/intake-movement', '/reconciliation'],
+  finance: ['/goods-received', '/sage-posting-review', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reports/intake-movement', '/reports/bulk-rm-position', '/reconciliation'],
+  accountant: ['/goods-received', '/sage-posting-review', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reports/intake-movement', '/reports/bulk-rm-position', '/reconciliation'],
 };
 
 const roleLandingPaths: Record<string, string> = {
