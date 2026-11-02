@@ -81,6 +81,20 @@ async function refreshSageStock(itemCodes, reason) {
   }
 }
 
+async function refreshRequestedSageStock(event) {
+  const itemCodes = [...new Set((event.details?.itemCodes || []).map(code => String(code || '').trim().toUpperCase()).filter(Boolean))];
+  const warehouseCodes = event.details?.warehouseCodes || ['PD'];
+  if (!itemCodes.length || itemCodes.length > 20 || warehouseCodes.length !== 1 || !['RM', 'PD'].includes(warehouseCodes[0])) {
+    throw new Error('A targeted stock refresh requires 1-20 mapped items and one RM or PD warehouse.');
+  }
+  const result = await queueSageStockSync(itemCodes, 'requested stock and cost refresh', { warehouseCodes });
+  if (result.failures.length || result.materialCount !== itemCodes.length || result.synced !== itemCodes.length) {
+    throw new Error('Sage stock/cost refresh incomplete: ' + (result.failures.join('; ') || 'Some requested item mappings were missing.'));
+  }
+  return { message: 'Sage stock and costs refreshed for ' + itemCodes.join(', '),
+    details: { itemCodes, warehouseCodes, synced: result.synced } };
+}
+
 async function createStockTakeSageSnapshot(event) {
   const stockTakeId = event.reference_id;
   const mandatoryItemIds = new Set((event.details?.mandatoryItemIds || []).filter(Boolean));
@@ -199,7 +213,7 @@ async function processPendingEvents() {
     .limit(100);
 
   if (ALLOWED_EVENT_TYPES.size > 0) {
-    pendingQuery = pendingQuery.in('event_type', [...ALLOWED_EVENT_TYPES]);
+    pendingQuery = pendingQuery.in('event_type', [...new Set([...ALLOWED_EVENT_TYPES, 'sage_stock_refresh'])]);
   }
   if (ALLOWED_REFERENCE_ID) {
     pendingQuery = pendingQuery.eq('reference_id', ALLOWED_REFERENCE_ID);
@@ -263,6 +277,8 @@ async function processPendingEvents() {
       continue;
     }
 
+    // Read-only refreshes are repeatable; stock postings remain deduplicated.
+    if (event.event_type !== 'sage_stock_refresh') {
     // ── Idempotency check ─────────────────────────────────────────────────────
     const { data: alreadyDone } = await supabase
       .from('sync_log')
@@ -282,6 +298,7 @@ async function processPendingEvents() {
       continue;
     }
     // ── End idempotency check ─────────────────────────────────────────────────
+    }
 
     console.log(`\nProcessing: ${event.event_type} — ${event.reference_type} — ${event.reference_id}`);
 
@@ -328,6 +345,9 @@ async function processPendingEvents() {
           break;
         case 'rm_cost_updated':
           handlerResult = await handleRmCostUpdated(event);
+          break;
+        case 'sage_stock_refresh':
+          handlerResult = await refreshRequestedSageStock(event);
           break;
         case 'stock_take_sage_snapshot':
           handlerResult = await createStockTakeSageSnapshot(event);
