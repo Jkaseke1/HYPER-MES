@@ -16,7 +16,7 @@ import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatch
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { packagingCost, hasUncostedPackaging } from '../lib/productionPackagingCost';
+import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
 
 interface OrderMaterial {
   id: string; 
@@ -178,7 +178,6 @@ export default function ProductionOrdersPage() {
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [orderPackaging, setOrderPackaging] = useState<any[]>([]);
-  const [packagingCostSaving, setPackagingCostSaving] = useState(false);
   const [editQtyForm, setEditQtyForm] = useState({ planned_qty: 0 });
   const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
@@ -1386,7 +1385,20 @@ export default function ProductionOrdersPage() {
 
     const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
-    setOrderPackaging(packagingData || []);
+    const packagingCodes = [...new Set((packagingData || []).map((item: any) => item.item_code))];
+    let resolvedPackaging = packagingData || [];
+    if (order.status !== 'completed' && packagingCodes.length) {
+      const [master, posting] = await Promise.all([
+        supabase.from('raw_materials').select('code, sage_code, cost_per_unit').eq('is_active', true)
+          .or(`code.in.(${packagingCodes.join(',')}),sage_code.in.(${packagingCodes.join(',')})`),
+        supabase.from('sync_log').select('details').eq('reference_id', order.id)
+          .eq('event_type', 'materials_issued').eq('status', 'success')
+          .order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      if (master.error || posting.error) toast.error('Packaging costs could not be refreshed.');
+      resolvedPackaging = resolvePackagingCosts(resolvedPackaging, master.data || [], posting.data?.details?.postedComponents || []);
+    }
+    setOrderPackaging(resolvedPackaging);
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
 
@@ -1813,32 +1825,25 @@ export default function ProductionOrdersPage() {
     return startBackgroundPolling(() => refreshSageStock(false), 300000);
   }, [showDetail, selected?.id, detailMaterials.length]);
 
-  /* ── Production completion with packaging ── */
-  async function savePackagingCost(item: any, value: string) {
-    if (!canValidateBom || !selected) return false;
-    const price = Number(value);
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error('Enter a positive packaging cost per unit.');
-      return false;
-    }
-    if (price === Number(item.unit_cost)) return true;
-    setPackagingCostSaving(true);
-    try {
-      const { error } = await supabase.rpc('set_production_packaging_cost', { p_packaging_id: item.id, p_unit_cost: price });
-      if (error) throw error;
-      setOrderPackaging(current => current.map(row => row.id === item.id ? { ...row, unit_cost: price } : row));
-      toast.success('Packaging cost saved.');
-      return true;
-    } catch (error: any) {
-      toast.error(error.message || 'Packaging cost could not be saved.');
-      return false;
-    } finally { setPackagingCostSaving(false); }
-  }
+  useEffect(() => {
+    if (!showDetail || !selected || selected.status === 'completed' || sageIssueStatus?.status !== 'success') return;
+    let active = true;
+    void supabase.from('production_order_packaging').select('id, unit_cost').eq('production_order_id', selected.id)
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        setOrderPackaging(current => current.map(item => {
+          const row = data?.find(candidate => candidate.id === item.id);
+          return Number(row?.unit_cost) > 0 ? { ...item, unit_cost: Number(row?.unit_cost) } : item;
+        }));
+      });
+    return () => { active = false; };
+  }, [showDetail, selected?.id, selected?.status, sageIssueStatus?.status, sageIssueStatus?.updated_at]);
 
+  /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {
     if (!selected) return;
-    if (packagingCostSaving || hasUncostedPackaging(orderPackaging)) {
-      setWorkflowError('Finance must save a cost per packaging unit before completion.');
+    if (hasUncostedPackaging(orderPackaging)) {
+      setWorkflowError('Packaging unit cost is awaiting material cost sync. Refresh costs before completion.');
       return;
     }
     if (selected.status !== 'in_progress') {
@@ -1943,7 +1948,7 @@ export default function ProductionOrdersPage() {
         }
         
         // Production Line cost deprecated (double-counted labour). Labour card holds the authoritative per-tonne labour cost.
-        if (packagingCostSaving || hasUncostedPackaging(orderPackaging)) throw new Error('Finance must cost packaging before completion.');
+        if (hasUncostedPackaging(orderPackaging)) throw new Error('Packaging unit cost is awaiting material cost sync.');
         const actualPackagingCost = packagingCost(orderPackaging, false, pkgActuals);
         const total = costing.raw_material_cost + actualPackagingCost + costing.labour_cost + costing.overhead_cost;
         Object.assign(updates, {
@@ -2018,7 +2023,7 @@ export default function ProductionOrdersPage() {
           const packagingUpdates = await Promise.all(pkgData.map((item) =>
             supabase
               .from('production_order_packaging')
-              .update({ actual_qty: item.bags_used })
+              .update({ actual_qty: item.bags_used, unit_cost: Number(orderPackaging.find(row => row.packaging_sku_id === item.packaging_sku_id)?.unit_cost || 0) })
               .eq('production_order_id', selected.id)
               .eq('packaging_sku_id', item.packaging_sku_id)
           ));
@@ -3309,17 +3314,7 @@ export default function ProductionOrdersPage() {
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
-                            <label className="flex items-center gap-2 text-xs text-slate-600">Cost / unit (USD)
-                              <input key={`${item.id}-${item.unit_cost}`} type="number" min="0.000001" step="any"
-                                defaultValue={Number(item.unit_cost) > 0 ? item.unit_cost : ''}
-                                disabled={!canValidateBom || packagingCostSaving || !['pending', 'pending_finance', 'materials_issued', 'in_progress'].includes(selected.status)}
-                                onBlur={async event => {
-                                  const input = event.currentTarget;
-                                  if (!(await savePackagingCost(item, input.value))) input.value = Number(item.unit_cost) > 0 ? String(item.unit_cost) : '';
-                                }}
-                                aria-label={`Unit cost for ${item.item_code}`} placeholder="Not costed"
-                                className="w-28 rounded border border-slate-300 bg-white px-2 py-1.5 text-right disabled:bg-slate-100" />
-                            </label>
+                            <span className="text-xs text-slate-600">Unit cost (USD): <strong>{Number(item.unit_cost) > 0 ? `$${Number(item.unit_cost).toFixed(4)}` : 'Awaiting cost sync'}</strong></span>
                             <span className="text-xs text-slate-600">Actual cost: {Number(item.unit_cost) > 0 ? `$${(Number(item.actual_qty || 0) * Number(item.unit_cost)).toFixed(2)}` : 'Not costed'}</span>
                           </div>
                         </div>
