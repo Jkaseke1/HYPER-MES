@@ -67,6 +67,18 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
     const itemCode = (material.sage_code || material.code || '').trim().toUpperCase();
     return itemCode && (!requestedCodes || requestedCodes.has(itemCode));
   });
+  if (requestedCodes) {
+    const missing = [...requestedCodes].filter(code => !materials.some(material => (material.sage_code || material.code).trim().toUpperCase() === code));
+    if (missing.length) {
+      const { data: packaging, error: packagingError } = await supabase.from('packaging_skus')
+        .select('sage_stock_code').eq('is_active', true).in('sage_stock_code', missing);
+      if (packagingError) throw new Error('Could not load packaging Sage mappings: ' + packagingError.message);
+      for (const sku of packaging || []) {
+        const code = String(sku.sage_stock_code || '').trim().toUpperCase();
+        if (code && !materials.some(material => material.sage_code === code)) materials.push({ id: null, code, sage_code: code });
+      }
+    }
+  }
   if (!materials.length) return materials;
 
   // Finished goods can exist in the legacy raw_materials catalogue as well as
@@ -107,6 +119,10 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
           sage_code: itemCode,
           warehouse_id: warehouse.id,
           quantity: Number(stock.quantity || 0),
+          average_unit_cost: stock.averageUnitCost != null && Number.isFinite(Number(stock.averageUnitCost)) && Number(stock.averageUnitCost) >= 0
+            ? Number(stock.averageUnitCost) : null,
+          cost_synced_at: stock.averageUnitCost != null && Number.isFinite(Number(stock.averageUnitCost)) && Number(stock.averageUnitCost) >= 0
+            ? new Date().toISOString() : null,
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'sage_code,warehouse_id' });

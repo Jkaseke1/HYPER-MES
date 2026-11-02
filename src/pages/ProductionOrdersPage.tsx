@@ -1388,15 +1388,25 @@ export default function ProductionOrdersPage() {
     const packagingCodes = [...new Set((packagingData || []).map((item: any) => item.item_code))];
     let resolvedPackaging = packagingData || [];
     if (order.status !== 'completed' && packagingCodes.length) {
-      const [master, posting] = await Promise.all([
+      const [master, posting, cache] = await Promise.all([
         supabase.from('raw_materials').select('code, sage_code, cost_per_unit').eq('is_active', true)
           .or(`code.in.(${packagingCodes.join(',')}),sage_code.in.(${packagingCodes.join(',')})`),
         supabase.from('sync_log').select('details').eq('reference_id', order.id)
           .eq('event_type', 'materials_issued').eq('status', 'success')
           .order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('sage_stock_balances').select('sage_code, average_unit_cost, cost_synced_at').eq('warehouse_id', 19).in('sage_code', packagingCodes),
       ]);
       if (master.error || posting.error) toast.error('Packaging costs could not be refreshed.');
       resolvedPackaging = resolvePackagingCosts(resolvedPackaging, master.data || [], posting.data?.details?.postedComponents || []);
+      if (!cache.error) resolvedPackaging = resolvedPackaging.map((item: any) => {
+        const row = cache.data?.find(row => row.sage_code === item.item_code);
+        return Number(item.unit_cost) > 0 || row?.average_unit_cost == null || !row.cost_synced_at ? item
+          : { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at };
+      });
+      if (hasUncostedPackaging(resolvedPackaging)) {
+        const refresh = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: order.id });
+        if (refresh.error) toast.error('Packaging price refresh could not be queued. Check the cost-sync migration and test bridge.');
+      }
     }
     setOrderPackaging(resolvedPackaging);
     // Calculate raw material cost from issued ingredients only
@@ -1757,6 +1767,18 @@ export default function ProductionOrdersPage() {
     stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
+      if (orderPackaging.length && selected.status !== 'completed') {
+        const request = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: selected.id });
+        if (request.error) throw new Error('Packaging cost refresh failed: ' + request.error.message);
+        const prices = await supabase.from('sage_stock_balances').select('sage_code, average_unit_cost, cost_synced_at').eq('warehouse_id', 19)
+          .in('sage_code', orderPackaging.map(item => item.item_code));
+        if (prices.error) throw prices.error;
+        setOrderPackaging(current => current.map(item => {
+          const row = prices.data?.find(row => row.sage_code === item.item_code);
+          return row?.average_unit_cost != null && row.cost_synced_at && sageIssueStatus?.status !== 'success'
+            ? { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at } : item;
+        }));
+      }
       const materialIds = detailMaterials.map(m => m.raw_material_id);
       await loadSageStockBalances(materialIds);
 
@@ -1839,11 +1861,25 @@ export default function ProductionOrdersPage() {
     return () => { active = false; };
   }, [showDetail, selected?.id, selected?.status, sageIssueStatus?.status, sageIssueStatus?.updated_at]);
 
+  useEffect(() => {
+    if (!showDetail || !selected || selected.status === 'completed') return;
+    const channel = supabase.channel('order-packaging-prices-' + selected.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances', filter: 'warehouse_id=eq.19' }, payload => {
+        const row = payload.new as { sage_code?: string; average_unit_cost?: number; cost_synced_at?: string };
+        if (row.average_unit_cost == null || !row.cost_synced_at || sageIssueStatus?.status === 'success') return;
+        setOrderPackaging(current => current.map(item => item.item_code === row.sage_code
+          ? { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at } : item));
+      }).subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [showDetail, selected?.id, selected?.status, sageIssueStatus?.status]);
+
   /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {
     if (!selected) return;
     if (hasUncostedPackaging(orderPackaging)) {
-      setWorkflowError('Packaging unit cost is awaiting material cost sync. Refresh costs before completion.');
+      setWorkflowError(orderPackaging.some(item => item.cost_synced_at && Number(item.unit_cost) === 0)
+        ? 'Sage reports a zero packaging unit cost. Review its cost in Sage before completing.'
+        : 'Packaging unit cost is awaiting material cost sync. Refresh costs before completion.');
       return;
     }
     if (selected.status !== 'in_progress') {
@@ -3314,7 +3350,7 @@ export default function ProductionOrdersPage() {
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
-                            <span className="text-xs text-slate-600">Unit cost (USD): <strong>{Number(item.unit_cost) > 0 ? `$${Number(item.unit_cost).toFixed(4)}` : 'Awaiting cost sync'}</strong></span>
+                            <span className="text-xs text-slate-600">Unit cost (USD): <strong>{Number(item.unit_cost) > 0 || item.cost_synced_at ? `$${Number(item.unit_cost).toFixed(4)}` : 'Awaiting cost sync'}</strong></span>
                             <span className="text-xs text-slate-600">Actual cost: {Number(item.unit_cost) > 0 ? `$${(Number(item.actual_qty || 0) * Number(item.unit_cost)).toFixed(2)}` : 'Not costed'}</span>
                           </div>
                         </div>

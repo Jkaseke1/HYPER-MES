@@ -1,5 +1,24 @@
 # PlantControl packaging costing
 
+## Sage price refresh
+
+Apply `20261102160000_packaging_sage_cost_cache.sql` in test Supabase and
+restart the updated test bridge. The SDK stock endpoint already returns
+averageUnitCost; the stock synchronizer now saves it separately from quantity
+with a cost sync timestamp. Packaging-only SKU mappings are supported even
+when there is no ingredient catalogue row.
+
+Opening an unpriced open order queues a targeted PD refresh, deduplicated by
+order for 60 seconds and while pending/processing. Refresh Sage Stock also
+requests packaging prices. Cache updates reach the order through Realtime;
+manual refresh can reread the cache as well. A confirmed zero price is displayed
+as zero rather than waiting indefinitely. No price is invented for absent data.
+The bridge and SQL changes read Sage and update only MES cache/cost metadata.
+
+Checks: `node scripts/test-packaging-stock-cost-sync.cjs` mocks the SDK and
+Supabase to verify packaging-only resolution, warehouse cost storage and absent
+prices. A running test bridge and the migration are needed for end-to-end data.
+
 Apply `supabase/migrations/20261102120000_production_packaging_cost.sql` before
 deploying the updated production-order screen. It adds `packaging_cost` to order
 cost metadata and a Finance-only RPC to set packaging unit costs on open orders.
