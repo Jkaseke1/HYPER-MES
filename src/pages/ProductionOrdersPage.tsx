@@ -16,6 +16,7 @@ import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatch
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { packagingCost, hasUncostedPackaging } from '../lib/productionPackagingCost';
 
 interface OrderMaterial {
   id: string; 
@@ -177,6 +178,7 @@ export default function ProductionOrdersPage() {
   const [materials, setMaterials] = useState<OrderMaterial[]>([]);
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [orderPackaging, setOrderPackaging] = useState<any[]>([]);
+  const [packagingCostSaving, setPackagingCostSaving] = useState(false);
   const [editQtyForm, setEditQtyForm] = useState({ planned_qty: 0 });
   const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
@@ -1812,8 +1814,33 @@ export default function ProductionOrdersPage() {
   }, [showDetail, selected?.id, detailMaterials.length]);
 
   /* ── Production completion with packaging ── */
+  async function savePackagingCost(item: any, value: string) {
+    if (!canValidateBom || !selected) return false;
+    const price = Number(value);
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error('Enter a positive packaging cost per unit.');
+      return false;
+    }
+    if (price === Number(item.unit_cost)) return true;
+    setPackagingCostSaving(true);
+    try {
+      const { error } = await supabase.rpc('set_production_packaging_cost', { p_packaging_id: item.id, p_unit_cost: price });
+      if (error) throw error;
+      setOrderPackaging(current => current.map(row => row.id === item.id ? { ...row, unit_cost: price } : row));
+      toast.success('Packaging cost saved.');
+      return true;
+    } catch (error: any) {
+      toast.error(error.message || 'Packaging cost could not be saved.');
+      return false;
+    } finally { setPackagingCostSaving(false); }
+  }
+
   async function handleCompletionRequest() {
     if (!selected) return;
+    if (packagingCostSaving || hasUncostedPackaging(orderPackaging)) {
+      setWorkflowError('Finance must save a cost per packaging unit before completion.');
+      return;
+    }
     if (selected.status !== 'in_progress') {
       setWorkflowError('Cannot complete — production must be in progress.');
       return;
@@ -1916,9 +1943,12 @@ export default function ProductionOrdersPage() {
         }
         
         // Production Line cost deprecated (double-counted labour). Labour card holds the authoritative per-tonne labour cost.
-        const total = costing.raw_material_cost + costing.labour_cost + costing.overhead_cost;
+        if (packagingCostSaving || hasUncostedPackaging(orderPackaging)) throw new Error('Finance must cost packaging before completion.');
+        const actualPackagingCost = packagingCost(orderPackaging, false, pkgActuals);
+        const total = costing.raw_material_cost + actualPackagingCost + costing.labour_cost + costing.overhead_cost;
         Object.assign(updates, {
           ...costing,
+          packaging_cost: actualPackagingCost,
           production_line_cost: 0,
           machine_cost: 0,
           actual_qty: output.actual_qty,
@@ -3278,6 +3308,20 @@ export default function ProductionOrdersPage() {
                           </div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
+                          <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
+                            <label className="flex items-center gap-2 text-xs text-slate-600">Cost / unit (USD)
+                              <input key={`${item.id}-${item.unit_cost}`} type="number" min="0.000001" step="any"
+                                defaultValue={Number(item.unit_cost) > 0 ? item.unit_cost : ''}
+                                disabled={!canValidateBom || packagingCostSaving || !['pending', 'pending_finance', 'materials_issued', 'in_progress'].includes(selected.status)}
+                                onBlur={async event => {
+                                  const input = event.currentTarget;
+                                  if (!(await savePackagingCost(item, input.value))) input.value = Number(item.unit_cost) > 0 ? String(item.unit_cost) : '';
+                                }}
+                                aria-label={`Unit cost for ${item.item_code}`} placeholder="Not costed"
+                                className="w-28 rounded border border-slate-300 bg-white px-2 py-1.5 text-right disabled:bg-slate-100" />
+                            </label>
+                            <span className="text-xs text-slate-600">Actual cost: {Number(item.unit_cost) > 0 ? `$${(Number(item.actual_qty || 0) * Number(item.unit_cost)).toFixed(2)}` : 'Not costed'}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3369,12 +3413,14 @@ export default function ProductionOrdersPage() {
                   // Calculate all costs. Production Line card is deprecated (double-counted labour); Labour card is authoritative.
                   const rawMaterialCost = costing.raw_material_cost;
                   const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
-                  const totalCost = rawMaterialCost + costing.labour_cost + costing.overhead_cost;
+                  const actualPackagingCost = selected.status === 'completed' ? Number(selected.packaging_cost || 0) : packagingCost(orderPackaging);
+                  const totalCost = selected.status === 'completed' ? Number(selected.total_cost || 0)
+                    : rawMaterialCost + actualPackagingCost + costing.labour_cost + costing.overhead_cost;
                   const costPerKg = output.actual_qty > 0 ? totalCost / output.actual_qty : 0;
 
                   // Planned cost calculation
                   const plannedBomCost = calculatePlannedMaterialCost(detailMaterials);
-                  const plannedTotalCost = plannedBomCost + costing.labour_cost + costing.overhead_cost;
+                  const plannedTotalCost = plannedBomCost + packagingCost(orderPackaging, true) + costing.labour_cost + costing.overhead_cost;
                   const plannedCostPerKg = selected.planned_qty > 0 ? plannedTotalCost / selected.planned_qty : 0;
                   
                   const varianceCostPerKg = costPerKg - plannedCostPerKg;
@@ -3382,11 +3428,16 @@ export default function ProductionOrdersPage() {
                   return (
                     <>
                       {/* Cost Summary Cards */}
-                      <div className="grid grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-slate-500 mb-1">Raw Material</div>
                           <div className="text-xl font-bold text-slate-800">${rawMaterialCost.toFixed(2)}</div>
                           <div className="text-xs text-slate-400 mt-1">Issued ingredients</div>
+                        </div>
+                        <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                          <div className="text-xs font-medium text-cyan-700 mb-1">Packaging</div>
+                          <div className="text-xl font-bold text-cyan-900">{hasUncostedPackaging(orderPackaging) ? 'Not costed' : `$${actualPackagingCost.toFixed(2)}`}</div>
+                          <div className="text-xs text-cyan-700 mt-1">{selected.status === 'completed' ? 'Saved order cost' : 'Recorded packaging used'}</div>
                         </div>
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
@@ -3402,10 +3453,10 @@ export default function ProductionOrdersPage() {
                           <div className="text-xs text-orange-600 mt-1">{overheadPct}% of RM cost</div>
                         </div>
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                          <div className="text-xs font-medium text-emerald-600 mb-1">Total Cost</div>
+                          <div className="text-xs font-medium text-emerald-600 mb-1">{selected.status !== 'completed' && hasUncostedPackaging(orderPackaging) ? 'Cost Subtotal' : 'Total Cost'}</div>
                           <div className="text-xl font-bold text-emerald-700">${totalCost.toFixed(2)}</div>
                           <div className="text-xs text-emerald-600 mt-1">
-                            All costs
+                            {selected.status === 'completed' ? 'Saved order total' : hasUncostedPackaging(orderPackaging) ? 'Packaging not costed' : 'Ingredients, packaging, labour and overhead'}
                             {usdZigRate !== null && <span className="block text-emerald-500">≈ ZiG {(totalCost * usdZigRate).toFixed(2)}</span>}
                           </div>
                         </div>
