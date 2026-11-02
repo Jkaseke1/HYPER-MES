@@ -1405,7 +1405,10 @@ export default function ProductionOrdersPage() {
       });
       if (hasUncostedPackaging(resolvedPackaging)) {
         const refresh = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: order.id });
-        if (refresh.error) toast.error('Packaging price refresh could not be queued. Check the cost-sync migration and test bridge.');
+        if (refresh.error) {
+          console.error('Packaging refresh request failed:', refresh.error);
+          toast.error(`Packaging refresh: ${refresh.error.message}`, { duration: 10000 });
+        }
       }
     }
     setOrderPackaging(resolvedPackaging);
