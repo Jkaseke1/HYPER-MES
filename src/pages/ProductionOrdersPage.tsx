@@ -161,6 +161,12 @@ export default function ProductionOrdersPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const createOrderInFlightRef = useRef(false);
+  const createAttemptRef = useRef<{
+    requestId: string;
+    batchNumber: string | null;
+    fingerprint: string;
+  } | null>(null);
   const [showOptionalSchedule, setShowOptionalSchedule] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showEditQty, setShowEditQty] = useState(false);
@@ -921,6 +927,26 @@ export default function ProductionOrdersPage() {
   useRealtimeRefresh('production-order-active-formulations', ['formulations'], refreshActiveFormulations, 350, 1000);
 
   const openCreate = async () => { 
+    if (createOrderInFlightRef.current) return;
+    if (createAttemptRef.current) {
+      const { data: existingOrder, error: existingOrderError } = await supabase
+        .from('production_orders')
+        .select('id, batch_number')
+        .eq('creation_request_id', createAttemptRef.current.requestId)
+        .maybeSingle();
+      if (existingOrderError) {
+        toast.error(`Could not reconcile the previous order submission: ${existingOrderError.message}`);
+        return;
+      }
+      if (existingOrder) {
+        createAttemptRef.current = null;
+        await fetchOrders();
+        toast.success(`Previous submission created ${existingOrder.batch_number}. Open that order instead of submitting it again.`);
+        return;
+      }
+      createAttemptRef.current = null;
+    }
+
     const batchNumber = await peekProductionBatchNumber();
     setForm({ ...emptyForm, batch_number: batchNumber }); 
     setMaterials([]); 
@@ -1069,6 +1095,8 @@ export default function ProductionOrdersPage() {
       return;
     }
 
+    if (createOrderInFlightRef.current) return;
+    createOrderInFlightRef.current = true;
     setSaving(true);
     try {
       // Finance control: a work order must be based on an approved formula whose
@@ -1092,9 +1120,30 @@ export default function ProductionOrdersPage() {
 
       // Ensure planned_qty is a valid number and not multiplied
       const plannedQty = parseFloat(String(form.planned_qty));
+
+      const fingerprint = JSON.stringify({
+        form: { ...form, planned_qty: plannedQty },
+        packagingSkuId: selectedPackaging.id,
+      });
+      if (createAttemptRef.current && createAttemptRef.current.fingerprint !== fingerprint) {
+        throw new Error('A previous submission is unresolved. Close and reopen the form to reconcile it before changing the order.');
+      }
+      if (!createAttemptRef.current) {
+        createAttemptRef.current = {
+          requestId: crypto.randomUUID(),
+          batchNumber: null,
+          fingerprint,
+        };
+      }
+      const createAttempt = createAttemptRef.current;
+      if (!createAttempt) throw new Error('Could not establish an idempotency key for this order submission.');
       
       // Generate official batch number only on actual form submission
-      const officialBatchNumber = await generateProductionBatchNumber();
+      if (!createAttempt.batchNumber) {
+        createAttempt.batchNumber = await generateProductionBatchNumber();
+      }
+      const officialBatchNumber = createAttempt.batchNumber;
+      if (!officialBatchNumber) throw new Error('Could not reserve a production batch number.');
 
       // Debug: Log form data before submission
       console.log('Creating order with form data:', {
@@ -1105,8 +1154,9 @@ export default function ProductionOrdersPage() {
         status: 'pending'
       });
       
-      const { data: createdOrder, error } = await supabase.from('production_orders').insert({
+      const createPayload = {
         batch_number: officialBatchNumber,
+        creation_request_id: createAttempt.requestId,
         plan_id: form.plan_id || null,
         formulation_id: form.formulation_id || null,
         machine_id: form.machine_id, // Required field - NOT NULL in database
@@ -1125,12 +1175,28 @@ export default function ProductionOrdersPage() {
         week_number: form.week_number === '' ? null : Number(form.week_number),
         notes: form.notes, 
         status: 'pending',
-      }).select('id').single();
+      };
+      const { data: createdOrderData, error } = await supabase
+        .from('production_orders')
+        .insert(createPayload)
+        .select('id')
+        .single();
 
-      if (error) throw error;
+      let createdOrder = createdOrderData;
+      if (error) {
+        const { data: existingOrder, error: lookupError } = await supabase
+          .from('production_orders')
+          .select('id')
+          .eq('creation_request_id', createAttempt.requestId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (!existingOrder) throw error;
+        createdOrder = existingOrder;
+      }
+      if (!createdOrder) throw new Error('The production order could not be confirmed after submission.');
 
       const plannedPackagingQty = Number(form.planned_bags || bagsFromKg(plannedQty, form.unit_size));
-      const { error: packagingError } = await supabase.from('production_order_packaging').insert({
+      const packagingPayload = {
         production_order_id: createdOrder.id,
         packaging_sku_id: selectedPackaging.id,
         item_code: selectedPackaging.sage_stock_code || selectedPackaging.sku_code,
@@ -1138,10 +1204,27 @@ export default function ProductionOrdersPage() {
         unit: 'bags',
         planned_qty: plannedPackagingQty,
         actual_qty: 0,
-      });
-      if (packagingError) throw packagingError;
+      };
+      const { error: packagingError } = await supabase.from('production_order_packaging').insert(packagingPayload);
+      if (packagingError) {
+        const { data: existingPackaging, error: packagingLookupError } = await supabase
+          .from('production_order_packaging')
+          .select('item_code, description, unit, planned_qty')
+          .eq('production_order_id', createdOrder.id)
+          .eq('packaging_sku_id', selectedPackaging.id)
+          .maybeSingle();
+        if (packagingLookupError) throw packagingLookupError;
+        if (!existingPackaging
+          || existingPackaging.item_code !== packagingPayload.item_code
+          || existingPackaging.description !== packagingPayload.description
+          || existingPackaging.unit !== packagingPayload.unit
+          || Number(existingPackaging.planned_qty) !== plannedPackagingQty) {
+          throw packagingError;
+        }
+      }
 
       // BOM ingredients will be auto-loaded by the database trigger
+      createAttemptRef.current = null;
       setSaving(false); 
       setShowCreate(false); 
       fetchOrders();
@@ -1149,6 +1232,8 @@ export default function ProductionOrdersPage() {
       console.error('Error creating order:', error);
       setWorkflowError(`Failed to create production order: ${error.message}`);
       setSaving(false);
+    } finally {
+      createOrderInFlightRef.current = false;
     }
   };
 
@@ -1435,38 +1520,6 @@ export default function ProductionOrdersPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate, orders]);
 
-  // The completion action owns output persistence, so the Sage receipt always
-  // uses the exact quantities currently shown to the production clerk.
-  const recordCompletionOutput = async (order: ProductionOrder) => {
-    const { data: existing, error: existingError } = await supabase
-      .from('production_outputs')
-      .select('id')
-      .eq('production_order_id', order.id)
-      .order('recorded_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (existingError) throw existingError;
-
-    const payload = {
-      production_order_id: order.id,
-      quantity_produced: output.actual_qty,
-      quantity_bags: output.actual_bags,
-      rejected_quantity: output.rejected_qty,
-      rejected_bags: output.rejected_bags,
-      wastage_quantity: output.wastage_qty,
-      wastage_bags: output.wastage_bags,
-      bag_size_kg: bagSizeKg(order.unit_size),
-      unit: order.unit,
-      recorded_at: new Date().toISOString(),
-      recorded_by: profile?.id || null,
-    };
-
-    const result = existing
-      ? await supabase.from('production_outputs').update(payload).eq('id', existing.id)
-      : await supabase.from('production_outputs').insert(payload);
-    if (result.error) throw result.error;
-  };
-
   // Check if all ingredients are issued
   const allIngredientsIssued = () => {
     return detailMaterials.length > 0 && detailMaterials.every(m => m.issued);
@@ -1604,26 +1657,17 @@ export default function ProductionOrdersPage() {
             throw new Error(preflight.message);
           }
 
-          // Issue remaining materials in parallel via RPC (RPC handles unit_cost and total_cost atomically)
-          const unissued = allIngredientsIssued() ? [] : detailMaterials.filter((material) => !material.issued);
-          const issuePromises = unissued.map(material =>
-            supabase.rpc('issue_individual_ingredient', {
-              p_material_id: material.id,
-              p_actual_qty: material.planned_qty,
-              p_issued_by: profile?.id || null
-            })
-          );
-
-          const results = await Promise.all(issuePromises);
-          
-          // Check for errors
-          const errors = results.filter(r => r.error);
-          if (errors.length > 0) {
-            const errorMessages = errors.map((r, i) => `Item ${i + 1}: ${r.error?.message}`).join('; ');
-            throw new Error(`Failed to issue ${errors.length} of ${results.length} ingredients: ${errorMessages}`);
+          // Issue the full order in one database transaction so any lot
+          // shortfall rolls back every ingredient instead of leaving a partial issue.
+          if (!allIngredientsIssued()) {
+            const { error } = await supabase.rpc('issue_production_order_materials', {
+              p_production_order_id: selected.id,
+              p_issued_by: profile?.id || null,
+            });
+            if (error) throw error;
           }
 
-          // (stock_movements rows are already created inside issue_individual_ingredient RPC — no duplicate insert)
+          // Stock movements are created inside the issue RPCs; do not insert duplicates.
 
           // Now update order status to materials_issued
           try {
@@ -1642,13 +1686,10 @@ export default function ProductionOrdersPage() {
           await updateStatus('materials_issued');
 
           // Auto-link to DRS issues
-          const issueEntries = detailMaterials.map((m) => ({
-            issue_date: new Date().toISOString().split('T')[0],
-            raw_material_name: m.raw_materials?.name || 'Unknown',
-            quantity_kg: m.planned_qty,
-            production_order_ref: selected.batch_number,
-          }));
-          await supabase.from('rm_daily_issues').insert(issueEntries);
+          const { error: dailyIssuesError } = await supabase.rpc('record_production_daily_issues_once', {
+            p_production_order_id: selected.id,
+          });
+          if (dailyIssuesError) throw dailyIssuesError;
 
           setSaving(false);
         } catch (error: any) {
@@ -1938,11 +1979,31 @@ export default function ProductionOrdersPage() {
         });
       }
 
-      const { error } = await supabase.from('production_orders').update(updates).eq('id', selected.id);
-      if (error) throw error;
-
       if (status === 'completed') {
-        await recordCompletionOutput(selected);
+        const packagingDeclarations = pkgActuals
+          .filter((item) => item.packaging_sku_id && item.bags_used > 0)
+          .map((item) => ({
+            packaging_sku_id: item.packaging_sku_id,
+            bags_used: item.bags_used,
+            implied_tonnes: item.implied_tonnes || 0,
+          }));
+        const completionPayload = {
+          ...updates,
+          bag_size_kg: bagSizeKg(selected.unit_size),
+        };
+        const { error } = await supabase.rpc('queue_production_completion_once', {
+          p_production_order_id: selected.id,
+          p_completion: completionPayload,
+          p_packaging: packagingDeclarations,
+        });
+        if (error) throw error;
+        setOrderPackaging((current) => current.map((item) => {
+          const used = packagingDeclarations.find((actual) => actual.packaging_sku_id === item.packaging_sku_id);
+          return used ? { ...item, actual_qty: used.bags_used } : item;
+        }));
+      } else {
+        const { error } = await supabase.from('production_orders').update(updates).eq('id', selected.id);
+        if (error) throw error;
       }
 
       if (status === 'materials_issued') {
@@ -2256,7 +2317,13 @@ export default function ProductionOrdersPage() {
       </div>
 
       {/* Create Order Modal */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog
+        open={showCreate}
+        onOpenChange={(open) => {
+          if (!open && createOrderInFlightRef.current) return;
+          setShowCreate(open);
+        }}
+      >
         <DialogContent className="max-w-[1120px] w-[96vw] h-[90vh] max-h-[900px] p-0 sm:!max-w-[1120px] flex flex-col overflow-hidden [&>button.absolute]:hidden">
           <div className="shrink-0 border-b-2 border-orange-500 bg-slate-950 text-white px-5 py-3 relative">
             <div className="flex items-center justify-between pr-10">
