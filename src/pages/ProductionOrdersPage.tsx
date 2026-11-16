@@ -16,6 +16,7 @@ import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatch
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
 
 interface OrderMaterial {
   id: string; 
@@ -1469,7 +1470,33 @@ export default function ProductionOrdersPage() {
 
     const mats = normalizeRawMaterials((data as any[]) || []);
     setDetailMaterials(mats);
-    setOrderPackaging(packagingData || []);
+    const packagingCodes = [...new Set((packagingData || []).map((item: any) => item.item_code))];
+    let resolvedPackaging = packagingData || [];
+    if (order.status !== 'completed' && packagingCodes.length) {
+      const [master, posting, cache] = await Promise.all([
+        supabase.from('raw_materials').select('code, sage_code, cost_per_unit').eq('is_active', true)
+          .or(`code.in.(${packagingCodes.join(',')}),sage_code.in.(${packagingCodes.join(',')})`),
+        supabase.from('sync_log').select('details').eq('reference_id', order.id)
+          .eq('event_type', 'materials_issued').eq('status', 'success')
+          .order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('sage_stock_balances').select('sage_code, average_unit_cost, cost_synced_at').eq('warehouse_id', 19).in('sage_code', packagingCodes),
+      ]);
+      if (master.error || posting.error) toast.error('Packaging costs could not be refreshed.');
+      resolvedPackaging = resolvePackagingCosts(resolvedPackaging, master.data || [], posting.data?.details?.postedComponents || []);
+      if (!cache.error) resolvedPackaging = resolvedPackaging.map((item: any) => {
+        const row = cache.data?.find(row => row.sage_code === item.item_code);
+        return Number(item.unit_cost) > 0 || row?.average_unit_cost == null || !row.cost_synced_at ? item
+          : { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at };
+      });
+      if (hasUncostedPackaging(resolvedPackaging)) {
+        const refresh = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: order.id });
+        if (refresh.error) {
+          console.error('Packaging refresh request failed:', refresh.error);
+          toast.error(`Packaging refresh: ${refresh.error.message}`, { duration: 10000 });
+        }
+      }
+    }
+    setOrderPackaging(resolvedPackaging);
     // Calculate raw material cost from issued ingredients only
     setCosting((prev) => ({ ...prev, raw_material_cost: calculateIssuedMaterialCost(mats) }));
 
@@ -1784,6 +1811,18 @@ export default function ProductionOrdersPage() {
     stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
+      if (orderPackaging.length && selected.status !== 'completed') {
+        const request = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: selected.id });
+        if (request.error) throw new Error('Packaging cost refresh failed: ' + request.error.message);
+        const prices = await supabase.from('sage_stock_balances').select('sage_code, average_unit_cost, cost_synced_at').eq('warehouse_id', 19)
+          .in('sage_code', orderPackaging.map(item => item.item_code));
+        if (prices.error) throw prices.error;
+        setOrderPackaging(current => current.map(item => {
+          const row = prices.data?.find(row => row.sage_code === item.item_code);
+          return row?.average_unit_cost != null && row.cost_synced_at && sageIssueStatus?.status !== 'success'
+            ? { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at } : item;
+        }));
+      }
       const materialIds = detailMaterials.map(m => m.raw_material_id);
       await loadSageStockBalances(materialIds);
 
@@ -1852,9 +1891,41 @@ export default function ProductionOrdersPage() {
     return startBackgroundPolling(() => refreshSageStock(false), 300000);
   }, [showDetail, selected?.id, detailMaterials.length]);
 
+  useEffect(() => {
+    if (!showDetail || !selected || selected.status === 'completed' || sageIssueStatus?.status !== 'success') return;
+    let active = true;
+    void supabase.from('production_order_packaging').select('id, unit_cost').eq('production_order_id', selected.id)
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        setOrderPackaging(current => current.map(item => {
+          const row = data?.find(candidate => candidate.id === item.id);
+          return Number(row?.unit_cost) > 0 ? { ...item, unit_cost: Number(row?.unit_cost) } : item;
+        }));
+      });
+    return () => { active = false; };
+  }, [showDetail, selected?.id, selected?.status, sageIssueStatus?.status, sageIssueStatus?.updated_at]);
+
+  useEffect(() => {
+    if (!showDetail || !selected || selected.status === 'completed') return;
+    const channel = supabase.channel('order-packaging-prices-' + selected.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances', filter: 'warehouse_id=eq.19' }, payload => {
+        const row = payload.new as { sage_code?: string; average_unit_cost?: number; cost_synced_at?: string };
+        if (row.average_unit_cost == null || !row.cost_synced_at || sageIssueStatus?.status === 'success') return;
+        setOrderPackaging(current => current.map(item => item.item_code === row.sage_code
+          ? { ...item, unit_cost: Number(row.average_unit_cost), cost_synced_at: row.cost_synced_at } : item));
+      }).subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [showDetail, selected?.id, selected?.status, sageIssueStatus?.status]);
+
   /* ── Production completion with packaging ── */
   async function handleCompletionRequest() {
     if (!selected) return;
+    if (hasUncostedPackaging(orderPackaging)) {
+      setWorkflowError(orderPackaging.some(item => item.cost_synced_at && Number(item.unit_cost) === 0)
+        ? 'Sage reports a zero packaging unit cost. Review its cost in Sage before completing.'
+        : 'Packaging unit cost is awaiting material cost sync. Refresh costs before completion.');
+      return;
+    }
     if (selected.status !== 'in_progress') {
       setWorkflowError('Cannot complete — production must be in progress.');
       return;
@@ -1957,9 +2028,12 @@ export default function ProductionOrdersPage() {
         }
         
         // Production Line cost deprecated (double-counted labour). Labour card holds the authoritative per-tonne labour cost.
-        const total = costing.raw_material_cost + costing.labour_cost + costing.overhead_cost;
+        if (hasUncostedPackaging(orderPackaging)) throw new Error('Packaging unit cost is awaiting material cost sync.');
+        const actualPackagingCost = packagingCost(orderPackaging, false, pkgActuals);
+        const total = costing.raw_material_cost + actualPackagingCost + costing.labour_cost + costing.overhead_cost;
         Object.assign(updates, {
           ...costing,
+          packaging_cost: actualPackagingCost,
           production_line_cost: 0,
           machine_cost: 0,
           actual_qty: output.actual_qty,
@@ -2049,7 +2123,7 @@ export default function ProductionOrdersPage() {
           const packagingUpdates = await Promise.all(pkgData.map((item) =>
             supabase
               .from('production_order_packaging')
-              .update({ actual_qty: item.bags_used })
+              .update({ actual_qty: item.bags_used, unit_cost: Number(orderPackaging.find(row => row.packaging_sku_id === item.packaging_sku_id)?.unit_cost || 0) })
               .eq('production_order_id', selected.id)
               .eq('packaging_sku_id', item.packaging_sku_id)
           ));
@@ -3345,6 +3419,10 @@ export default function ProductionOrdersPage() {
                           </div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
+                          <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
+                            <span className="text-xs text-slate-600">Unit cost (USD): <strong>{Number(item.unit_cost) > 0 || item.cost_synced_at ? `$${Number(item.unit_cost).toFixed(4)}` : 'Awaiting cost sync'}</strong></span>
+                            <span className="text-xs text-slate-600">Actual cost: {Number(item.unit_cost) > 0 ? `$${(Number(item.actual_qty || 0) * Number(item.unit_cost)).toFixed(2)}` : 'Not costed'}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3436,12 +3514,14 @@ export default function ProductionOrdersPage() {
                   // Calculate all costs. Production Line card is deprecated (double-counted labour); Labour card is authoritative.
                   const rawMaterialCost = costing.raw_material_cost;
                   const actualTonnes = output.actual_qty > 0 ? output.actual_qty / 1000 : 0;
-                  const totalCost = rawMaterialCost + costing.labour_cost + costing.overhead_cost;
+                  const actualPackagingCost = selected.status === 'completed' ? Number(selected.packaging_cost || 0) : packagingCost(orderPackaging);
+                  const totalCost = selected.status === 'completed' ? Number(selected.total_cost || 0)
+                    : rawMaterialCost + actualPackagingCost + costing.labour_cost + costing.overhead_cost;
                   const costPerKg = output.actual_qty > 0 ? totalCost / output.actual_qty : 0;
 
                   // Planned cost calculation
                   const plannedBomCost = calculatePlannedMaterialCost(detailMaterials);
-                  const plannedTotalCost = plannedBomCost + costing.labour_cost + costing.overhead_cost;
+                  const plannedTotalCost = plannedBomCost + packagingCost(orderPackaging, true) + costing.labour_cost + costing.overhead_cost;
                   const plannedCostPerKg = selected.planned_qty > 0 ? plannedTotalCost / selected.planned_qty : 0;
                   
                   const varianceCostPerKg = costPerKg - plannedCostPerKg;
@@ -3449,11 +3529,16 @@ export default function ProductionOrdersPage() {
                   return (
                     <>
                       {/* Cost Summary Cards */}
-                      <div className="grid grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-slate-500 mb-1">Raw Material</div>
                           <div className="text-xl font-bold text-slate-800">${rawMaterialCost.toFixed(2)}</div>
                           <div className="text-xs text-slate-400 mt-1">Issued ingredients</div>
+                        </div>
+                        <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                          <div className="text-xs font-medium text-cyan-700 mb-1">Packaging</div>
+                          <div className="text-xl font-bold text-cyan-900">{hasUncostedPackaging(orderPackaging) ? 'Not costed' : `$${actualPackagingCost.toFixed(2)}`}</div>
+                          <div className="text-xs text-cyan-700 mt-1">{selected.status === 'completed' ? 'Saved order cost' : 'Recorded packaging used'}</div>
                         </div>
                         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                           <div className="text-xs font-medium text-purple-600 mb-1">Labour</div>
@@ -3469,10 +3554,10 @@ export default function ProductionOrdersPage() {
                           <div className="text-xs text-orange-600 mt-1">{overheadPct}% of RM cost</div>
                         </div>
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                          <div className="text-xs font-medium text-emerald-600 mb-1">Total Cost</div>
+                          <div className="text-xs font-medium text-emerald-600 mb-1">{selected.status !== 'completed' && hasUncostedPackaging(orderPackaging) ? 'Cost Subtotal' : 'Total Cost'}</div>
                           <div className="text-xl font-bold text-emerald-700">${totalCost.toFixed(2)}</div>
                           <div className="text-xs text-emerald-600 mt-1">
-                            All costs
+                            {selected.status === 'completed' ? 'Saved order total' : hasUncostedPackaging(orderPackaging) ? 'Packaging not costed' : 'Ingredients, packaging, labour and overhead'}
                             {usdZigRate !== null && <span className="block text-emerald-500">≈ ZiG {(totalCost * usdZigRate).toFixed(2)}</span>}
                           </div>
                         </div>
