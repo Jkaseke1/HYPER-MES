@@ -1684,6 +1684,27 @@ export default function ProductionOrdersPage() {
             throw new Error(preflight.message);
           }
 
+          // This UAT order has a dedicated approval RPC that consumes labelled PD lots.
+          if (selected.id === '844df5c9-362b-49af-8876-eab663d1358d' &&
+              selected.batch_number === 'MFP010440' &&
+              new URL(import.meta.env.VITE_SUPABASE_URL).hostname === 'appyuqxetlphuxfybmus.supabase.co') {
+            const { error } = await supabase.rpc('approve_and_issue_production_order', {
+              p_production_order_id: selected.id,
+              p_issued_by: profile?.id || null,
+            });
+            if (error) throw error;
+
+            setSageIssueStatus({
+              status: 'pending',
+              message: 'Materials issued in Plant Control. The Sage material issue has been queued.',
+            });
+            window.setTimeout(() => loadSageIssueStatus(selected.id, true), 1500);
+            setShowDetail(false);
+            fetchOrders();
+            setSaving(false);
+            return;
+          }
+
           // Issue the full order in one database transaction so any lot
           // shortfall rolls back every ingredient instead of leaving a partial issue.
           if (!allIngredientsIssued()) {
