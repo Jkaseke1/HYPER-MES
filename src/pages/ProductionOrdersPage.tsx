@@ -1684,11 +1684,17 @@ export default function ProductionOrdersPage() {
             throw new Error(preflight.message);
           }
 
-          // This UAT order has a dedicated approval RPC that consumes labelled PD lots.
-          if (selected.id === '844df5c9-362b-49af-8876-eab663d1358d' &&
-              selected.batch_number === 'MFP010440' &&
-              new URL(import.meta.env.VITE_SUPABASE_URL).hostname === 'appyuqxetlphuxfybmus.supabase.co') {
-            const { error } = await supabase.rpc('approve_and_issue_production_order', {
+          // UAT trials consume their reviewed PD lots through dedicated approval RPCs.
+          const isUat = new URL(import.meta.env.VITE_SUPABASE_URL).hostname === 'appyuqxetlphuxfybmus.supabase.co';
+          const usesMfp010440Lots = selected.id === '844df5c9-362b-49af-8876-eab663d1358d' &&
+            selected.batch_number === 'MFP010440';
+          const usesMfp010441Lots = selected.id === 'f564a0ce-83f6-4b62-8029-fcd4b6d8610c' &&
+            selected.batch_number === 'MFP010441';
+          if (isUat && (usesMfp010440Lots || usesMfp010441Lots)) {
+            const issueRpc = usesMfp010441Lots
+              ? 'uat_mfp010441_approve_and_issue'
+              : 'approve_and_issue_production_order';
+            const { error } = await supabase.rpc(issueRpc, {
               p_production_order_id: selected.id,
               p_issued_by: profile?.id || null,
             });
