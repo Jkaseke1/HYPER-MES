@@ -61,7 +61,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'No reviewed warehouse-stock policy for %',p_sage_code; END IF;
   IF p_observed_at IS NULL OR p_observed_at>clock_timestamp() OR p_observed_at<clock_timestamp()-interval '2 minutes'
     THEN RAISE EXCEPTION 'PD stock observation is outside the allowed window'; END IF;
-  INSERT INTO pd_verified_stock VALUES(p_sage_code,19,'Hyperfeeds 2026 UAT',p_available_quantity,
+  INSERT INTO pd_verified_stock VALUES(p_sage_code,19,'Hyperfeeds UAT Bench 20261124',p_available_quantity,
     policy.unit,policy.lot_controlled,true,p_observed_at,'Native UAT SDK PD availability. Item review: '||policy.review_note)
   ON CONFLICT(company_database,warehouse_id,sage_code) DO UPDATE SET
     available_quantity=excluded.available_quantity,unit=excluded.unit,lot_controlled=excluded.lot_controlled,
@@ -150,7 +150,7 @@ BEGIN
   SELECT status INTO order_status FROM production_orders WHERE id=p_order FOR UPDATE;
   IF order_status IS DISTINCT FROM 'pending_finance' OR NOT EXISTS(
     SELECT 1 FROM pd_warehouse_issue_orders WHERE order_id=p_order AND enabled
-      AND company_database='Hyperfeeds 2026 UAT' AND warehouse_id=19) THEN
+      AND company_database='Hyperfeeds UAT Bench 20261124' AND warehouse_id=19) THEN
     RAISE EXCEPTION 'PD stock refresh is unavailable for this order';
   END IF;
   SELECT array_agg(DISTINCT sage_code ORDER BY sage_code) INTO codes FROM pd_warehouse_requirements(p_order)
@@ -175,7 +175,7 @@ BEGIN
   SELECT status INTO state FROM production_orders WHERE id=p_order FOR UPDATE;
   IF state IS DISTINCT FROM 'pending_finance' THEN RAISE EXCEPTION 'Order is not awaiting Finance; reload and reconcile'; END IF;
   SELECT * INTO cfg FROM pd_warehouse_issue_orders WHERE order_id=p_order AND enabled FOR UPDATE;
-  IF NOT FOUND OR cfg.company_database<>'Hyperfeeds 2026 UAT' OR cfg.warehouse_id<>19 THEN
+  IF NOT FOUND OR cfg.company_database<>'Hyperfeeds UAT Bench 20261124' OR cfg.warehouse_id<>19 THEN
     RAISE EXCEPTION 'Warehouse-stock mode is not enabled for this UAT order'; END IF;
   IF EXISTS(SELECT 1 FROM sync_log WHERE reference_id=p_order AND event_type='materials_issued')
     OR EXISTS(SELECT 1 FROM production_order_materials WHERE production_order_id=p_order AND issued)
@@ -220,7 +220,7 @@ BEGIN
   RETURN changed;
 END $$;
 REVOKE ALL ON FUNCTION public.approve_pd_warehouse_issue(uuid) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.approve_pd_warehouse_issue(uuid) TO authenticated;
+-- Issue approval stays disabled in the stock-only bench preparation.
 -- Protect order requirements once reserved, including direct browser edits.
 CREATE FUNCTION public.guard_pd_warehouse_requirements() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$

@@ -98,6 +98,10 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
 
 async function publishVerifiedPdStock(stock, itemCode, warehouse) {
   if (process.env.SAGE_PD_WAREHOUSE_ISSUE_ENABLED !== 'true' || warehouse.code !== 'PD') return;
+  const project = new URL(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL).hostname;
+  if (project !== 'appyuqxetlphuxfybmus.supabase.co') {
+    throw new Error('Restricted Sage bench stock can only be published to Plant Control UAT.');
+  }
   const { data: policy, error: policyError } = await supabase.from('pd_warehouse_item_policy')
     .select('unit, review_note').eq('sage_code', itemCode).eq('warehouse_mode_allowed', true).maybeSingle();
   if (policyError) throw new Error(policyError.message);
@@ -109,7 +113,7 @@ async function publishVerifiedPdStock(stock, itemCode, warehouse) {
   const age = Date.now() - observedAt;
   if (stock.status !== 'ok' || stock.itemCode !== itemCode || stock.warehouse !== 'PD'
       || stock.warehouseId !== 19 || stock.environment !== 'UAT'
-      || stock.companyDatabase !== 'Hyperfeeds 2026 UAT' || stock.manufacturingWipVerified !== true
+      || stock.companyDatabase !== 'Hyperfeeds UAT Bench 20261124' || stock.manufacturingWipVerified !== true
       || !Number.isFinite(stock.availableQuantity) || !Number.isFinite(age) || age < 0 || age > 120000) {
     throw new Error('Verified Sage PD availability is missing for ' + itemCode);
   }

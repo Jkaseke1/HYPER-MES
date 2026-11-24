@@ -61,9 +61,16 @@ namespace SDK_Test
             if (context == null)
                 throw new InvalidOperationException("Sage has no warehouse context for " + item.Code + " in " + sageWarehouse.Code + ".");
             decimal manufacturingWip=0;
-            bool manufacturingWipVerified = SageRuntime.EnvironmentName=="UAT" && SageRuntime.CompanyDatabase=="Hyperfeeds 2026 UAT"
-                && Environment.GetEnvironmentVariable("HYPER_SAGE_NATIVE_BRIDGE_ENABLED")=="true";
+            bool manufacturingWipVerified = SageRuntime.EnvironmentName=="UAT" && SageRuntime.CompanyDatabase=="Hyperfeeds UAT Bench 20261124"
+                && Environment.GetEnvironmentVariable("HYPER_SAGE_PD_BENCH_READS_ENABLED")=="true";
             if(manufacturingWipVerified) {
+                using (var identity = new SqlCommand("SELECT CASE WHEN @@SERVERNAME = @Server AND DB_NAME() = @Company AND DATABASEPROPERTYEX(DB_NAME(), 'UserAccess') = 'RESTRICTED_USER' THEN 1 ELSE 0 END"))
+                {
+                    identity.Parameters.AddWithValue("@Server", @"USERA213\SQLEXPRESS01");
+                    identity.Parameters.AddWithValue("@Company", "Hyperfeeds UAT Bench 20261124");
+                    if (Convert.ToInt32(DatabaseContext.ExecuteCommandScalar(identity)) != 1)
+                        throw new InvalidOperationException("Unexpected Sage PD bench identity or access mode.");
+                }
                 using(var command=new SqlCommand("SELECT COALESCE(SUM(QtyMFPWIP),0) FROM dbo._etblStockQtys WHERE StockID=@Stock AND WhseID=@Warehouse")) {
                     command.Parameters.AddWithValue("@Stock",item.ID);command.Parameters.AddWithValue("@Warehouse",sageWarehouse.ID);
                     manufacturingWip=Convert.ToDecimal(DatabaseContext.ExecuteCommandScalar(command));
