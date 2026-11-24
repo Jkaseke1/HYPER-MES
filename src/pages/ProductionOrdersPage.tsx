@@ -1298,6 +1298,10 @@ export default function ProductionOrdersPage() {
   const isPdUatPreview = selected?.id === PD_UAT_PREVIEW_ORDER_ID && selected.status === 'pending'
     && /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '');
 
+  const pdPreviewExpired = isPdUatPreview && pdWarehouseReview?.lines.some(
+    line => line.reason === 'Refresh verified PD availability'
+  );
+
   useEffect(() => {
     setPdWarehouseReview(null);
     setPdWarehouseError(null);
@@ -3253,10 +3257,12 @@ export default function ProductionOrdersPage() {
               <section aria-label="PD stock availability" className="mb-4 rounded-md border p-4 bg-slate-50" aria-live="polite">
                 <strong>{isPdUatPreview ? 'Restricted Sage PD stock preview' : pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
                 {pdWarehouseError ? <p role="alert">{pdWarehouseError}</p> : !pdWarehouseReview ? <p>Checking issue mode and PD availability…</p> : pdWarehouseReview.enabled ? <>
-                  <p>{isPdUatPreview ? 'Preview only. Snapshots expire after two minutes. Finance approval and Sage posting are on hold.' : 'Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.'}</p>
+                  <p>{isPdUatPreview ? 'Approval is on hold. The rollback test measured a 21.0560 decrease in the value of existing Sage stock, above the current limit.' : 'Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.'}</p>
+                  {pdPreviewExpired && <p className="mt-2 font-medium text-amber-800">Sage snapshot expired. The quantities below are from the last Windows sync. Run the scoped Windows refresh for current availability.</p>}
+                  {isPdUatPreview && pdWarehouseReview.ready && <p className="mt-2 font-medium text-emerald-800">All {pdWarehouseReview.lines.length} lines are covered by the current Sage snapshot.</p>}
                   <ul>{pdWarehouseReview.lines.map(line => <li key={line.sageCode}>
-                    {line.sageCode}: {line.required} {line.unit} required; {line.available ?? 'unknown'} available.
-                    {line.reason && <span className="text-red-700"> {line.reason}</span>}
+                    {line.sageCode}: {formatQty(line.required)} {line.unit} required; {line.available == null ? 'unknown' : formatQty(line.available)} {isPdUatPreview && line.reason === 'Refresh verified PD availability' ? 'at last sync' : 'available'}.
+                    {line.reason && (!isPdUatPreview || line.reason !== 'Refresh verified PD availability') && <span className="text-red-700"> {line.reason}</span>}
                   </li>)}</ul>
                 </> : <p>This order uses the existing lot allocation workflow.</p>}
               </section>
@@ -3431,7 +3437,7 @@ export default function ProductionOrdersPage() {
                                 )}
                               </td>
                               <td className="px-3 py-3 text-center">
-                                {!material.issued && selected.status === 'pending' && isOutOfStock && (
+                                {!material.issued && selected.status === 'pending' && !isPdUatPreview && isOutOfStock && (
                                   <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
                                     <AlertTriangle className="w-3 h-3" /> Out of stock
                                   </span>
