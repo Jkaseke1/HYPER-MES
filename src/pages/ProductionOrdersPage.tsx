@@ -20,6 +20,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
 
+const PD_UAT_PREVIEW_ORDER_ID = '7a84c0ad-edb9-4dab-bdcf-189f7fa18e38';
 const PD_STOCK_MODE_ENABLED = import.meta.env.VITE_ENABLE_PD_WAREHOUSE_ISSUE === 'true';
 interface PdWarehouseReview {
   enabled: boolean; ready: boolean;
@@ -1294,10 +1295,13 @@ export default function ProductionOrdersPage() {
     setSageStockSyncedAt(syncedMap);
   };
 
+  const isPdUatPreview = selected?.id === PD_UAT_PREVIEW_ORDER_ID && selected.status === 'pending'
+    && /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '');
+
   useEffect(() => {
     setPdWarehouseReview(null);
     setPdWarehouseError(null);
-    if (!PD_STOCK_MODE_ENABLED || !showDetail || !selected?.id || selected.status !== 'pending_finance') return;
+    if (!showDetail || !selected?.id || (!isPdUatPreview && (!PD_STOCK_MODE_ENABLED || selected.status !== 'pending_finance'))) return;
     let cancelled = false;
     const load = async () => {
       const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
@@ -1310,7 +1314,7 @@ export default function ProductionOrdersPage() {
     void load();
     const stop = startBackgroundPolling(load, 15000);
     return () => { cancelled = true; stop(); };
-  }, [showDetail, selected?.id, selected?.status]);
+  }, [showDetail, selected?.id, selected?.status, isPdUatPreview]);
 
   const runSageIssuePreflight = async (materialsToCheck: OrderMaterial[]) => {
     const materialIds = [...new Set(materialsToCheck.filter(m => !m.issued).map(m => m.raw_material_id))];
@@ -1508,7 +1512,7 @@ export default function ProductionOrdersPage() {
   };
 
   const requestFinanceBomValidation = async () => {
-    if (!selected) return;
+    if (!selected || isPdUatPreview) return;
     if (detailMaterials.length === 0) {
       setWorkflowError('Cannot send to Finance — no ingredients linked to this order. Please set up the BOM for this formulation first.');
       return;
@@ -1795,7 +1799,7 @@ export default function ProductionOrdersPage() {
 
   // Refresh Sage stock balances for current order
   const refreshSageStock = async (showToast = true) => {
-    if (!selected || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
+    if (!selected || isPdUatPreview || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
     stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
@@ -3036,7 +3040,7 @@ export default function ProductionOrdersPage() {
               {/* Workflow Actions Bar */}
               <div className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-y border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur flex-wrap">
                 <div className="flex items-center gap-3">
-                  {selected.status === 'pending' && (
+                  {selected.status === 'pending' && !isPdUatPreview && (
                     <button
                       onClick={requestFinanceBomValidation}
                       disabled={saving || detailMaterials.length === 0}
@@ -3229,7 +3233,7 @@ export default function ProductionOrdersPage() {
                       </select>
                     </label>
                   </div>
-                  {detailTab === 'materials' && (
+                  {detailTab === 'materials' && !isPdUatPreview && (
                     <button
                       onClick={() => refreshSageStock(true)}
                       disabled={saving || refreshingStock}
@@ -3245,11 +3249,11 @@ export default function ProductionOrdersPage() {
               {/* Tab Content */}
               <div className="p-4">
 
-            {PD_STOCK_MODE_ENABLED && selected.status === 'pending_finance' && (
+            {(isPdUatPreview || (PD_STOCK_MODE_ENABLED && selected.status === 'pending_finance')) && (
               <section aria-label="PD stock availability" className="mb-4 rounded-md border p-4 bg-slate-50" aria-live="polite">
-                <strong>{pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
+                <strong>{isPdUatPreview ? 'Restricted Sage PD stock preview' : pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
                 {pdWarehouseError ? <p role="alert">{pdWarehouseError}</p> : !pdWarehouseReview ? <p>Checking issue mode and PD availability…</p> : pdWarehouseReview.enabled ? <>
-                  <p>Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.</p>
+                  <p>{isPdUatPreview ? 'Preview only. Snapshots expire after two minutes. Finance approval and Sage posting are on hold.' : 'Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.'}</p>
                   <ul>{pdWarehouseReview.lines.map(line => <li key={line.sageCode}>
                     {line.sageCode}: {line.required} {line.unit} required; {line.available ?? 'unknown'} available.
                     {line.reason && <span className="text-red-700"> {line.reason}</span>}
@@ -3326,7 +3330,7 @@ export default function ProductionOrdersPage() {
                   </div>
                 </div>
 
-                {!pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
+                {!isPdUatPreview && !pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
