@@ -1,6 +1,7 @@
 using Pastel.Evolution;
 using System;
 using System.Net;
+using System.Data.SqlClient;
 using System.Web.Http;
 
 namespace SDK_Test
@@ -59,14 +60,27 @@ namespace SDK_Test
             var context = item.WarehouseContexts[sageWarehouse];
             if (context == null)
                 throw new InvalidOperationException("Sage has no warehouse context for " + item.Code + " in " + sageWarehouse.Code + ".");
+            decimal manufacturingWip=0;
+            bool manufacturingWipVerified = SageRuntime.EnvironmentName=="UAT" && SageRuntime.CompanyDatabase=="Hyperfeeds 2026 UAT"
+                && Environment.GetEnvironmentVariable("HYPER_SAGE_NATIVE_BRIDGE_ENABLED")=="true";
+            if(manufacturingWipVerified) {
+                using(var command=new SqlCommand("SELECT COALESCE(SUM(QtyMFPWIP),0) FROM dbo._etblStockQtys WHERE StockID=@Stock AND WhseID=@Warehouse")) {
+                    command.Parameters.AddWithValue("@Stock",item.ID);command.Parameters.AddWithValue("@Warehouse",sageWarehouse.ID);
+                    manufacturingWip=Convert.ToDecimal(DatabaseContext.ExecuteCommandScalar(command));
+                }
+            }
 
             return new
             {
                 status = "ok",
                 environment = SageRuntime.EnvironmentName,
+                companyDatabase = SageRuntime.CompanyDatabase,
+                warehouseId = sageWarehouse.ID,
+                manufacturingWipVerified,
                 itemCode = item.Code,
                 warehouse = sageWarehouse.Code,
                 quantity = context.QtyOnHand,
+                availableQuantity = (decimal)context.QtyFree - manufacturingWip,
                 averageUnitCost = context.AverageUnitCost,
                 readAtUtc = DateTime.UtcNow
             };

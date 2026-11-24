@@ -57,6 +57,10 @@ async function handleGoodsIssue(syncEvent) {
     throw new Error(`Material issue event must reference production_orders, received ${syncEvent.reference_type}`);
   }
 
+  if (syncEvent.details?.pdWarehouseIssue === true) {
+    throw new Error('PD warehouse issue requires the native Sage adapter. Legacy posting is blocked.');
+  }
+
   const orderId = syncEvent.reference_id;
   const { data: order, error: orderError } = await supabase
     .from('production_orders')

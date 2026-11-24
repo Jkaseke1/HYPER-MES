@@ -96,6 +96,31 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
   return materials.filter((material) => !finishedGoodCodes.has((material.sage_code || material.code).trim().toUpperCase()));
 }
 
+async function publishVerifiedPdStock(stock, itemCode, warehouse) {
+  if (process.env.SAGE_PD_WAREHOUSE_ISSUE_ENABLED !== 'true' || warehouse.code !== 'PD') return;
+  const { data: policy, error: policyError } = await supabase.from('pd_warehouse_item_policy')
+    .select('unit, review_note').eq('sage_code', itemCode).eq('warehouse_mode_allowed', true).maybeSingle();
+  if (policyError) throw new Error(policyError.message);
+  if (!policy) return;
+
+  // This candidate can publish only for the verified UAT native SDK. The
+  // item policy records an explicit manual review of lot requirements and UOM.
+  const observedAt = Date.parse(stock.readAtUtc);
+  const age = Date.now() - observedAt;
+  if (stock.status !== 'ok' || stock.itemCode !== itemCode || stock.warehouse !== 'PD'
+      || stock.warehouseId !== 19 || stock.environment !== 'UAT'
+      || stock.companyDatabase !== 'Hyperfeeds 2026 UAT' || stock.manufacturingWipVerified !== true
+      || !Number.isFinite(stock.availableQuantity) || !Number.isFinite(age) || age < 0 || age > 120000) {
+    throw new Error('Verified Sage PD availability is missing for ' + itemCode);
+  }
+  const { error } = await supabase.rpc('publish_verified_pd_stock', {
+    p_sage_code: itemCode,
+    p_available_quantity: Math.max(0, stock.availableQuantity),
+    p_observed_at: new Date(observedAt).toISOString(),
+  });
+  if (error) throw new Error(error.message);
+}
+
 async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {}) {
   if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for Sage stock sync');
   const materials = await loadMaterials(itemCodes, { fullSync });
@@ -127,6 +152,7 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'sage_code,warehouse_id' });
         if (error) throw new Error(error.message);
+        await publishVerifiedPdStock(stock, itemCode, warehouse);
         synced += 1;
       } catch (error) {
         failures.push(`${itemCode}/${warehouse.code}: ${error.message}`);

@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
+import { freshPdQuantity, pdStockProblems } from '../lib/productionPdStock';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
@@ -17,6 +18,12 @@ import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
+
+const PD_STOCK_MODE_ENABLED = import.meta.env.VITE_ENABLE_PD_WAREHOUSE_ISSUE === 'true';
+interface PdWarehouseReview {
+  enabled: boolean; ready: boolean;
+  lines: { sageCode: string; required: number; available: number | null; unit: string; reason: string | null }[];
+}
 
 interface OrderMaterial {
   id: string; 
@@ -185,7 +192,8 @@ export default function ProductionOrdersPage() {
   const [detailMaterials, setDetailMaterials] = useState<OrderMaterial[]>([]);
   const [orderPackaging, setOrderPackaging] = useState<any[]>([]);
   const [editQtyForm, setEditQtyForm] = useState({ planned_qty: 0 });
-  const [productionFloorStock, setProductionFloorStock] = useState<Record<string, number>>({});
+  const [pdWarehouseReview, setPdWarehouseReview] = useState<PdWarehouseReview | null>(null);
+  const [pdWarehouseError, setPdWarehouseError] = useState<string | null>(null);
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
   const [sageStockSyncedAt, setSageStockSyncedAt] = useState<Record<string, string | null>>({});
   const [logs, setLogs] = useState<ProductionLog[]>([]);
@@ -1250,33 +1258,6 @@ export default function ProductionOrdersPage() {
     }
   };
 
-  const loadProductionFloorStock = async (materialIds: string[]) => {
-    if (!materialIds.length) {
-      setProductionFloorStock({});
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('stock_movements')
-      .select('raw_material_id, quantity')
-      .eq('movement_type', 'production_input')
-      .in('raw_material_id', materialIds);
-
-    if (error) {
-      console.error('Error loading production floor stock:', error);
-      return;
-    }
-
-    const stockMap: Record<string, number> = {};
-    for (const row of data || []) {
-      const materialId = (row as any).raw_material_id;
-      const quantity = Number((row as any).quantity || 0);
-      stockMap[materialId] = (stockMap[materialId] || 0) + quantity;
-    }
-
-    setProductionFloorStock(stockMap);
-  };
-
   const loadSageStockBalances = async (materialIds: string[]) => {
     if (!materialIds.length) {
       setSageStockBalances({});
@@ -1292,6 +1273,8 @@ export default function ProductionOrdersPage() {
 
     if (error) {
       console.error('Error loading Sage stock balances:', error);
+      setSageStockBalances({});
+      setSageStockSyncedAt({});
       return;
     }
 
@@ -1308,111 +1291,68 @@ export default function ProductionOrdersPage() {
     setSageStockSyncedAt(syncedMap);
   };
 
-  const isSageRowFresh = (syncedAt?: string | null) => {
-    if (!syncedAt) return true; // Graceful default
-    const syncedMs = new Date(syncedAt).getTime();
-    if (Number.isNaN(syncedMs)) return true;
-    const ageMinutes = (Date.now() - syncedMs) / (1000 * 60);
-    return ageMinutes <= SAGE_STOCK_MAX_AGE_MINUTES;
-  };
+  useEffect(() => {
+    setPdWarehouseReview(null);
+    setPdWarehouseError(null);
+    if (!PD_STOCK_MODE_ENABLED || !showDetail || !selected?.id || selected.status !== 'pending_finance') return;
+    let cancelled = false;
+    const load = async () => {
+      const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
+      if (cancelled) return;
+      if (error || !data || typeof data.enabled !== 'boolean' || typeof data.ready !== 'boolean' || !Array.isArray(data.lines)) {
+        setPdWarehouseReview(null);
+        setPdWarehouseError(error?.message || 'PD availability response could not be verified.');
+      } else { setPdWarehouseReview(data); setPdWarehouseError(null); }
+    };
+    void load();
+    const stop = startBackgroundPolling(load, 15000);
+    return () => { cancelled = true; stop(); };
+  }, [showDetail, selected?.id, selected?.status]);
 
   const runSageIssuePreflight = async (materialsToCheck: OrderMaterial[]) => {
-    const pendingMaterials = materialsToCheck.filter((m) => !m.issued);
-    if (pendingMaterials.length === 0) {
-      return { ok: true as const };
-    }
-
-    const materialIds = Array.from(new Set(pendingMaterials.map((m) => m.raw_material_id).filter(Boolean)));
-    
-    // Query Sage stock balances
-    const { data: sageData, error: sageStockError } = await supabase
-      .from('sage_stock_balances')
-      // `quantity` is the canonical bridge balance column. Querying the
-      // retired `quantity_on_hand` field caused Supabase to reject the whole
-      // request, then the UI silently fell back to MES zero balances.
+    const materialIds = [...new Set(materialsToCheck.filter(m => !m.issued).map(m => m.raw_material_id))];
+    if (!materialIds.length) return { ok: true as const };
+    const { data, error } = await supabase.from('sage_stock_balances')
       .select('raw_material_id, quantity, last_synced_at')
-      .eq('warehouse_id', 19)
-      .in('raw_material_id', materialIds);
-
-    if (sageStockError) {
-      throw new Error(`Unable to read Sage Production balances: ${sageStockError.message}`);
-    }
-
-    // Query raw_materials current stock as fallback
-    const { data: rmData } = await supabase
-      .from('raw_materials')
-      .select('id, name, code, current_stock, unit')
-      .in('id', materialIds);
-
-    const stockMap: Record<string, number> = {};
-    const syncedMap: Record<string, string | null> = {};
-    const rmStockMap: Record<string, number> = {};
-
-    for (const row of sageData || []) {
-      const materialId = (row as any).raw_material_id;
-      if (materialId) {
-        stockMap[materialId] = Number((row as any).quantity ?? 0);
-        syncedMap[materialId] = (row as any).last_synced_at || null;
+      .eq('warehouse_id', 19).in('raw_material_id', materialIds);
+    if (error) throw new Error(`Unable to read Sage PD balances: ${error.message}`);
+    const quantities: Record<string, number> = {};
+    const timestamps: Record<string, string | null> = {};
+    for (const row of data || []) {
+      if (Object.prototype.hasOwnProperty.call(quantities, row.raw_material_id)) {
+        throw new Error('Duplicate Sage PD balance mapping; reconcile before issuing.');
       }
+      quantities[row.raw_material_id] = row.quantity == null ? NaN : Number(row.quantity);
+      timestamps[row.raw_material_id] = row.last_synced_at;
     }
-
-    for (const row of rmData || []) {
-      if (row.id) {
-        rmStockMap[row.id] = Number(row.current_stock || 0);
-      }
-    }
-
-    setSageStockBalances(stockMap);
-    setSageStockSyncedAt(syncedMap);
-
-    const insufficient: string[] = [];
-
-    for (const material of pendingMaterials) {
-      const name = material.raw_materials?.name || material.raw_material_id;
-      const unit = material.unit || 'kg';
-      const required = normalizeQty(material.planned_qty);
-      
-      const sageVal = stockMap[material.raw_material_id];
-      const mesVal = rmStockMap[material.raw_material_id] ?? Number(material.raw_materials?.current_stock || 0);
-      
-      // Use Sage balance if available, otherwise fallback to MES stock
-      const available = normalizeQty(typeof sageVal === 'number' && sageVal > 0 ? sageVal : mesVal);
-
-      if (available + 0.001 < required) {
-        insufficient.push(`${name} (required: ${formatQty(required)} ${unit}, available: ${formatQty(available)} ${unit})`);
-      }
-    }
-
-    if (insufficient.length > 0) {
-      return {
-        ok: false as const,
-        message: `Cannot issue materials — insufficient stock: ${insufficient.join('; ')}. Please restock before proceeding.`,
-      };
-    }
-
-    return { ok: true as const };
+    setSageStockBalances(quantities);
+    setSageStockSyncedAt(timestamps);
+    const problems = pdStockProblems(materialsToCheck, quantities, timestamps, SAGE_STOCK_MAX_AGE_MINUTES);
+    return problems.length ? { ok: false as const, message: `Cannot issue materials: ${problems.join('; ')}.` }
+      : { ok: true as const };
   };
 
-  const getAvailableStock = (material: OrderMaterial) => {
-    const sageQty = sageStockBalances[material.raw_material_id];
-    if (typeof sageQty === 'number' && sageQty > 0) return sageQty;
-    
-    const floorQty = productionFloorStock[material.raw_material_id];
-    if (typeof floorQty === 'number' && floorQty > 0) return floorQty;
-    
-    return Number(material.raw_materials?.current_stock || 0);
-  };
+  const getAvailableStock = (material: OrderMaterial) =>
+    freshPdQuantity(sageStockBalances[material.raw_material_id],
+      sageStockSyncedAt[material.raw_material_id], SAGE_STOCK_MAX_AGE_MINUTES) ?? 0;
 
   const normalizeQty = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
   const formatQty = (value: number) => normalizeQty(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
   const hasSufficientStock = (material: OrderMaterial) => {
-    const available = normalizeQty(getAvailableStock(material));
-    const required = normalizeQty(material.planned_qty);
-    return available + 0.001 >= required;
+    if (pdWarehouseReview?.enabled && !material.issued) {
+      const code = (material.raw_materials?.sage_code || material.raw_materials?.code || '').trim().toUpperCase();
+      const line = pdWarehouseReview.lines.find(row => row.sageCode === code);
+      return !!line && !line.reason && line.available != null && line.available >= line.required;
+    }
+    return pdStockProblems([material], sageStockBalances, sageStockSyncedAt, SAGE_STOCK_MAX_AGE_MINUTES).length === 0;
   };
 
   const openDetail = async (order: ProductionOrder) => {
     setSelected(order);
+    setSageStockBalances({});
+    setSageStockSyncedAt({});
+    setPdWarehouseReview(null);
+    setPdWarehouseError(null);
     setSageIssueStatus(null);
     setCosting({ raw_material_cost: order.raw_material_cost, labour_cost: order.labour_cost, production_line_cost: order.machine_cost, overhead_cost: order.overhead_cost });
     setOutput({
@@ -1518,7 +1458,6 @@ export default function ProductionOrdersPage() {
 
     // These depend on the materials list resolved above, so run after
     await Promise.all([
-      loadProductionFloorStock(mats.map((m) => m.raw_material_id).filter(Boolean)),
       loadSageStockBalances(mats.map((m) => m.raw_material_id).filter(Boolean)),
       order.status === 'completed' ? loadBomVariances(order.id) : Promise.resolve(),
     ]);
@@ -1547,16 +1486,15 @@ export default function ProductionOrdersPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate, orders]);
 
-  // Check if all ingredients are issued
-  const allIngredientsIssued = () => {
-    return detailMaterials.length > 0 && detailMaterials.every(m => m.issued);
-  };
-
   // Check if all materials have sufficient stock available
   const allMaterialsAvailable = () => {
+    if (PD_STOCK_MODE_ENABLED && selected?.status === 'pending_finance') {
+      if (!pdWarehouseReview) return false;
+      if (pdWarehouseReview.enabled) return pdWarehouseReview.ready;
+    }
     const pendingMaterials = detailMaterials.filter((m) => !m.issued);
     if (pendingMaterials.length === 0) return true;
-    return pendingMaterials.every((m) => hasSufficientStock(m));
+    return pdStockProblems(pendingMaterials, sageStockBalances, sageStockSyncedAt, SAGE_STOCK_MAX_AGE_MINUTES).length === 0;
   };
 
   // Get list of materials with insufficient stock
@@ -1672,12 +1610,32 @@ export default function ProductionOrdersPage() {
     }
     openConfirmDialog({
       title: 'Approve material issue',
-      message: `Approve and issue the planned materials for ${selected.batch_number} (${detailMaterials.length} ingredient lines)? This will record the material issues and move stock; it cannot be undone.`,
+      message: pdWarehouseReview?.enabled
+        ? `Approve the materials and packaging for ${selected.batch_number}? Plant Control will reserve the stock and queue the Sage issue.`
+        : `Approve and issue the planned materials for ${selected.batch_number} (${detailMaterials.length} ingredient lines)? This will record the material issues and move stock; it cannot be undone.`,
       confirmLabel: 'Approve & Issue Materials',
       destructive: false,
       onConfirm: async () => {
         setSaving(true);
         try {
+          if (PD_STOCK_MODE_ENABLED && !pdWarehouseReview) {
+            throw new Error('PD issue mode has not been verified. Reload the order before approval.');
+          }
+          if (pdWarehouseReview?.enabled) {
+            const { error } = await supabase.rpc('approve_pd_warehouse_issue', { p_order: selected.id });
+            if (error) throw error;
+            setSageIssueStatus({
+              status: 'pending',
+              message: 'Materials reserved in Plant Control. The Sage material issue has been queued.',
+            });
+            showSageNotification('processing', 'Material issue queued', 'Materials are issued in MES. Sage will confirm the issue before production can start.');
+            window.setTimeout(() => loadSageIssueStatus(selected.id, true), 1500);
+            setShowDetail(false);
+            fetchOrders();
+            setSaving(false);
+            return;
+          }
+
           // Hard gate: query Sage balances directly before issue (no stale React-state dependency)
           const preflight = await runSageIssuePreflight(detailMaterials);
           if (!preflight.ok) {
@@ -1838,6 +1796,13 @@ export default function ProductionOrdersPage() {
     stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
+      if (pdWarehouseReview?.enabled && selected.status === 'pending_finance') {
+        if (!showToast) return;
+        const request = await supabase.rpc('request_pd_warehouse_stock_refresh', { p_order: selected.id });
+        if (request.error) throw request.error;
+        toast.success('Sage PD refresh queued. Availability updates when Sage responds.');
+        return;
+      }
       if (orderPackaging.length && selected.status !== 'completed') {
         const request = await supabase.rpc('request_production_packaging_cost_refresh', { p_order_id: selected.id });
         if (request.error) throw new Error('Packaging cost refresh failed: ' + request.error.message);
@@ -3271,6 +3236,18 @@ export default function ProductionOrdersPage() {
               {/* Tab Content */}
               <div className="p-4">
 
+            {PD_STOCK_MODE_ENABLED && selected.status === 'pending_finance' && (
+              <section aria-label="PD stock availability" className="mb-4 rounded-md border p-4 bg-slate-50" aria-live="polite">
+                <strong>{pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
+                {pdWarehouseError ? <p role="alert">{pdWarehouseError}</p> : !pdWarehouseReview ? <p>Checking issue mode and PD availability…</p> : pdWarehouseReview.enabled ? <>
+                  <p>Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.</p>
+                  <ul>{pdWarehouseReview.lines.map(line => <li key={line.sageCode}>
+                    {line.sageCode}: {line.required} {line.unit} required; {line.available ?? 'unknown'} available.
+                    {line.reason && <span className="text-red-700"> {line.reason}</span>}
+                  </li>)}</ul>
+                </> : <p>This order uses the existing lot allocation workflow.</p>}
+              </section>
+            )}
             {/* Materials Tab */}
             {detailTab === 'materials' && (
               <div className="space-y-4">
@@ -3340,7 +3317,7 @@ export default function ProductionOrdersPage() {
                   </div>
                 </div>
 
-                {!allMaterialsAvailable() && (
+                {!pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
@@ -3352,7 +3329,7 @@ export default function ProductionOrdersPage() {
                             <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> — Need {formatQty(m.planned_qty)} {m.unit}, have {formatQty(getAvailableStock(m))} {m.unit}</li>
                           ))}
                         </ul>
-                        <p className="text-xs text-red-600 mt-2 font-medium">Please restock these materials in Sage or MES before issuing.</p>
+                        <p className="text-xs text-red-600 mt-2 font-medium">Refresh Sage PD stock or replenish PD before issuing.</p>
                       </div>
                     </div>
                   </div>
