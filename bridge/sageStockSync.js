@@ -96,16 +96,11 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
   return materials.filter((material) => !finishedGoodCodes.has((material.sage_code || material.code).trim().toUpperCase()));
 }
 
-async function publishVerifiedPdStock(stock, itemCode, warehouse) {
-  if (process.env.SAGE_PD_WAREHOUSE_ISSUE_ENABLED !== 'true' || warehouse.code !== 'PD') return;
-  const project = new URL(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL).hostname;
-  if (project !== 'appyuqxetlphuxfybmus.supabase.co') {
-    throw new Error('Restricted Sage bench stock can only be published to Plant Control UAT.');
-  }
+async function publishVerifiedPdStock(stock, itemCode) {
   const { data: policy, error: policyError } = await supabase.from('pd_warehouse_item_policy')
     .select('unit, review_note').eq('sage_code', itemCode).eq('warehouse_mode_allowed', true).maybeSingle();
   if (policyError) throw new Error(policyError.message);
-  if (!policy) return;
+  if (!policy) throw new Error('No reviewed PD stock policy for ' + itemCode);
 
   // This candidate can publish only for the verified UAT native SDK. The
   // item policy records an explicit manual review of lot requirements and UOM.
@@ -156,7 +151,6 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'sage_code,warehouse_id' });
         if (error) throw new Error(error.message);
-        await publishVerifiedPdStock(stock, itemCode, warehouse);
         synced += 1;
       } catch (error) {
         failures.push(`${itemCode}/${warehouse.code}: ${error.message}`);
@@ -165,6 +159,32 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
   }
 
   return { materialCount: materials.length, warehouseCount: warehouses.length, synced, failures, fullSyncBatch: !itemCodes?.length && !fullSync, fullSync };
+}
+
+async function syncRestrictedPdStock(itemCodes) {
+  const target = new URL(SDK_BASE_URL);
+  if (process.env.SAGE_PD_WAREHOUSE_ISSUE_ENABLED !== 'true' || !SDK_API_KEY
+      || target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || target.port !== '5089') {
+    throw new Error('Restricted PD stock refresh requires the enabled loopback bench SDK on port 5089.');
+  }
+  const project = new URL(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
+  if (project.origin !== 'https://appyuqxetlphuxfybmus.supabase.co') {
+    throw new Error('Restricted Sage bench stock can only be published to Plant Control UAT.');
+  }
+  const codes = [...new Set(itemCodes.map(code => code.trim().toUpperCase()))];
+  if (codes.length < 1 || codes.length > 20 || codes.some(code => !/^[A-Z0-9_-]+$/.test(code))) {
+    throw new Error('Supply 1–20 explicit Sage item codes.');
+  }
+  const health = await getJson(SDK_BASE_URL + '/api/v1/health');
+  if (health.environment !== 'UAT' || health.companyDatabase !== 'Hyperfeeds UAT Bench 20261124'
+      || health.writeMode !== 'Disabled') {
+    throw new Error('Unexpected restricted Sage bench SDK identity or write mode.');
+  }
+  for (const code of codes) {
+    const stock = await getJson(SDK_BASE_URL + '/api/v1/stock?warehouse=PD&itemCode=' + encodeURIComponent(code));
+    await publishVerifiedPdStock(stock, code);
+  }
+  return { synced: codes.length };
 }
 
 async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
@@ -242,4 +262,4 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
   return { formulationCount: (formulations || []).length, synced, failures };
 }
 
-module.exports = { syncSageStock, syncFinishedGoodsStock };
+module.exports = { syncSageStock, syncFinishedGoodsStock, syncRestrictedPdStock };
