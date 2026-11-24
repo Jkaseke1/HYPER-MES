@@ -20,7 +20,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
 
-const PD_UAT_PREVIEW_ORDER_ID = '7a84c0ad-edb9-4dab-bdcf-189f7fa18e38';
 const PD_STOCK_MODE_ENABLED = import.meta.env.VITE_ENABLE_PD_WAREHOUSE_ISSUE === 'true';
 interface PdWarehouseReview {
   enabled: boolean; ready: boolean;
@@ -1295,17 +1294,14 @@ export default function ProductionOrdersPage() {
     setSageStockSyncedAt(syncedMap);
   };
 
-  const isPdUatPreview = selected?.id === PD_UAT_PREVIEW_ORDER_ID && selected.status === 'pending'
-    && /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '');
-
-  const pdPreviewExpired = isPdUatPreview && pdWarehouseReview?.lines.some(
-    line => line.reason === 'Refresh verified PD availability'
-  );
+  const usesBenchStock = selected?.id === '7a84c0ad-edb9-4dab-bdcf-189f7fa18e38'
+    && /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '')
+    && ['pending', 'pending_finance'].includes(selected.status);
 
   useEffect(() => {
     setPdWarehouseReview(null);
     setPdWarehouseError(null);
-    if (!showDetail || !selected?.id || (!isPdUatPreview && (!PD_STOCK_MODE_ENABLED || selected.status !== 'pending_finance'))) return;
+    if (!showDetail || !selected?.id || (!usesBenchStock && (!PD_STOCK_MODE_ENABLED || selected.status !== 'pending_finance'))) return;
     let cancelled = false;
     const load = async () => {
       const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
@@ -1318,7 +1314,7 @@ export default function ProductionOrdersPage() {
     void load();
     const stop = startBackgroundPolling(load, 15000);
     return () => { cancelled = true; stop(); };
-  }, [showDetail, selected?.id, selected?.status, isPdUatPreview]);
+  }, [showDetail, selected?.id, selected?.status, usesBenchStock]);
 
   const runSageIssuePreflight = async (materialsToCheck: OrderMaterial[]) => {
     const materialIds = [...new Set(materialsToCheck.filter(m => !m.issued).map(m => m.raw_material_id))];
@@ -1499,6 +1495,7 @@ export default function ProductionOrdersPage() {
 
   // Check if all materials have sufficient stock available
   const allMaterialsAvailable = () => {
+    if (usesBenchStock) return pdWarehouseReview?.ready === true;
     if (PD_STOCK_MODE_ENABLED && selected?.status === 'pending_finance') {
       if (!pdWarehouseReview) return false;
       if (pdWarehouseReview.enabled) return pdWarehouseReview.ready;
@@ -1516,7 +1513,7 @@ export default function ProductionOrdersPage() {
   };
 
   const requestFinanceBomValidation = async () => {
-    if (!selected || isPdUatPreview) return;
+    if (!selected) return;
     if (detailMaterials.length === 0) {
       setWorkflowError('Cannot send to Finance — no ingredients linked to this order. Please set up the BOM for this formulation first.');
       return;
@@ -1603,6 +1600,10 @@ export default function ProductionOrdersPage() {
   // Finance authorizes the complete material issue after review of the order and BOM.
   const bulkIssueMaterials = async () => {
     if (!selected) return;
+    if (usesBenchStock) {
+      setWorkflowError('Sage material posting is disabled for this UAT order.');
+      return;
+    }
     if (!canValidateBom) {
       setWorkflowError('Finance must validate the formula and BOM before materials can be issued.');
       return;
@@ -1803,7 +1804,15 @@ export default function ProductionOrdersPage() {
 
   // Refresh Sage stock balances for current order
   const refreshSageStock = async (showToast = true) => {
-    if (!selected || isPdUatPreview || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
+    if (!selected || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
+    if (usesBenchStock) {
+      if (showToast) {
+        const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
+        if (error) toast.error(error.message);
+        else setPdWarehouseReview(data as PdWarehouseReview);
+      }
+      return;
+    }
     stockRefreshInFlightRef.current = true;
     if (showToast) setRefreshingStock(true);
     try {
@@ -3044,7 +3053,7 @@ export default function ProductionOrdersPage() {
               {/* Workflow Actions Bar */}
               <div className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-y border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur flex-wrap">
                 <div className="flex items-center gap-3">
-                  {selected.status === 'pending' && !isPdUatPreview && (
+                  {selected.status === 'pending' && (
                     <button
                       onClick={requestFinanceBomValidation}
                       disabled={saving || detailMaterials.length === 0}
@@ -3237,7 +3246,7 @@ export default function ProductionOrdersPage() {
                       </select>
                     </label>
                   </div>
-                  {detailTab === 'materials' && !isPdUatPreview && (
+                  {detailTab === 'materials' && (
                     <button
                       onClick={() => refreshSageStock(true)}
                       disabled={saving || refreshingStock}
@@ -3253,19 +3262,24 @@ export default function ProductionOrdersPage() {
               {/* Tab Content */}
               <div className="p-4">
 
-            {(isPdUatPreview || (PD_STOCK_MODE_ENABLED && selected.status === 'pending_finance')) && (
+            {PD_STOCK_MODE_ENABLED && selected.status === 'pending_finance' && (
               <section aria-label="PD stock availability" className="mb-4 rounded-md border p-4 bg-slate-50" aria-live="polite">
-                <strong>{isPdUatPreview ? 'Restricted Sage PD stock preview' : pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
+                <strong>{pdWarehouseReview?.enabled ? 'Issue from available Production warehouse stock' : 'Production warehouse check'}</strong>
                 {pdWarehouseError ? <p role="alert">{pdWarehouseError}</p> : !pdWarehouseReview ? <p>Checking issue mode and PD availability…</p> : pdWarehouseReview.enabled ? <>
-                  <p>{isPdUatPreview ? 'Approval is on hold. The rollback test measured a 21.0560 decrease in the value of existing Sage stock, above the current limit.' : 'Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.'}</p>
-                  {pdPreviewExpired && <p className="mt-2 font-medium text-amber-800">Sage snapshot expired. The quantities below are from the last Windows sync. Run the scoped Windows refresh for current availability.</p>}
-                  {isPdUatPreview && pdWarehouseReview.ready && <p className="mt-2 font-medium text-emerald-800">All {pdWarehouseReview.lines.length} lines are covered by the current Sage snapshot.</p>}
+                  <p>Eligible materials use verified PD stock without MES lot allocation. Sage posting must succeed before production starts.</p>
                   <ul>{pdWarehouseReview.lines.map(line => <li key={line.sageCode}>
-                    {line.sageCode}: {formatQty(line.required)} {line.unit} required; {line.available == null ? 'unknown' : formatQty(line.available)} {isPdUatPreview && line.reason === 'Refresh verified PD availability' ? 'at last sync' : 'available'}.
-                    {line.reason && (!isPdUatPreview || line.reason !== 'Refresh verified PD availability') && <span className="text-red-700"> {line.reason}</span>}
+                    {line.sageCode}: {line.required} {line.unit} required; {line.available ?? 'unknown'} available.
+                    {line.reason && <span className="text-red-700"> {line.reason}</span>}
                   </li>)}</ul>
                 </> : <p>This order uses the existing lot allocation workflow.</p>}
               </section>
+            )}
+            {usesBenchStock && (
+              <p className="mb-3 text-sm text-slate-700" role="status">
+                {pdWarehouseError || (pdWarehouseReview?.ready
+                  ? 'Sage PD stock covers the ingredients and packaging. Material posting is disabled.'
+                  : pdWarehouseReview?.lines.find(line => line.reason)?.reason || 'Waiting for the Windows Sage stock sync.')}
+              </p>
             )}
             {/* Materials Tab */}
             {detailTab === 'materials' && (
@@ -3336,7 +3350,7 @@ export default function ProductionOrdersPage() {
                   </div>
                 </div>
 
-                {!isPdUatPreview && !pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
+                {!usesBenchStock && !pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
@@ -3437,12 +3451,12 @@ export default function ProductionOrdersPage() {
                                 )}
                               </td>
                               <td className="px-3 py-3 text-center">
-                                {!material.issued && selected.status === 'pending' && !isPdUatPreview && isOutOfStock && (
+                                {!usesBenchStock && !material.issued && selected.status === 'pending' && isOutOfStock && (
                                   <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
                                     <AlertTriangle className="w-3 h-3" /> Out of stock
                                   </span>
                                 )}
-                                {!material.issued && selected.status === 'pending_finance' && isOutOfStock && (
+                                {!usesBenchStock && !material.issued && selected.status === 'pending_finance' && isOutOfStock && (
                                   <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
                                     <AlertTriangle className="w-3 h-3" /> Out of stock
                                   </span>
