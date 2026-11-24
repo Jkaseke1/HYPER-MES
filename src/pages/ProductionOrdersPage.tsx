@@ -1,3 +1,4 @@
+import { requiresSageReconciliation, sageIssueReference } from '../lib/sagePostingStatus';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, ClipboardList, Radio, ShieldCheck, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -666,8 +667,10 @@ export default function ProductionOrdersPage() {
     notifiedSageIssueRef.current[orderId] = notificationKey;
 
     if (data.status === 'success') {
-      const reference = data.sage_response?.materialIssue?.reference || 'Sage';
-      showSageNotification('success', 'Material issue posted', `${reference} is confirmed in Sage and production can start.`);
+      const reference = sageIssueReference(data.sage_response);
+      showSageNotification('success', 'Material issue posted', reference
+        ? `Sage confirmed ${reference}. Production can start.`
+        : 'Sage confirmed the material issue. Production can start.');
     } else if (data.status === 'failed') {
       showSageNotification('error', 'Material issue needs attention', data.message || 'Open the production order to review the Sage response.');
     } else if (data.status === 'pending' || data.status === 'processing') {
@@ -687,7 +690,7 @@ export default function ProductionOrdersPage() {
   }, [showDetail, selected?.id, sageIssueStatus?.status, loadSageIssueStatus]);
 
   const retrySageMaterialIssue = useCallback(async () => {
-    if (!selected?.id || !sageIssueStatus?.id || sageIssueStatus.status !== 'failed') return;
+    if (!selected?.id || !sageIssueStatus?.id || sageIssueStatus.status !== 'failed' || requiresSageReconciliation(sageIssueStatus)) return;
 
     setRetryingSageIssue(true);
     setWorkflowError(null);
@@ -726,7 +729,7 @@ export default function ProductionOrdersPage() {
   }, []);
 
   const retrySageCompletion = useCallback(async () => {
-    if (!selected?.id || !sageCompletionStatus?.id || sageCompletionStatus.status !== 'failed') return;
+    if (!selected?.id || !sageCompletionStatus?.id || sageCompletionStatus.status !== 'failed' || requiresSageReconciliation(sageCompletionStatus)) return;
 
     setRetryingSageCompletion(true);
     setWorkflowError(null);
@@ -737,7 +740,7 @@ export default function ProductionOrdersPage() {
       showSageNotification(
         'processing',
         'Finished-goods retry queued',
-        'The existing failed Sage completion event was requeued. Sage stock is reconciled before any receipt is posted.'
+        'The existing failed Sage completion event was requeued.'
       );
       await loadSageCompletionStatus(selected.id);
     } catch (error: any) {
@@ -858,7 +861,7 @@ export default function ProductionOrdersPage() {
         notifiedSageIssueRef.current[event.reference_id] = notificationKey;
 
         if (event.status === 'success') {
-          const reference = event.sage_response?.materialIssue?.reference || 'the production order';
+          const reference = sageIssueReference(event.sage_response) || 'The material issue';
           showSageNotification('success', 'Material issue posted', `${reference} is confirmed in Sage and production can start.`);
         } else if (event.status === 'failed') {
           showSageNotification('error', 'Material issue needs attention', event.message || 'Open the production order to review the Sage response.');
@@ -884,11 +887,11 @@ export default function ProductionOrdersPage() {
       return <span className={`${className} text-slate-400`}>Not issued</span>;
     }
     if (status.status === 'success') {
-      const reference = status.sage_response?.materialIssue?.reference;
-      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-emerald-700`} title={reference ? `Posted to Sage as ${reference} (MFDR)` : 'Posted to Sage'}><CheckCircle2 className="w-3.5 h-3.5" />Posted{reference ? ` ${reference}` : ''}</span>;
+      const reference = sageIssueReference(status.sage_response);
+      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-emerald-700`} title={reference ? `Posted to Sage as ${reference}` : 'Posted to Sage'}><CheckCircle2 className="w-3.5 h-3.5" />Posted{reference ? ` ${reference}` : ''}</span>;
     }
     if (status.status === 'failed') {
-      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-red-700`} title={status.error_details?.message || status.message || 'Sage material issue failed'}><AlertCircle className="w-3.5 h-3.5" />Failed</span>;
+      return <span className={`${className} inline-flex items-center gap-1 font-semibold text-red-700`} title={status.error_details?.message || status.message || 'Sage material issue failed'}><AlertCircle className="w-3.5 h-3.5" />{requiresSageReconciliation(status) ? 'Reconciliation required' : 'Failed'}</span>;
     }
     if (status.status === 'processing') {
       return <span className={`${className} inline-flex items-center gap-1 font-semibold text-amber-700`}><RefreshCw className="w-3.5 h-3.5 animate-spin" />Posting</span>;
@@ -2125,6 +2128,9 @@ export default function ProductionOrdersPage() {
   const selectedBomMassBalanced = Boolean(selected && Math.abs(selectedBomTotal - Number(selected.planned_qty || 0)) <= 0.01);
   const sageCompletionInFlight = sageCompletionStatus?.status === 'pending' || sageCompletionStatus?.status === 'processing';
   const sageCompletionPosted = sageCompletionStatus?.status === 'success';
+  const sageIssueNeedsReconciliation = requiresSageReconciliation(sageIssueStatus);
+  const sageCompletionNeedsReconciliation = requiresSageReconciliation(sageCompletionStatus);
+  const issueReference = sageIssueReference(sageIssueStatus?.sage_response);
   const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
   const workflowStepIndex = selected
     ? ({ pending: 0, pending_finance: 1, materials_issued: 2, in_progress: 3, completed: 4 } as Record<string, number>)[selected.status] ?? 0
@@ -2934,11 +2940,11 @@ export default function ProductionOrdersPage() {
                   )}
                   <div className="min-w-0">
                     <div className="text-xs font-extrabold uppercase tracking-wide">
-                      Sage Material Issue: {sageIssueStatus.status === 'success' ? 'Posted' : sageIssueStatus.status}
+                      Sage Material Issue: {sageIssueStatus.status === 'success' ? 'Posted' : sageIssueNeedsReconciliation ? 'Reconciliation required' : sageIssueStatus.status}
                     </div>
                     <div className="text-xs mt-0.5 break-words">
-                      {sageIssueStatus.status === 'success' && sageIssueStatus.sage_response?.materialIssue?.reference
-                        ? `Posted to Sage as ${sageIssueStatus.sage_response.materialIssue.reference} (${sageIssueStatus.sage_response.materialIssue.transactionCode || 'MFDR'}).`
+                      {sageIssueStatus.status === 'success' && issueReference
+                        ? `Confirmed in Sage as ${issueReference}.`
                         : sageIssueStatus.message || 'Awaiting Sage bridge update.'}
                     </div>
                     {sageIssueStatus.status === 'failed' && sageIssueStatus.error_details?.message && (
@@ -2958,8 +2964,11 @@ export default function ProductionOrdersPage() {
                 }`}>
                   {sageCompletionStatus.status === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" /> : sageCompletionStatus.status === 'failed' ? <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" /> : <RefreshCw className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-spin" />}
                   <div className="min-w-0">
-                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Receipt: {sageCompletionStatus.status === 'success' ? 'Posted' : sageCompletionStatus.status === 'processing' ? 'Posting' : sageCompletionStatus.status}</div>
-                    <div className="text-xs mt-0.5 break-words">{sageCompletionStatus.message || 'Waiting for Sage finished-goods posting.'}</div>
+                    <div className="text-xs font-extrabold uppercase tracking-wide">Sage Finished-Goods Receipt: {sageCompletionStatus.status === 'success' ? 'Posted' : sageCompletionNeedsReconciliation ? 'Reconciliation required' : sageCompletionStatus.status === 'processing' ? 'Posting' : sageCompletionStatus.status}</div>
+                    <div className="text-xs mt-0.5 break-words">{sageCompletionStatus.message || 'Waiting for Sage finished-goods posting.'}
+                      {sageCompletionStatus.status === 'success' && sageCompletionStatus.sage_response?.processReference && (
+                        <div className="mt-1">Sage manufacturing reference {sageCompletionStatus.sage_response.processReference}</div>
+                      )}</div>
                     {sageCompletionStatus.status === 'failed' && sageCompletionStatus.error_details?.message && <div className="text-[11px] mt-1 text-red-700 break-words">{sageCompletionStatus.error_details.message}</div>}
                   </div>
                 </div>
@@ -3059,7 +3068,7 @@ export default function ProductionOrdersPage() {
                   )}
                   {selected.status === 'materials_issued' && (
                     <>
-                      {sageIssueStatus?.status === 'failed' && (
+                      {sageIssueStatus?.status === 'failed' && !sageIssueNeedsReconciliation && (
                         <button
                           onClick={retrySageMaterialIssue}
                           disabled={saving || retryingSageIssue}
@@ -3082,17 +3091,17 @@ export default function ProductionOrdersPage() {
                     </>
                   )}
                   {selected.status === 'in_progress' && (
-                    sageCompletionFailed ? (
+                    sageCompletionFailed ? (!sageCompletionNeedsReconciliation && (
                       <button
                         onClick={retrySageCompletion}
                         disabled={saving || retryingSageCompletion || !sageCompletionStatus?.id}
-                        title="Requeue this failed completion. Sage ledger checks prevent a duplicate finished-goods receipt."
+                        title="Requeue the existing failed Sage completion event."
                         className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-amber-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <RefreshCw className={`w-4 h-4 ${retryingSageCompletion ? 'animate-spin' : ''}`} />
                         {retryingSageCompletion ? 'Requeuing Sage Completion' : 'Retry Sage Completion'}
                       </button>
-                    ) : (
+                    )) : (
                       <button
                         onClick={handleCompletionRequest}
                         disabled={saving || sageCompletionInFlight || sageCompletionPosted || (output.actual_qty <= 0 && (selected.actual_qty || 0) <= 0)}

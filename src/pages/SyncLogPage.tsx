@@ -1,3 +1,4 @@
+import { requiresSageReconciliation } from '../lib/sagePostingStatus';
 import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, AlertCircle, CheckCircle, Clock, XCircle, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -93,7 +94,9 @@ export default function SyncLogPage() {
     }
   }
 
-  async function retrySync(logId: string) {
+  async function retrySync(log: SyncLog) {
+    if (log.status !== 'failed' || requiresSageReconciliation(log)) return;
+    const logId = log.id;
     setRetrying(prev => new Set(prev).add(logId));
     try {
       const { error } = await supabase.rpc('request_sync_retry', { p_log_id: logId });
@@ -268,6 +271,7 @@ export default function SyncLogPage() {
                   const StatusIcon = currentStatusConfig.icon;
                   const isExpanded = expandedErrors.has(log.id);
                   const isRetrying = retrying.has(log.id);
+                  const needsReconciliation = requiresSageReconciliation(log);
                   const isResolvedRetry = log.status === 'success' && !!log.retried_at && !!log.resolved_at;
 
                   return (
@@ -313,9 +317,12 @@ export default function SyncLogPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            {log.status === 'failed' && (
+                            {needsReconciliation && (
+                              <span className="text-xs font-semibold text-amber-800">Reconciliation required</span>
+                            )}
+                            {log.status === 'failed' && !needsReconciliation && (
                               <button
-                                onClick={() => retrySync(log.id)}
+                                onClick={() => retrySync(log)}
                                 disabled={isRetrying}
                                 className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors disabled:opacity-50"
                               >
