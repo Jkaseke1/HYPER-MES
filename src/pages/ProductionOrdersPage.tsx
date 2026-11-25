@@ -1307,9 +1307,13 @@ export default function ProductionOrdersPage() {
       const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
       if (cancelled) return;
       if (error || !data || typeof data.enabled !== 'boolean' || typeof data.ready !== 'boolean' || !Array.isArray(data.lines)) {
-        setPdWarehouseReview(null);
         setPdWarehouseError(error?.message || 'PD availability response could not be verified.');
-      } else { setPdWarehouseReview(data); setPdWarehouseError(null); }
+        return;
+      }
+      setPdWarehouseReview(current =>
+        JSON.stringify(current) === JSON.stringify(data) ? current : data
+      );
+      setPdWarehouseError(null);
     };
     void load();
     const stop = startBackgroundPolling(load, 15000);
@@ -1346,6 +1350,7 @@ export default function ProductionOrdersPage() {
   const normalizeQty = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
   const formatQty = (value: number) => normalizeQty(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
   const hasSufficientStock = (material: OrderMaterial) => {
+    if (usesBenchStock && pdWarehouseError && !material.issued) return false;
     if (pdWarehouseReview?.enabled && !material.issued) {
       const code = (material.raw_materials?.sage_code || material.raw_materials?.code || '').trim().toUpperCase();
       const line = pdWarehouseReview.lines.find(row => row.sageCode === code);
@@ -1495,9 +1500,9 @@ export default function ProductionOrdersPage() {
 
   // Check if all materials have sufficient stock available
   const allMaterialsAvailable = () => {
-    if (usesBenchStock) return pdWarehouseReview?.ready === true;
+    if (usesBenchStock) return !pdWarehouseError && pdWarehouseReview?.ready === true;
     if (PD_STOCK_MODE_ENABLED && selected?.status === 'pending_finance') {
-      if (!pdWarehouseReview) return false;
+      if (pdWarehouseError || !pdWarehouseReview) return false;
       if (pdWarehouseReview.enabled) return pdWarehouseReview.ready;
     }
     const pendingMaterials = detailMaterials.filter((m) => !m.issued);
@@ -1630,7 +1635,7 @@ export default function ProductionOrdersPage() {
       onConfirm: async () => {
         setSaving(true);
         try {
-          if (PD_STOCK_MODE_ENABLED && !pdWarehouseReview) {
+          if (PD_STOCK_MODE_ENABLED && (pdWarehouseError || !pdWarehouseReview)) {
             throw new Error('PD issue mode has not been verified. Reload the order before approval.');
           }
           if (pdWarehouseReview?.enabled) {
@@ -1806,11 +1811,16 @@ export default function ProductionOrdersPage() {
   const refreshSageStock = async (showToast = true) => {
     if (!selected || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
     if (usesBenchStock) {
-      if (showToast) {
-        const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
-        if (error) toast.error(error.message);
-        else setPdWarehouseReview(data as PdWarehouseReview);
+      if (!showToast) return;
+      const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
+      if (error || !data || typeof data.enabled !== 'boolean' || typeof data.ready !== 'boolean' || !Array.isArray(data.lines)) {
+        setPdWarehouseError(error?.message || 'PD availability response could not be verified.');
+        return;
       }
+      setPdWarehouseReview(current =>
+        JSON.stringify(current) === JSON.stringify(data) ? current : data
+      );
+      setPdWarehouseError(null);
       return;
     }
     stockRefreshInFlightRef.current = true;
