@@ -11,7 +11,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
-import { freshPdQuantity, pdStockProblems } from '../lib/productionPdStock';
+import { formatPdAvailability, freshPdQuantity, pdStockProblems } from '../lib/productionPdStock';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
@@ -1345,7 +1345,7 @@ export default function ProductionOrdersPage() {
 
   const getAvailableStock = (material: OrderMaterial) =>
     freshPdQuantity(sageStockBalances[material.raw_material_id],
-      sageStockSyncedAt[material.raw_material_id], SAGE_STOCK_MAX_AGE_MINUTES) ?? 0;
+      sageStockSyncedAt[material.raw_material_id], SAGE_STOCK_MAX_AGE_MINUTES);
 
   const normalizeQty = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
   const formatQty = (value: number) => normalizeQty(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
@@ -3365,14 +3365,14 @@ export default function ProductionOrdersPage() {
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                       <div>
-                        <h4 className="font-bold text-red-900 text-sm mb-1">⚠️ Insufficient Stock - Cannot Proceed</h4>
-                        <p className="text-xs text-red-700 mb-2">The following materials do not have sufficient stock available:</p>
+                        <h4 className="font-bold text-red-900 text-sm mb-1">⚠️ Stock unavailable or insufficient - Cannot Proceed</h4>
+                        <p className="text-xs text-red-700 mb-2">The following materials require a fresh, sufficient Sage PD balance:</p>
                         <ul className="text-xs text-red-700 space-y-1 font-medium">
                           {getInsufficientMaterials().map((m) => (
-                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> — Need {formatQty(m.planned_qty)} {m.unit}, have {formatQty(getAvailableStock(m))} {m.unit}</li>
+                            <li key={m.id}>• <strong>{m.raw_materials?.name}</strong> — Need {formatQty(m.planned_qty)} {m.unit}, {formatPdAvailability(getAvailableStock(m), m.unit)}</li>
                           ))}
                         </ul>
-                        <p className="text-xs text-red-600 mt-2 font-medium">Refresh Sage PD stock or replenish PD before issuing.</p>
+                        <p className="text-xs text-red-600 mt-2 font-medium">Verify the Sage target and refresh PD stock; replenish only if a fresh balance is insufficient.</p>
                       </div>
                     </div>
                   </div>

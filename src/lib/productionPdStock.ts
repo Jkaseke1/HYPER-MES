@@ -11,6 +11,11 @@ export function freshPdQuantity(quantity: unknown, syncedAt: string | null | und
   return value;
 }
 
+export function formatPdAvailability(quantity: number | null, unit: string): string {
+  if (quantity === null) return 'Sage PD balance unavailable or stale';
+  return `have ${quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${unit}`;
+}
+
 export interface PdRequirement {
   raw_material_id: string;
   planned_qty: number;

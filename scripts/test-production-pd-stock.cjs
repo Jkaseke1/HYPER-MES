@@ -6,7 +6,9 @@ const path = require('node:path');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(),'pd-stock-test-'));
 try {
   esbuild.buildSync({entryPoints:['src/lib/productionPdStock.ts'],outfile:path.join(dir,'stock.cjs'),platform:'node',format:'cjs'});
-  const { freshPdQuantity, pdStockProblems } = require(path.join(dir,'stock.cjs'));
+  const { formatPdAvailability, freshPdQuantity, pdStockProblems } = require(path.join(dir,'stock.cjs'));
+  assert.equal(formatPdAvailability(null, 'kg'), 'Sage PD balance unavailable or stale');
+  assert.equal(formatPdAvailability(0, 'kg'), 'have 0 kg');
   const now = Date.parse('2026-11-24T12:00:00Z'), date = new Date(now-1000).toISOString();
   assert.equal(freshPdQuantity(0,date,2,now),0);
   for(const value of [null,undefined,'',NaN,Infinity,-1]) assert.equal(freshPdQuantity(value,date,2,now),null);
