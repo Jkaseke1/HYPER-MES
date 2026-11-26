@@ -21,6 +21,8 @@ import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { packagingCost, hasUncostedPackaging, resolvePackagingCosts } from '../lib/productionPackagingCost';
 
 const PD_STOCK_MODE_ENABLED = import.meta.env.VITE_ENABLE_PD_WAREHOUSE_ISSUE === 'true';
+const UAT_PD_READ_MODE = /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '');
+type UatPdStock = Record<string, { quantity: number; observedAt: string }>;
 interface PdWarehouseReview {
   enabled: boolean; ready: boolean;
   lines: { sageCode: string; required: number; available: number | null; unit: string; reason: string | null }[];
@@ -197,6 +199,7 @@ export default function ProductionOrdersPage() {
   const [pdWarehouseError, setPdWarehouseError] = useState<string | null>(null);
   const [sageStockBalances, setSageStockBalances] = useState<Record<string, number>>({});
   const [sageStockSyncedAt, setSageStockSyncedAt] = useState<Record<string, string | null>>({});
+  const [uatPdStock, setUatPdStock] = useState<UatPdStock>({});
   const [logs, setLogs] = useState<ProductionLog[]>([]);
   const [detailTab, setDetailTab] = useState<'materials' | 'costing' | 'output' | 'variance' | 'downtime' | 'logs' | 'operations'>('materials');
   const [operations, setOperations] = useState<any[]>([]);
@@ -1265,7 +1268,39 @@ export default function ProductionOrdersPage() {
     if (!materialIds.length) {
       setSageStockBalances({});
       setSageStockSyncedAt({});
-      return;
+      return true;
+    }
+
+    if (UAT_PD_READ_MODE) {
+      const [materials, reads] = await Promise.all([
+        supabase.from('raw_materials').select('id, code, sage_code').in('id', materialIds),
+        supabase.from('uat_pd_stock_reads').select('sage_code, available_quantity, observed_at'),
+      ]);
+      if (materials.error || reads.error) {
+        console.error('Error loading verified UAT PD availability:', materials.error || reads.error);
+        setSageStockBalances({});
+        setSageStockSyncedAt({});
+        setUatPdStock({});
+        return false;
+      }
+      const byCode: UatPdStock = {};
+      for (const row of reads.data || []) {
+        byCode[row.sage_code] = { quantity: Number(row.available_quantity), observedAt: row.observed_at };
+      }
+      const quantities: Record<string, number> = {};
+      const timestamps: Record<string, string | null> = {};
+      for (const material of materials.data || []) {
+        const code = (String(material.sage_code || '').trim() || String(material.code || '').trim()).toUpperCase();
+        const stock = byCode[code];
+        if (stock) {
+          quantities[material.id] = stock.quantity;
+          timestamps[material.id] = stock.observedAt;
+        }
+      }
+      setUatPdStock(byCode);
+      setSageStockBalances(quantities);
+      setSageStockSyncedAt(timestamps);
+      return true;
     }
 
     const { data, error } = await supabase
@@ -1278,7 +1313,7 @@ export default function ProductionOrdersPage() {
       console.error('Error loading Sage stock balances:', error);
       setSageStockBalances({});
       setSageStockSyncedAt({});
-      return;
+      return false;
     }
 
     const stockMap: Record<string, number> = {};
@@ -1292,6 +1327,7 @@ export default function ProductionOrdersPage() {
 
     setSageStockBalances(stockMap);
     setSageStockSyncedAt(syncedMap);
+    return true;
   };
 
   const usesBenchStock = selected?.id === '7a84c0ad-edb9-4dab-bdcf-189f7fa18e38'
@@ -1363,6 +1399,7 @@ export default function ProductionOrdersPage() {
     setSelected(order);
     setSageStockBalances({});
     setSageStockSyncedAt({});
+    setUatPdStock({});
     setPdWarehouseReview(null);
     setPdWarehouseError(null);
     setSageIssueStatus(null);
@@ -1605,6 +1642,10 @@ export default function ProductionOrdersPage() {
   // Finance authorizes the complete material issue after review of the order and BOM.
   const bulkIssueMaterials = async () => {
     if (!selected) return;
+    if (UAT_PD_READ_MODE) {
+      setWorkflowError('Material posting is disabled while restricted UAT PD stock is being verified.');
+      return;
+    }
     if (usesBenchStock) {
       setWorkflowError('Sage material posting is disabled for this UAT order.');
       return;
@@ -1810,6 +1851,42 @@ export default function ProductionOrdersPage() {
   // Refresh Sage stock balances for current order
   const refreshSageStock = async (showToast = true) => {
     if (!selected || detailMaterials.length === 0 || stockRefreshInFlightRef.current) return;
+    if (UAT_PD_READ_MODE && !usesBenchStock) {
+      if (!showToast) {
+        if (!await loadSageStockBalances(detailMaterials.map(m => m.raw_material_id))) {
+          throw new Error('Sage PD was read, but its results could not be loaded.');
+        }
+        return;
+      }
+      stockRefreshInFlightRef.current = true;
+      setRefreshingStock(true);
+      try {
+        const request = await supabase.rpc('request_uat_pd_stock', { p_order_id: selected.id });
+        if (request.error || !request.data) throw new Error(request.error?.message || 'Stock request was not created.');
+        toast.success('Sage PD refresh queued.');
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const result = await supabase.from('uat_pd_stock_requests').select('status,message').eq('id', request.data).single();
+          if (result.error) throw result.error;
+          if (result.data.status === 'failed') throw new Error(result.data.message || 'Sage PD refresh failed.');
+          if (result.data.status === 'success') {
+            if (!await loadSageStockBalances(detailMaterials.map(m => m.raw_material_id))) {
+              throw new Error('Sage PD was read, but its results could not be loaded.');
+            }
+            toast.success('Sage PD balances refreshed.');
+            return;
+          }
+        }
+        throw new Error('Sage PD reader did not respond within one minute.');
+      } catch (error) {
+        console.error('Sage PD refresh failed:', error);
+        toast.error(error instanceof Error ? error.message : 'Sage PD refresh failed.');
+      } finally {
+        stockRefreshInFlightRef.current = false;
+        setRefreshingStock(false);
+      }
+      return;
+    }
     if (usesBenchStock) {
       if (!showToast) return;
       const { data, error } = await supabase.rpc('preview_pd_warehouse_issue', { p_order: selected.id });
@@ -3360,6 +3437,9 @@ export default function ProductionOrdersPage() {
                   </div>
                 </div>
 
+                {UAT_PD_READ_MODE && !usesBenchStock && (
+                  <p className="text-xs text-slate-600">Restricted UAT Sage PD availability; material posting remains disabled.</p>
+                )}
                 {!usesBenchStock && !pdWarehouseReview?.enabled && (!PD_STOCK_MODE_ENABLED || pdWarehouseReview) && !allMaterialsAvailable() && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex items-start gap-3">
@@ -3397,6 +3477,11 @@ export default function ProductionOrdersPage() {
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Planned</span>{formatQty(Number(item.planned_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="text-sm text-slate-700"><span className="text-xs text-slate-500 sm:block">Recorded used</span>{formatQty(Number(item.actual_qty || 0))} {item.unit || 'bags'}</div>
                           <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
+                            {UAT_PD_READ_MODE && (() => {
+                              const stock = uatPdStock[String(item.item_code || '').trim().toUpperCase()];
+                              const quantity = freshPdQuantity(stock?.quantity, stock?.observedAt, SAGE_STOCK_MAX_AGE_MINUTES);
+                              return <span className="text-xs text-slate-600">Sage PD: <strong>{formatPdAvailability(quantity, item.unit || 'bags')}</strong>{quantity !== null && stock?.observedAt ? ` (${format(new Date(stock.observedAt), 'dd MMM HH:mm:ss')})` : ''}</span>;
+                            })()}
                             <span className="text-xs text-slate-600">Unit cost (USD): <strong>{Number(item.unit_cost) > 0 || item.cost_synced_at ? `$${Number(item.unit_cost).toFixed(4)}` : 'Awaiting cost sync'}</strong></span>
                             <span className="text-xs text-slate-600">Actual cost: {Number(item.unit_cost) > 0 ? `$${(Number(item.actual_qty || 0) * Number(item.unit_cost)).toFixed(2)}` : 'Not costed'}</span>
                           </div>
@@ -3436,6 +3521,13 @@ export default function ProductionOrdersPage() {
                               <td className="px-4 py-3">
                                 <div className="font-bold text-slate-900 text-sm">{material.raw_materials?.name}</div>
                                 <div className="text-[10px] text-slate-400 font-mono">{material.raw_materials?.code}</div>
+                                {UAT_PD_READ_MODE && (
+                                  <div className="text-[10px] text-slate-500">
+                                    Sage PD: {formatPdAvailability(getAvailableStock(material), material.unit)}
+                                    {getAvailableStock(material) !== null && sageStockSyncedAt[material.raw_material_id]
+                                      ? ` (${format(new Date(sageStockSyncedAt[material.raw_material_id]!), 'dd MMM HH:mm:ss')})` : ''}
+                                  </div>
+                                )}
                               </td>
                               <td className="px-3 py-3 text-right font-mono font-medium text-slate-700">
                                 {material.planned_qty.toLocaleString()} <span className="text-slate-400 text-[10px]">{material.unit}</span>
@@ -3463,12 +3555,12 @@ export default function ProductionOrdersPage() {
                               <td className="px-3 py-3 text-center">
                                 {!usesBenchStock && !material.issued && selected.status === 'pending' && isOutOfStock && (
                                   <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
-                                    <AlertTriangle className="w-3 h-3" /> Out of stock
+                                    <AlertTriangle className="w-3 h-3" /> {UAT_PD_READ_MODE ? 'Check Sage PD' : 'Out of stock'}
                                   </span>
                                 )}
                                 {!usesBenchStock && !material.issued && selected.status === 'pending_finance' && isOutOfStock && (
                                   <span className="text-[10px] text-red-600 font-bold inline-flex items-center gap-0.5">
-                                    <AlertTriangle className="w-3 h-3" /> Out of stock
+                                    <AlertTriangle className="w-3 h-3" /> {UAT_PD_READ_MODE ? 'Check Sage PD' : 'Out of stock'}
                                   </span>
                                 )}
                               </td>

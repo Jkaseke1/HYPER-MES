@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase';
 import { refreshIntervals, startBackgroundRefresh } from '../lib/backgroundRefresh';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { freshPdQuantity } from '../lib/productionPdStock';
+
+const UAT_PD_READ_MODE = /^https:\/\/appyuqxetlphuxfybmus\.supabase\.co\/?$/.test(import.meta.env.VITE_SUPABASE_URL || '');
 
 interface TransferRow {
   id: string;
@@ -31,7 +34,7 @@ interface AggregatedMaterial {
   production_reorder_level: number;
 }
 
-interface ProductionMaterialSetting { id: string; name: string; code: string; unit: string; reorder_level: number; production_reorder_level?: number; }
+interface ProductionMaterialSetting { id: string; name: string; code: string; sage_code?: string | null; unit: string; reorder_level: number; production_reorder_level?: number; }
 
 import { Link } from 'react-router-dom';
 
@@ -53,7 +56,7 @@ type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 export default function ProductionWarehousePage() {
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
-  const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
+  const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number | null; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
@@ -84,10 +87,9 @@ export default function ProductionWarehousePage() {
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
         .eq('warehouses.code', 'PRODUCTION'),
-      supabase
-        .from('sage_stock_balances')
-        .select('raw_material_id, quantity, last_synced_at')
-        .eq('warehouse_id', 19),
+      UAT_PD_READ_MODE
+        ? supabase.from('uat_pd_stock_reads').select('sage_code, quantity:available_quantity, last_synced_at:observed_at')
+        : supabase.from('sage_stock_balances').select('raw_material_id, quantity, last_synced_at').eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
         .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
@@ -109,12 +111,21 @@ export default function ProductionWarehousePage() {
       balMap[b.raw_material_id] = Number(b.quantity || 0);
     });
     setBalances(balMap);
-    const sagePdMap: Record<string, { quantity: number; syncedAt: string | null }> = {};
+    const sagePdMap: Record<string, { quantity: number | null; syncedAt: string | null }> = {};
     (sagePdData as any || []).forEach((balance: any) => {
-      sagePdMap[balance.raw_material_id] = {
-        quantity: Number(balance.quantity || 0),
-        syncedAt: balance.last_synced_at || null,
-      };
+      const ids = UAT_PD_READ_MODE
+        ? ((settingsData as ProductionMaterialSetting[]) || [])
+            .filter(m => (String(m.sage_code || '').trim() || String(m.code || '').trim()).toUpperCase() === balance.sage_code)
+            .map(m => m.id)
+        : [balance.raw_material_id];
+      for (const id of ids) {
+        sagePdMap[id] = {
+          quantity: UAT_PD_READ_MODE
+            ? freshPdQuantity(balance.quantity, balance.last_synced_at, 120)
+            : Number(balance.quantity || 0),
+          syncedAt: balance.last_synced_at || null,
+        };
+      }
     });
     setSageProductionBalances(sagePdMap);
     setLastRefresh(new Date());
@@ -206,7 +217,7 @@ export default function ProductionWarehousePage() {
     for (const setting of materialSettings) {
       const threshold = Number(setting.production_reorder_level ?? setting.reorder_level ?? 0);
       if (!map[setting.id]) {
-        map[setting.id] = { raw_material_id: setting.id, name: setting.name, code: setting.code, unit: setting.unit, mes_ledger_quantity: 0, sage_pd_quantity: 0, sage_pd_synced_at: null, last_transfer: new Date(0).toISOString(), transfer_count: 0, transfers: [], production_reorder_level: threshold };
+        map[setting.id] = { raw_material_id: setting.id, name: setting.name, code: setting.code, unit: setting.unit, mes_ledger_quantity: 0, sage_pd_quantity: UAT_PD_READ_MODE ? null : 0, sage_pd_synced_at: null, last_transfer: new Date(0).toISOString(), transfer_count: 0, transfers: [], production_reorder_level: threshold };
       } else {
         map[setting.id].production_reorder_level = threshold;
       }
@@ -244,9 +255,10 @@ export default function ProductionWarehousePage() {
   }).length;
   const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
   const stockHealth = useMemo(() => {
-    const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
-    const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
-    return { critical, low, healthy: aggregated.length - critical.length - low.length };
+    const unknown = UAT_PD_READ_MODE ? aggregated.filter(m => m.sage_pd_quantity === null) : [];
+    const critical = aggregated.filter((m) => m.production_reorder_level > 0 && (m.sage_pd_quantity === 0 || (!UAT_PD_READ_MODE && m.sage_pd_quantity === null)));
+    const low = aggregated.filter((m) => m.production_reorder_level > 0 && m.sage_pd_quantity !== null && m.sage_pd_quantity > 0 && m.sage_pd_quantity <= m.production_reorder_level);
+    return { critical, low, unknown, healthy: aggregated.length - critical.length - low.length - unknown.length };
   }, [aggregated]);
   const floorReadiness = totalMaterials ? Math.round((stockHealth.healthy / totalMaterials) * 100) : 100;
   const movedThisWeek = transfers
@@ -450,13 +462,13 @@ export default function ProductionWarehousePage() {
 
       <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
-        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{stockHealth.unknown.length ? 'Incomplete' : totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} {!stockHealth.unknown.length && <span className="text-sm">kg</span>}</p><p className="mt-1 text-xs text-slate-500">{stockHealth.unknown.length ? `${stockHealth.unknown.length} balances unavailable or stale` : 'Warehouse 19 available balance'}</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
       </section>
 
-      <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
-        <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Sage Production 19 last synced {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
+      <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length || stockHealth.unknown.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
+        <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length || stockHealth.unknown.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : stockHealth.unknown.length ? 'Some Sage PD balances are unavailable or stale' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Most recent Sage Production 19 reading {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
         {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
       </section>
 
@@ -525,7 +537,7 @@ export default function ProductionWarehousePage() {
                   </div>
                   <div className="flex items-center gap-6 text-sm mr-4">
                     <div className="text-right">
-                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
+                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Unavailable or stale' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
                       <p className="text-xs text-slate-400">Sage PD {m.sage_pd_synced_at ? format(new Date(m.sage_pd_synced_at), 'dd MMM HH:mm:ss') : ''}</p>
                     </div>
                     <div className="text-right hidden md:block">
